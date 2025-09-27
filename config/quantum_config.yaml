@@ -1,0 +1,28 @@
+quantum:
+  # Execution mode: "simulator", "heron", or "auto"
+  execution_mode: "simulator"
+  
+  # IBM Quantum credentials
+  ibm_quantum:
+    token: "${IBM_QUANTUM_TOKEN}"
+    instance: "ibm-q/open/main"
+    backend: "ibm_heron"
+  
+  # Simulator settings
+  simulator:
+    backend: "aer_simulator_statevector"
+    shots: 1024
+    noise_model: null
+  
+  # Heron settings
+  heron:
+    shots: 4000
+    resilience_level: 1
+    optimization_level: 3
+    use_dynamical_decoupling: true
+    max_runtime_minutes: 120
+  
+  # Common settings
+  circuit_optimization: true
+  error_mitigation: true
+  cost_monitoring: true

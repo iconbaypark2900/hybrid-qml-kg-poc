@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import joblib
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
@@ -191,27 +191,76 @@ class ClassicalLinkPredictor:
         return False
 
 
-# Example usage (uncomment to test)
-# if __name__ == "__main__":
-#     from kg_layer.kg_loader import load_hetionet_edges, extract_task_edges, prepare_link_prediction_dataset
-#     from kg_layer.kg_embedder import HetionetEmbedder
-#     
-#     # Load data
-#     df = load_hetionet_edges()
-#     task_edges, _, _ = extract_task_edges(df, relation_type="CtD", max_entities=300)
-#     train_df, test_df = prepare_link_prediction_dataset(task_edges)
-#     
-#     # Load or train embeddings
-#     embedder = HetionetEmbedder(embedding_dim=32, qml_dim=5)
-#     if not embedder.load_saved_embeddings():
-#         embedder.train_embeddings(train_df)
-#         embedder.reduce_to_qml_dim()
-#     
-#     # Train classical baseline
-#     predictor = ClassicalLinkPredictor(model_type="LogisticRegression")
-#     metrics = predictor.train(train_df, embedder, test_df)
-#     
-#     print("\nFinal Test Metrics:")
-#     for k, v in metrics.items():
-#         if k.startswith("test_"):
-#             print(f"{k}: {v:.4f}")
+if __name__ == "__main__":
+    import argparse, os, json, time, logging
+    from kg_layer.kg_loader import (
+        load_hetionet_edges,
+        extract_task_edges,
+        prepare_link_prediction_dataset,
+    )
+    from kg_layer.kg_embedder import HetionetEmbedder
+
+    logging.basicConfig(level=logging.INFO)
+    log = logging.getLogger("baseline.cli")
+
+    parser = argparse.ArgumentParser(description="Run classical baseline and write results/ metrics.")
+    parser.add_argument("--relation", type=str, default="CtD", help="Hetionet relation, e.g., CtD")
+    parser.add_argument("--max_entities", type=int, default=300, help="Subsample cap for smaller runs")
+    parser.add_argument("--embedding_dim", type=int, default=32, help="KG embedding dimension")
+    parser.add_argument("--qml_dim", type=int, default=5, help="PCA-reduced dim (for QML parity)")
+    parser.add_argument("--model", type=str, default="LogisticRegression",
+                        choices=["LogisticRegression", "SVM", "RandomForest"])
+    parser.add_argument("--results_dir", type=str, default="results", help="Output directory for metrics")
+    parser.add_argument("--random_state", type=int, default=42)
+    args = parser.parse_args()
+
+    os.makedirs(args.results_dir, exist_ok=True)
+
+    # 1) Load and prepare the task-specific triples and link dataset
+    log.info("Loading Hetionet edges…")
+    df = load_hetionet_edges()
+    task_edges, _, _ = extract_task_edges(df, relation_type=args.relation, max_entities=args.max_entities)
+    train_df, test_df = prepare_link_prediction_dataset(task_edges)
+
+    # 2) Train/load embeddings on the **triples**, not on the link-split
+    embedder = HetionetEmbedder(embedding_dim=args.embedding_dim, qml_dim=args.qml_dim)
+    if not embedder.load_saved_embeddings():
+        log.info("No saved embeddings found; training/generating embeddings on task triples.")
+        embedder.train_embeddings(task_edges)   # <-- key change (triples with source/metaedge/target)
+        embedder.reduce_to_qml_dim()
+
+    # 3) Train classical baseline and evaluate
+    predictor = ClassicalLinkPredictor(
+        model_type=args.model,
+        random_state=args.random_state,
+        model_dir="models"
+    )
+    metrics = predictor.train(train_df, embedder, test_df)
+
+    # 4) Persist metrics to results/
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    out_json = os.path.join(args.results_dir, f"baseline_metrics_{args.model}_{ts}.json")
+    with open(out_json, "w") as f:
+        json.dump(
+            {
+                "args": {
+                    "relation": args.relation,
+                    "max_entities": args.max_entities,
+                    "embedding_dim": args.embedding_dim,
+                    "qml_dim": args.qml_dim,
+                    "model": args.model,
+                    "random_state": args.random_state,
+                },
+                "metrics": metrics,
+            },
+            f,
+            indent=2,
+        )
+    latest = os.path.join(args.results_dir, "baseline_metrics_latest.json")
+    try:
+        import shutil
+        shutil.copyfile(out_json, latest)
+    except Exception:
+        pass
+
+    log.info(f"Wrote metrics → {out_json}")

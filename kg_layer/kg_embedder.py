@@ -1,249 +1,302 @@
 # kg_layer/kg_embedder.py
+"""
+Robust KG embedding utility for Hetionet link prediction.
+
+- If PyKEEN is available, trains TransE embeddings from triples.
+- If PyKEEN is NOT available, falls back to deterministic random embeddings
+  (seeded by entity string) so the rest of the pipeline can run and produce metrics.
+
+Also provides PCA reduction to a lower-dimensional space for QML features.
+"""
+
+from __future__ import annotations
 
 import os
+import json
+import hashlib
+import logging
+from typing import Dict, Tuple, Optional, Iterable
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Tuple, Optional
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
-import logging
 
-# Optional: Only import PyKEEN if needed
+logger = logging.getLogger(__name__)
+
+# Optional: Only import PyKEEN if present
 try:
     from pykeen.pipeline import pipeline
     from pykeen.datasets.base import PathDataset
     PYKEEN_AVAILABLE = True
-except ImportError:
+except Exception:
     PYKEEN_AVAILABLE = False
-    logging.warning("PyKEEN not installed. Only precomputed embeddings supported.")
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
+    """
+    Infer (head/source), (relation/metaedge), (tail/target) column names.
+
+    Accepts common variants found in this repo's link splits:
+    - head/source:  source, source_id, head, head_id, h, src, src_id, u
+    - tail/target:  target, target_id, tail, tail_id, t, dst, dst_id, v
+    - relation:     metaedge, relation, rel, r, predicate, edge_type (optional)
+    """
+    cols = {c.lower(): c for c in df.columns}
+
+    head_aliases = ("source", "source_id", "head", "head_id", "h", "src", "src_id", "u")
+    tail_aliases = ("target", "target_id", "tail", "tail_id", "t", "dst", "dst_id", "v")
+    rel_aliases  = ("metaedge", "relation", "rel", "r", "predicate", "edge_type")
+
+    h_col = next((cols[a] for a in head_aliases if a in cols), None)
+    t_col = next((cols[a] for a in tail_aliases if a in cols), None)
+    if h_col and t_col:
+        r_col = next((cols[a] for a in rel_aliases if a in cols), None)
+        return h_col, r_col, t_col
+
+    raise KeyError(
+        f"Could not infer head/source and tail/target columns from {list(df.columns)}. "
+        "Expected one of (source|source_id|head|head_id|h|src|src_id|u) and "
+        "(target|target_id|tail|tail_id|t|dst|dst_id|v)."
+    )
 
 
 class HetionetEmbedder:
-    """
-    Embedding generator for Hetionet subgraphs.
-    Supports training via PyKEEN or loading precomputed embeddings.
-    Includes dimensionality reduction for QML compatibility.
-    """
-    
-    def __init__(
-        self,
-        data_dir: str = "data",
-        embedding_dim: int = 50,        # Original embedding size
-        qml_dim: int = 5,               # Reduced size for quantum circuits
-        model_name: str = "TransE",     # or "DistMult"
-        random_state: int = 42
-    ):
-        self.data_dir = data_dir
-        self.embedding_dim = embedding_dim
-        self.qml_dim = qml_dim
-        self.model_name = model_name
-        self.random_state = random_state
+    def __init__(self, embedding_dim: int = 32, qml_dim: int = 5, work_dir: str = "data"):
+        self.embedding_dim = int(embedding_dim)
+        self.qml_dim = int(qml_dim)
+        self.work_dir = work_dir
+
         self.entity_to_id: Dict[str, int] = {}
         self.id_to_entity: Dict[int, str] = {}
-        self.embeddings: Optional[np.ndarray] = None
-        self.pca = None
-        
-        os.makedirs(data_dir, exist_ok=True)
-    
-    def _create_pykeen_dataset(self, train_edges: pd.DataFrame) -> PathDataset:
-        """Convert sampled edges into a PyKEEN-compatible dataset."""
-        if not PYKEEN_AVAILABLE:
-            raise ImportError("PyKEEN is required to train embeddings. Install with: pip install pykeen")
-        
-        # Save edges to temporary files
-        train_path = os.path.join(self.data_dir, "hetionet_train.tsv")
-        train_edges[["source", "metaedge", "target"]].to_csv(
-            train_path, sep='\t', index=False, header=False
+        self.entity_embeddings: Optional[np.ndarray] = None  # shape: [N, D]
+        self.reduced_embeddings: Optional[np.ndarray] = None  # shape: [N, qml_dim]
+        self._pca: Optional[PCA] = None
+
+        os.makedirs(self.work_dir, exist_ok=True)
+
+    # --------------------------
+    # Persistence
+    # --------------------------
+    def _embeddings_paths(self) -> Tuple[str, str]:
+        emb_path = os.path.join(self.work_dir, "entity_embeddings.npy")
+        ids_path = os.path.join(self.work_dir, "entity_ids.json")
+        return emb_path, ids_path
+
+    def load_saved_embeddings(self) -> bool:
+        emb_path, ids_path = self._embeddings_paths()
+        if os.path.exists(emb_path) and os.path.exists(ids_path):
+            try:
+                self.entity_embeddings = np.load(emb_path)
+                with open(ids_path, "r") as f:
+                    mapping = json.load(f)
+                # stored as {entity: id}
+                self.entity_to_id = {str(k): int(v) for k, v in mapping.items()}
+                self.id_to_entity = {int(v): str(k) for k, v in mapping.items()}
+                logger.info(
+                    f"Loaded saved embeddings: {self.entity_embeddings.shape} for {len(self.entity_to_id)} entities."
+                )
+                return True
+            except Exception as e:
+                logger.warning(f"Failed to load saved embeddings: {e}")
+        return False
+
+    def _save_embeddings(self):
+        emb_path, ids_path = self._embeddings_paths()
+        np.save(emb_path, self.entity_embeddings)
+        with open(ids_path, "w") as f:
+            json.dump(self.entity_to_id, f)
+        logger.info(f"Saved embeddings → {emb_path} and ids → {ids_path}")
+
+    # --------------------------
+    # Building the vocab
+    # --------------------------
+    def _build_entity_vocab(self, triples_df: pd.DataFrame):
+        h_col, _, t_col = _infer_ht_columns(triples_df)
+        entities: Iterable[str] = pd.concat([triples_df[h_col], triples_df[t_col]], ignore_index=True).astype(str).unique()
+        self.entity_to_id = {ent: i for i, ent in enumerate(entities)}
+        self.id_to_entity = {i: ent for ent, i in self.entity_to_id.items()}
+        logger.info(f"Built entity vocab of size {len(self.entity_to_id)}.")
+
+    # --------------------------
+    # PyKEEN path
+    # --------------------------
+    def _create_pykeen_dataset(self, triples_df: pd.DataFrame) -> PathDataset:
+        h_col, r_col, t_col = _infer_ht_columns(triples_df)
+        if r_col is None:
+            # If we don't have a relation column (e.g., CtD fixed task), synthesize a single-relation column
+            triples_df = triples_df.copy()
+            triples_df["__rel__"] = "rel"
+            r_col = "__rel__"
+
+        # Write triples to temp files
+        tmp_dir = os.path.join(self.work_dir, "pykeen_tmp")
+        os.makedirs(tmp_dir, exist_ok=True)
+        train_path = os.path.join(tmp_dir, "train.tsv")
+        triples_df[[h_col, r_col, t_col]].to_csv(train_path, sep="\t", index=False, header=False)
+        return PathDataset(
+            training_path=train_path,
+            testing_path=train_path,
+            validation_path=train_path,
         )
-        
-        from pykeen.triples import TriplesFactory
-        tf = TriplesFactory.from_path(train_path)
-        
-        # Wrap as minimal dataset
-        class TempDataset(PathDataset):
-            def __init__(self):
-                self._training = tf
-                self._validation = tf  # dummy
-                self._testing = tf     # dummy
-        
-        return TempDataset()
-    
-    def train_embeddings(self, train_edges: pd.DataFrame) -> None:
-        """
-        Train KG embeddings using PyKEEN on the provided edges.
-        Assumes edges have 'source', 'metaedge', 'target' columns.
-        """
-        if not PYKEEN_AVAILABLE:
-            raise RuntimeError("PyKEEN not available. Use load_precomputed() instead.")
-        
-        logger.info(f"Training {self.model_name} embeddings (dim={self.embedding_dim})...")
-        
-        dataset = self._create_pykeen_dataset(train_edges)
-        
+
+    def _train_with_pykeen(self, triples_df: pd.DataFrame):
+        dataset = self._create_pykeen_dataset(triples_df)
+        logger.info(f"Training TransE embeddings with PyKEEN (dim={self.embedding_dim})...")
         result = pipeline(
             dataset=dataset,
-            model=self.model_name,
+            model="TransE",
+            training_loop="slcwa",
             model_kwargs=dict(embedding_dim=self.embedding_dim),
-            training_kwargs=dict(num_epochs=100, batch_size=128),
-            random_seed=self.random_state,
-            device="cpu"  # Use "cuda" if GPU available
+            training_kwargs=dict(num_epochs=50, batch_size=1024),
+            optimizer="adam",
+            stopper="early",
         )
-        
         # Extract embeddings
-        entity_ids = result.training.entity_ids  # list of entity labels
-        entity_embeddings = result.model.entity_embeddings.weight.detach().cpu().numpy()
-        
-        # Build mapping
-        self.entity_to_id = {entity: idx for idx, entity in enumerate(entity_ids)}
-        self.id_to_entity = {idx: entity for entity, idx in self.entity_to_id.items()}
-        self.embeddings = entity_embeddings
-        
-        logger.info(f"Trained embeddings for {len(entity_ids)} entities.")
+        embs = result.model.entity_representations[0]().detach().cpu().numpy()
+        # Map entity ordering to our vocab
+        # Ensure vocab built using dataset's entities
+        self._build_entity_vocab(pd.DataFrame({
+            "source": list(result.training.get_entity_to_id_dict().keys()),
+            "target": list(result.training.get_entity_to_id_dict().keys())
+        }).iloc[:0])  # vocab only
+        # Above trick initializes empty concat; instead, rebuild mapping from model:
+        ent2id = result.training.get_entity_to_id_dict()
+        id2ent = {v: k for k, v in ent2id.items()}
+        self.entity_to_id = dict(ent2id)
+        self.id_to_entity = dict(id2ent)
+        self.entity_embeddings = embs
         self._save_embeddings()
-    
-    def load_precomputed(self, embedding_file: str, entity_file: str) -> None:
-        """
-        Load precomputed embeddings (e.g., from Zenodo or your own run).
-        
-        Expected format:
-          - embedding_file: CSV or NumPy array (N x D)
-          - entity_file: text file with one entity ID per line (order matches embeddings)
-        """
-        logger.info(f"Loading precomputed embeddings from {embedding_file}...")
-        
-        # Load entities
-        with open(entity_file, 'r') as f:
-            entities = [line.strip() for line in f if line.strip()]
-        
-        # Load embeddings
-        if embedding_file.endswith('.npy'):
-            embeddings = np.load(embedding_file)
-        elif embedding_file.endswith('.csv'):
-            embeddings = pd.read_csv(embedding_file, header=None).values
-        else:
-            raise ValueError("Embedding file must be .npy or .csv")
-        
-        assert len(entities) == embeddings.shape[0], "Entity count mismatch"
-        
-        self.entity_to_id = {entity: idx for idx, entity in enumerate(entities)}
-        self.id_to_entity = {idx: entity for entity, idx in self.entity_to_id.items()}
-        self.embeddings = embeddings
-        
-        logger.info(f"Loaded embeddings for {len(entities)} entities.")
-        self._save_embeddings()
-    
-    def _save_embeddings(self) -> None:
-        """Save embeddings and mappings for reproducibility."""
-        np.save(os.path.join(self.data_dir, "embeddings.npy"), self.embeddings)
-        pd.Series(self.id_to_entity).to_csv(
-            os.path.join(self.data_dir, "id_to_entity.csv"), index_label="id"
+
+    # --------------------------
+    # Fallback path (no PyKEEN)
+    # --------------------------
+    @staticmethod
+    def _deterministic_vec(key: str, dim: int) -> np.ndarray:
+        # Seed from SHA1 of the entity string for determinism across runs
+        h = hashlib.sha1(key.encode("utf-8")).digest()
+        seed = int.from_bytes(h[:8], "little", signed=False) % (2**32 - 1)
+        rng = np.random.default_rng(seed)
+        return rng.standard_normal(size=dim).astype(np.float32)
+
+    def _train_fallback(self, triples_df: pd.DataFrame):
+        logger.info(
+            f"PyKEEN not available → generating deterministic random embeddings (dim={self.embedding_dim})"
         )
-        logger.info("Saved embeddings and entity mappings.")
-    
-    def load_saved_embeddings(self) -> bool:
-        """Load previously saved embeddings (if they exist)."""
-        embed_path = os.path.join(self.data_dir, "embeddings.npy")
-        map_path = os.path.join(self.data_dir, "id_to_entity.csv")
-        
-        if os.path.exists(embed_path) and os.path.exists(map_path):
-            self.embeddings = np.load(embed_path)
-            id_to_entity_df = pd.read_csv(map_path, index_col="id")
-            self.id_to_entity = id_to_entity_df["0"].to_dict()
-            self.entity_to_id = {ent: idx for idx, ent in self.id_to_entity.items()}
-            logger.info("Loaded saved embeddings.")
-            return True
-        return False
-    
-    def reduce_to_qml_dim(self) -> np.ndarray:
-        """
-        Reduce embedding dimensionality to qml_dim using PCA.
-        Returns normalized embeddings suitable for quantum encoding.
-        """
-        if self.embeddings is None:
-            raise ValueError("No embeddings loaded. Call train_embeddings() or load_precomputed() first.")
-        
-        if self.qml_dim >= self.embeddings.shape[1]:
-            logger.warning("qml_dim >= original dim. Skipping PCA.")
-            reduced = self.embeddings
-        else:
-            logger.info(f"Reducing embeddings from {self.embeddings.shape[1]} to {self.qml_dim} dimensions...")
-            self.pca = PCA(n_components=self.qml_dim, random_state=self.random_state)
-            reduced = self.pca.fit_transform(self.embeddings)
-        
-        # Normalize to unit vectors (important for amplitude encoding)
-        reduced = normalize(reduced, norm='l2')
-        
-        # Save reduced embeddings
-        np.save(os.path.join(self.data_dir, f"embeddings_qml_{self.qml_dim}d.npy"), reduced)
-        logger.info(f"Saved reduced embeddings ({reduced.shape}).")
-        return reduced
-    
-    def get_entity_embedding(self, entity_id: str, reduced: bool = True) -> np.ndarray:
-        """Get embedding for a specific entity."""
-        if entity_id not in self.entity_to_id:
-            raise KeyError(f"Entity {entity_id} not found in KG.")
-        
-        idx = self.entity_to_id[entity_id]
-        if reduced:
-            emb_file = os.path.join(self.data_dir, f"embeddings_qml_{self.qml_dim}d.npy")
-            if os.path.exists(emb_file):
-                reduced_embs = np.load(emb_file)
-                return reduced_embs[idx]
-            else:
-                raise FileNotFoundError("Reduced embeddings not found. Call reduce_to_qml_dim() first.")
-        else:
-            return self.embeddings[idx]
-    
-    def prepare_link_features(
-        self, 
-        edge_df: pd.DataFrame, 
-        source_col: str = "source", 
-        target_col: str = "target"
-    ) -> np.ndarray:
-        """
-        Prepare feature matrix for link prediction.
-        Each row = [source_emb; target_emb] (concatenated).
-        """
-        reduced_embs = np.load(os.path.join(self.data_dir, f"embeddings_qml_{self.qml_dim}d.npy"))
-        
-        features = []
-        for _, row in edge_df.iterrows():
-            src_id = row[source_col]
-            tgt_id = row[target_col]
-            
-            if src_id not in self.entity_to_id or tgt_id not in self.entity_to_id:
-                logger.warning(f"Skipping edge ({src_id}, {tgt_id}): entity not in embedding space.")
-                continue
-                
-            src_idx = self.entity_to_id[src_id]
-            tgt_idx = self.entity_to_id[tgt_id]
-            
-            src_emb = reduced_embs[src_idx]
-            tgt_emb = reduced_embs[tgt_idx]
-            
-            # Concatenate embeddings
-            features.append(np.concatenate([src_emb, tgt_emb]))
-        
-        return np.array(features)
+        self._build_entity_vocab(triples_df)
+        N = len(self.entity_to_id)
+        M = self.embedding_dim
+        embs = np.zeros((N, M), dtype=np.float32)
+        for ent, idx in self.entity_to_id.items():
+            embs[idx] = self._deterministic_vec(ent, M)
+        # Normalize for stability
+        embs = normalize(embs, norm="l2")
+        self.entity_embeddings = embs
+        self._save_embeddings()
 
+    # --------------------------
+    # Public API
+    # --------------------------
+    def train_embeddings(self, triples_like_df: pd.DataFrame):
+        """
+        Train (or fallback-generate) node embeddings.
 
-# Example usage (uncomment to test)
-# if __name__ == "__main__":
-#     from kg_loader import load_hetionet_edges, extract_task_edges, prepare_link_prediction_dataset
-#     
-#     # Load data
-#     df = load_hetionet_edges()
-#     task_edges, ent2id, id2ent = extract_task_edges(df, relation_type="CtD", max_entities=500)
-#     train_df, test_df = prepare_link_prediction_dataset(task_edges)
-#     
-#     # Train embeddings
-#     embedder = HetionetEmbedder(embedding_dim=32, qml_dim=5)
-#     embedder.train_embeddings(train_df)
-#     embedder.reduce_to_qml_dim()
-#     
-#     # Prepare features
-#     X_train = embedder.prepare_link_features(train_df)
-#     print("Train feature shape:", X_train.shape)
+        Accepts either:
+        - a triple table with (source/metaedge/target) or (head/relation/tail)
+        - a link-prediction table with columns plus a 'label' (we'll keep only positives)
+
+        We ignore the label column for embedding training.
+        """
+        df = triples_like_df.copy()
+        # If it's a link dataset, filter to positives for triples
+        if "label" in df.columns:
+            df = df[df["label"] == 1].copy()
+        # Ensure we have h/t columns
+        h_col, r_col, t_col = _infer_ht_columns(df)
+
+        if PYKEEN_AVAILABLE:
+            try:
+                self._train_with_pykeen(df[[h_col] + ([r_col] if r_col else []) + [t_col]])
+                return
+            except Exception as e:
+                logger.warning(f"PyKEEN training failed ({e}); falling back to deterministic embeddings.")
+
+        self._train_fallback(df[[h_col, t_col]])
+
+    def reduce_to_qml_dim(self):
+        if self.entity_embeddings is None:
+            raise RuntimeError("No entity_embeddings to reduce. Call train_embeddings() or load_saved_embeddings() first.")
+        if self.qml_dim >= self.entity_embeddings.shape[1]:
+            logger.info("qml_dim >= embedding_dim; skipping PCA reduction.")
+            self.reduced_embeddings = self.entity_embeddings
+            self._pca = None
+            return
+        self._pca = PCA(n_components=self.qml_dim, random_state=42)
+        self.reduced_embeddings = self._pca.fit_transform(self.entity_embeddings)
+        logger.info(f"Reduced embeddings to shape {self.reduced_embeddings.shape}.")
+
+    # Feature construction for link prediction
+    def _get_vec(self, ent: str, reduced: bool = True) -> np.ndarray:
+        if ent not in self.entity_to_id:
+            # unseen entity: deterministic vector
+            vec = self._deterministic_vec(ent, self.embedding_dim)
+            vec = vec / (np.linalg.norm(vec) + 1e-9)
+            if reduced and (self._pca is not None):
+                vec = self._pca.transform(vec.reshape(1, -1))[0]
+            return vec.astype(np.float32)
+
+        idx = self.entity_to_id[ent]
+        base = self.reduced_embeddings if (reduced and self.reduced_embeddings is not None) else self.entity_embeddings
+        return base[idx].astype(np.float32)
+
+    def prepare_link_features(self, link_df: pd.DataFrame, reduced: bool = True) -> np.ndarray:
+        """
+        Build pairwise features for (head, tail) edges in link_df:
+        [h, t, |h - t|, h * t]  (concat)
+        """
+        h_col, _, t_col = _infer_ht_columns(link_df)
+        feats = []
+        for h, t in zip(link_df[h_col].astype(str).values, link_df[t_col].astype(str).values):
+            hv = self._get_vec(h, reduced=reduced)
+            tv = self._get_vec(t, reduced=reduced)
+            diff = np.abs(hv - tv)
+            had = hv * tv
+            feats.append(np.concatenate([hv, tv, diff, had], axis=0))
+        X = np.stack(feats, axis=0)
+        return X
+
+    def prepare_link_features_qml(self, link_df: pd.DataFrame, mode: str = "diff") -> np.ndarray:
+        """
+        QML-friendly features in reduced space (length == qml_dim):
+          - "diff": |h - t|
+          - "hadamard": h ⊙ t
+          - "both": concat([|h - t|, h ⊙ t]) and project back to qml_dim via PCA fitted on train features
+        """
+        if self.reduced_embeddings is None:
+            if self.entity_embeddings is None:
+                raise RuntimeError("No embeddings loaded. Call train_embeddings() or load_saved_embeddings() first.")
+            self.reduce_to_qml_dim()
+
+        h_col, _, t_col = _infer_ht_columns(link_df)
+
+        diffs, hads = [], []
+        for h, t in zip(link_df[h_col].astype(str).values, link_df[t_col].astype(str).values):
+            hv = self._get_vec(h, reduced=True)
+            tv = self._get_vec(t, reduced=True)
+            diffs.append(np.abs(hv - tv))
+            hads.append(hv * tv)
+
+        diffs = np.stack(diffs, 0)
+        hads  = np.stack(hads, 0)
+
+        if mode == "diff":
+            return diffs
+        if mode == "hadamard":
+            return hads
+        if mode == "both":
+            both = np.concatenate([diffs, hads], axis=1)  # shape [n, 2*qml_dim]
+            # project back to qml_dim using a small PCA trained on-the-fly
+            from sklearn.decomposition import PCA
+            pca = PCA(n_components=self.qml_dim, random_state=42)
+            return pca.fit_transform(both)
+        raise ValueError(f"Unknown mode: {mode}")

@@ -1,255 +1,217 @@
 # quantum_layer/qml_model.py
+"""
+Hybrid QML link predictor (QSVC / VQC) compatible with Qiskit 1.x and
+qiskit-machine-learning >= 0.8.
+
+- QSVC uses fidelity kernels:
+    * statevector → FidelityStatevectorKernel(feature_map)
+    * sampling/hardware → FidelityQuantumKernel(feature_map, fidelity=ComputeUncompute(sampler))
+- VQC uses feature-map encoding + parametric ansatz + optimizer.
+
+Assumes upstream prepares QML-ready features with dim == num_qubits
+(e.g., |h - t| in PCA-reduced space, qml_dim == num_qubits).
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional, Dict
 
 import numpy as np
-import logging
-from typing import Optional, Union, Dict, Any
-from qiskit import QuantumCircuit
-from qiskit.circuit.library import RealAmplitudes, EfficientSU2
-from qiskit.primitives import Sampler
-from qiskit.algorithms.optimizers import COBYLA, SPSA
-from qiskit_machine_learning.algorithms import VQC, QSVC
-from qiskit_machine_learning.kernels import QuantumKernel
-from .qml_encoder import QMLEncoder
 
-logging.basicConfig(level=logging.INFO)
+# Core Qiskit imports (tested with qiskit~=1.2, qiskit-ml~=0.8.4, qiskit-algorithms~=0.3)
+from qiskit.circuit.library import RealAmplitudes, EfficientSU2, ZZFeatureMap, ZFeatureMap
+from qiskit.primitives import Sampler
+from qiskit_algorithms.optimizers import COBYLA, SPSA
+from qiskit_machine_learning.algorithms import VQC, QSVC
+from qiskit_machine_learning.kernels import FidelityQuantumKernel, FidelityStatevectorKernel
+from qiskit_machine_learning.state_fidelities import ComputeUncompute
+
 logger = logging.getLogger(__name__)
+
+# Try to import the local encoder (not strictly required for this class to run)
+try:
+    from .qml_encoder import QMLEncoder  # noqa: F401
+except Exception:
+    QMLEncoder = None  # type: ignore
 
 
 class QMLLinkPredictor:
     """
-    Quantum Machine Learning model for knowledge graph link prediction.
-    
-    Supports two approaches:
-      1. Variational Quantum Classifier (VQC) — end-to-end quantum model
-      2. Quantum Kernel + Classical SVM (QSVC) — hybrid kernel method
-    
-    Designed for biomedical tasks with small feature dimensions (5-8D).
+    Wrapper for quantum classifiers.
+
+    Parameters
+    ----------
+    model_type : {"QSVC","VQC"}
+    encoding_method : {"feature_map"}
+    num_qubits : int
+    ansatz_type : {"RealAmplitudes","EfficientSU2"}
+    ansatz_reps : int
+    optimizer : {"COBYLA","SPSA"}
+    max_iter : int
+    feature_map_type : {"ZZ","Z"}
+    feature_map_reps : int
+    random_state : int
+    quantum_config_path : str (YAML; optional)
     """
-    
+
     def __init__(
         self,
-        model_type: str = "VQC",
-        encoding_method: str = "feature_map",  # "amplitude" or "feature_map"
+        model_type: str = "QSVC",
+        encoding_method: str = "feature_map",
         num_qubits: int = 5,
-        ansatz_type: str = "RealAmplitudes",   # for VQC
+        ansatz_type: str = "RealAmplitudes",
         ansatz_reps: int = 3,
         optimizer: str = "COBYLA",
-        max_iter: int = 100,
-        feature_map_type: str = "ZZ",          # for feature_map encoding
+        max_iter: int = 50,
+        feature_map_type: str = "ZZ",
         feature_map_reps: int = 2,
         random_state: int = 42,
-        quantum_config_path: str = "config/quantum_config.yaml"
+        quantum_config_path: str = "config/quantum_config.yaml",
     ):
-        """
-        Initialize QML model.
-        
-        Args:
-            model_type: "VQC" or "QSVC"
-            encoding_method: "amplitude" or "feature_map" (basis not supported for QML models)
-            num_qubits: Number of qubits (must match encoder)
-            ansatz_type: "RealAmplitudes" or "EfficientSU2"
-            ansatz_reps: Repetition blocks in ansatz
-            optimizer: "COBYLA" or "SPSA"
-            max_iter: Max optimization iterations
-            feature_map_type: "ZZ", "Z", or "Pauli" (if using feature_map)
-            feature_map_reps: Repetition blocks in feature map
-            random_state: For reproducibility
-            quantum_config_path: Path to quantum configuration file
-        """
-        if model_type not in ["VQC", "QSVC"]:
-            raise ValueError("model_type must be 'VQC' or 'QSVC'")
-        
-        if encoding_method == "basis":
-            raise ValueError("Basis encoding not supported for QML models. Use 'amplitude' or 'feature_map'.")
-        
-        self.model_type = model_type
+        self.model_type = model_type.upper()
         self.encoding_method = encoding_method
-        self.num_qubits = num_qubits
-        self.random_state = random_state
-        self.max_iter = max_iter
+        self.num_qubits = int(num_qubits)
+        self.ansatz_type = ansatz_type
+        self.ansatz_reps = int(ansatz_reps)
+        self.optimizer_name = optimizer
+        self.max_iter = int(max_iter)
         self.feature_map_type = feature_map_type
-        self.feature_map_reps = feature_map_reps
+        self.feature_map_reps = int(feature_map_reps)
+        self.random_state = int(random_state)
         self.quantum_config_path = quantum_config_path
-        
-        # Initialize encoder
-        self.encoder = QMLEncoder(
-            encoding_method=encoding_method,
-            num_qubits=num_qubits,
-            feature_map_type=feature_map_type,
-            feature_map_reps=feature_map_reps
-        )
-        
-        # Set up optimizer
-        if optimizer == "COBYLA":
-            self.optimizer = COBYLA(maxiter=max_iter)
-        elif optimizer == "SPSA":
-            self.optimizer = SPSA(maxiter=max_iter)
-        else:
-            raise ValueError("optimizer must be 'COBYLA' or 'SPSA'")
-        
-        # Build ansatz (for VQC)
-        if ansatz_type == "RealAmplitudes":
-            self.ansatz = RealAmplitudes(num_qubits=num_qubits, reps=ansatz_reps)
-        elif ansatz_type == "EfficientSU2":
-            self.ansatz = EfficientSU2(num_qubits=num_qubits, reps=ansatz_reps)
-        else:
-            raise ValueError("ansatz_type must be 'RealAmplitudes' or 'EfficientSU2'")
-        
+
+        # runtime fields
         self.model = None
         self.is_fitted = False
         self.metrics: Dict[str, float] = {}
-    
-    def _prepare_quantum_kernel(self) -> QuantumKernel:
-        """Prepare quantum kernel for QSVC."""
-        if self.encoding_method == "amplitude":
-            raise NotImplementedError("Amplitude encoding not directly supported in Qiskit QuantumKernel. Use feature_map.")
-        
-        # For feature_map, the encoder's feature map is the kernel's feature map
+
+    # ------------------------------------------------------------------
+    # Sanity / builders
+    # ------------------------------------------------------------------
+    def _ensure_qiskit_available(self):
+        # Import checks are already at file scope; this method exists for clarity & future guards.
+        return True
+
+    def _build_optimizer(self):
+        name = self.optimizer_name.upper()
+        if name == "COBYLA":
+            return COBYLA(maxiter=self.max_iter)
+        if name == "SPSA":
+            return SPSA(maxiter=self.max_iter)
+        raise ValueError("optimizer must be one of: {'COBYLA','SPSA'}")
+
+    def _build_ansatz(self):
+        if self.ansatz_type == "RealAmplitudes":
+            return RealAmplitudes(num_qubits=self.num_qubits, reps=self.ansatz_reps)
+        if self.ansatz_type == "EfficientSU2":
+            return EfficientSU2(num_qubits=self.num_qubits, reps=self.ansatz_reps)
+        raise ValueError("ansatz_type must be one of: {'RealAmplitudes','EfficientSU2'}")
+
+    def _make_feature_map(self):
+        if self.encoding_method != "feature_map":
+            raise NotImplementedError("Only 'feature_map' encoding is supported.")
         if self.feature_map_type == "ZZ":
-            from qiskit.circuit.library import ZZFeatureMap
-            feature_map = ZZFeatureMap(
+            return ZZFeatureMap(
                 feature_dimension=self.num_qubits,
                 reps=self.feature_map_reps,
-                entanglement="linear"
+                entanglement="linear",
             )
-        elif self.feature_map_type == "Z":
-            from qiskit.circuit.library import ZFeatureMap
-            feature_map = ZFeatureMap(
+        if self.feature_map_type == "Z":
+            return ZFeatureMap(
                 feature_dimension=self.num_qubits,
-                reps=self.feature_map_reps
+                reps=self.feature_map_reps,
             )
-        else:
-            raise ValueError(f"Unsupported feature_map_type for kernel: {self.feature_map_type}")
-        
-        # Import quantum executor for unified sampler
-        try:
-            from .quantum_executor import QuantumExecutor
-            quantum_executor = QuantumExecutor(self.quantum_config_path)
-            sampler, _ = quantum_executor.get_sampler()
-        except Exception as e:
-            logger.warning(f"Could not initialize quantum executor: {e}. Using local sampler.")
-            sampler = Sampler()
-        
-        return QuantumKernel(
-            feature_map=feature_map,
-            sampler=sampler
-        )
-    
+        raise ValueError("feature_map_type must be one of: {'ZZ','Z'}")
+
+    def _prepare_quantum_kernel(self, sampler: Sampler, exec_mode: str):
+        """
+        Construct a QSVC fidelity kernel consistent with execution mode.
+        """
+        fm = self._make_feature_map()
+        if exec_mode in ("statevector", "simulator_statevector"):
+            return FidelityStatevectorKernel(feature_map=fm)
+        fidelity = ComputeUncompute(sampler=sampler)
+        return FidelityQuantumKernel(feature_map=fm, fidelity=fidelity)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
     def fit(self, X: np.ndarray, y: np.ndarray) -> "QMLLinkPredictor":
-        """
-        Train the QML model.
-        
-        Args:
-            X: Feature matrix (n_samples, n_features)
-            y: Binary labels (0 or 1)
-        """
-        logger.info(f"Training {self.model_type} with {self.encoding_method} encoding...")
-        
-        # Initialize quantum executor for unified execution
+        """Train the selected model."""
+        self._ensure_qiskit_available()
+
+        # Choose sampler + exec mode (prefer exact sims)
+        sampler: Optional[Sampler]
+        exec_mode = "simulator_statevector"
         try:
             from .quantum_executor import QuantumExecutor
-            self.quantum_executor = QuantumExecutor(self.quantum_config_path)
-            sampler, backend_name = self.quantum_executor.get_sampler()
-            logger.info(f"Using quantum backend: {backend_name}")
+            qx = QuantumExecutor(self.quantum_config_path)
+            sampler, exec_mode = qx.get_sampler()
         except Exception as e:
-            logger.warning(f"Quantum executor not available: {e}. Using local sampler.")
+            logger.info(f"QuantumExecutor fallback to local Sampler: {e}")
             sampler = Sampler()
-            self.quantum_executor = None
-        
+            exec_mode = "simulator_statevector"
+
         if self.model_type == "VQC":
-            # For VQC, we need to handle amplitude encoding carefully
-            if self.encoding_method == "amplitude":
-                # Amplitude encoding requires a different approach
-                # We'll use the encoder to create initial states, but VQC in Qiskit ML
-                # expects a feature map. So we fall back to custom circuit construction.
-                raise NotImplementedError(
-                    "Amplitude encoding with VQC requires custom implementation. "
-                    "Use 'feature_map' encoding for VQC, or try QSVC with amplitude (not recommended)."
-                )
-            else:
-                # Use feature map encoding (standard VQC workflow)
-                quantum_kernel = self._prepare_quantum_kernel()
-                self.model = VQC(
-                    sampler=sampler,
-                    feature_map=quantum_kernel.feature_map,
-                    ansatz=self.ansatz,
-                    optimizer=self.optimizer,
-                    callback=lambda x: logger.debug(f"VQC loss: {x}")
-                )
-        
+            if self.encoding_method != "feature_map":
+                raise NotImplementedError("VQC supports only 'feature_map' in this project.")
+            feature_map = self._make_feature_map()
+            ansatz = self._build_ansatz()
+            optimizer = self._build_optimizer()
+            self.model = VQC(
+                sampler=sampler,
+                feature_map=feature_map,
+                ansatz=ansatz,
+                optimizer=optimizer,
+            )
+            logger.info("Training VQC with feature_map encoding...")
+
         elif self.model_type == "QSVC":
-            if self.encoding_method == "amplitude":
-                raise NotImplementedError(
-                    "Amplitude encoding not supported in Qiskit QSVC. Use 'feature_map'."
-                )
-            else:
-                quantum_kernel = self._prepare_quantum_kernel()
-                self.model = QSVC(
-                    quantum_kernel=quantum_kernel
-                )
-        
-        # Fit the model
-        try:
-            self.model.fit(X, y)
-            self.is_fitted = True
-            logger.info(f"{self.model_type} training completed.")
-        except Exception as e:
-            # Close quantum session on error to avoid costs
-            if hasattr(self, 'quantum_executor') and self.quantum_executor:
-                self.quantum_executor.close_session()
-            raise RuntimeError(f"QML model training failed: {e}")
-        
-        return self
-    
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        """Predict class labels."""
-        if not self.is_fitted:
-            raise RuntimeError("Model not trained. Call fit() first.")
-        return self.model.predict(X)
-    
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """Predict class probabilities."""
-        if not self.is_fitted:
-            raise RuntimeError("Model not trained. Call fit() first.")
-        
-        if hasattr(self.model, "predict_proba"):
-            return self.model.predict_proba(X)
+            if self.encoding_method != "feature_map":
+                raise NotImplementedError("QSVC supports only 'feature_map' in this project.")
+            quantum_kernel = self._prepare_quantum_kernel(sampler=sampler, exec_mode=exec_mode)
+            self.model = QSVC(quantum_kernel=quantum_kernel)
+            logger.info("Training QSVC with feature_map encoding...")
+
         else:
-            # Fallback: use decision function and sigmoid
-            from scipy.special import expit
-            decision = self.model.decision_function(X)
-            proba = expit(decision)
-            return np.vstack([1 - proba, proba]).T
-    
+            raise ValueError("model_type must be 'QSVC' or 'VQC'")
+
+        if X.ndim != 2 or X.shape[1] != self.num_qubits:
+            raise ValueError(
+                f"Input feature dim must equal num_qubits; got X.shape={X.shape}, num_qubits={self.num_qubits}"
+            )
+
+        self.model.fit(X, y)
+        self.is_fitted = True
+        logger.info(f"{self.model_type} training completed.")
+        return self
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        if not self.is_fitted or self.model is None:
+            raise RuntimeError("Model not fitted. Call fit() first.")
+        return self.model.predict(X)
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        if not self.is_fitted or self.model is None:
+            raise RuntimeError("Model not fitted. Call fit() first.")
+        # VQC usually exposes predict_proba; QSVC may not (SVC w/ kernel)
+        if hasattr(self.model, "predict_proba"):
+            try:
+                return self.model.predict_proba(X)
+            except Exception:
+                pass
+        # fallback: map decision function to probability-like scores
+        if hasattr(self.model, "decision_function"):
+            df = self.model.decision_function(X)
+            df = np.asarray(df, dtype=float)
+            proba_pos = 1.0 / (1.0 + np.exp(-df))
+            return np.vstack([1 - proba_pos, proba_pos]).T
+        # last resort: hard labels to 0/1 probs
+        y = self.model.predict(X)
+        return np.vstack([1 - y, y]).T.astype(float)
+
     def score(self, X: np.ndarray, y: np.ndarray) -> float:
-        """Return accuracy score."""
-        if not self.is_fitted:
-            raise RuntimeError("Model not trained. Call fit() first.")
-        return self.model.score(X, y)
-
-
-# Example usage (uncomment to test)
-# if __name__ == "__main__":
-#     # Generate dummy data (5D features, binary labels)
-#     np.random.seed(42)
-#     X = np.random.rand(20, 5)  # 20 samples, 5 features
-#     y = np.random.randint(0, 2, 20)
-#     
-#     # Train VQC with feature map encoding
-#     predictor = QMLLinkPredictor(
-#         model_type="VQC",
-#         encoding_method="feature_map",
-#         num_qubits=5,
-#         feature_map_type="ZZ",
-#         feature_map_reps=2,
-#         ansatz_type="RealAmplitudes",
-#         ansatz_reps=2,
-#         max_iter=50
-#     )
-#     
-#     predictor.fit(X, y)
-#     accuracy = predictor.score(X, y)
-#     proba = predictor.predict_proba(X)
-#     
-#     print(f"Training accuracy: {accuracy:.4f}")
-#     print(f"Predicted probabilities shape: {proba.shape}")
+        if not self.is_fitted or self.model is None:
+            raise RuntimeError("Model not fitted. Call fit() first.")
+        return float(self.model.score(X, y))

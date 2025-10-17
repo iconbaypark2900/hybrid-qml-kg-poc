@@ -40,33 +40,74 @@ METAEDGES = {
 
 def download_hetionet_if_missing(data_dir: str = "data") -> str:
     """
-    Download Hetionet edge list if not present.
-    Uses the official GitHub-hosted SIF file.
+    Ensure Hetionet edge list is present locally.
+    Tries multiple mirrors/new branch layout. Stores an uncompressed TSV at:
+        {data_dir}/hetionet-v1.0-edges.sif
     """
     os.makedirs(data_dir, exist_ok=True)
     edge_file = os.path.join(data_dir, "hetionet-v1.0-edges.sif")
-    
-    if not os.path.exists(edge_file):
-        logger.info("Downloading Hetionet edge list...")
-        url = "https://raw.githubusercontent.com/hetio/hetionet/master/hetnet/tsv/hetionet-v1.0-edges.sif"
-        df = pd.read_csv(url, sep='\t', names=["source", "metaedge", "target"])
-        df.to_csv(edge_file, sep='\t', index=False, header=False)
-        logger.info(f"Saved to {edge_file}")
-    else:
+    if os.path.exists(edge_file):
         logger.info(f"Hetionet edge file already exists at {edge_file}")
-    return edge_file
+        return edge_file
+
+    logger.info("Downloading Hetionet edge list...")
+
+    # Candidate URLs: prefer .sif.gz on 'main', then fall back
+    candidates = [
+        ("https://raw.githubusercontent.com/hetio/hetionet/main/hetnet/tsv/hetionet-v1.0-edges.sif.gz", True),
+        ("https://github.com/hetio/hetionet/raw/main/hetnet/tsv/hetionet-v1.0-edges.sif.gz", True),
+        ("https://raw.githubusercontent.com/hetio/hetionet/master/hetnet/tsv/hetionet-v1.0-edges.sif.gz", True),
+        ("https://github.com/hetio/hetionet/raw/master/hetnet/tsv/hetionet-v1.0-edges.sif.gz", True),
+        ("https://raw.githubusercontent.com/hetio/hetionet/main/hetnet/tsv/hetionet-v1.0-edges.sif", False),
+        ("https://github.com/hetio/hetionet/raw/main/hetnet/tsv/hetionet-v1.0-edges.sif", False),
+    ]
+
+    last_err = None
+    for url, gz in candidates:
+        try:
+            logger.info(f"Trying {url}")
+            df = pd.read_csv(
+                url,
+                sep="\t",
+                names=["source", "metaedge", "target"],
+                dtype=str,
+                compression=("gzip" if gz else None),
+            )
+            # Basic sanity check
+            if {"source", "metaedge", "target"}.issubset(df.columns) and len(df) > 0:
+                df.to_csv(edge_file, sep="\t", index=False, header=False)
+                logger.info(f"Saved Hetionet edges to {edge_file} ({len(df)} rows)")
+                return edge_file
+            else:
+                raise ValueError(f"Downloaded file from {url} but schema/rows look invalid.")
+        except Exception as e:
+            last_err = e
+            logger.warning(f"Failed to fetch from {url}: {e}")
+
+    raise RuntimeError(
+        "Could not download Hetionet edges from any known location. "
+        "Manual workaround:\n"
+        "  1) curl -L -o data/hetionet-v1.0-edges.sif.gz "
+        "https://github.com/hetio/hetionet/raw/main/hetnet/tsv/hetionet-v1.0-edges.sif.gz\n"
+        "  2) python - <<'PY'\n"
+        "import gzip, shutil; "
+        "shutil.copyfileobj(gzip.open('data/hetionet-v1.0-edges.sif.gz','rb'), open('data/hetionet-v1.0-edges.sif','wb'))\n"
+        "PY\n"
+        f"Last error was: {last_err}"
+    )
+
 
 def load_hetionet_edges(data_dir: str = "data") -> pd.DataFrame:
     """
-    Load full Hetionet edge list as a pandas DataFrame.
-    Columns: ['source', 'metaedge', 'target']
+    Load Hetionet edges from local cache (auto-downloads if missing).
+    Returns a DataFrame with columns: ['source', 'metaedge', 'target'] (dtype=str).
     """
     edge_file = download_hetionet_if_missing(data_dir)
     df = pd.read_csv(
         edge_file,
-        sep='\t',
+        sep="\t",
         names=["source", "metaedge", "target"],
-        dtype=str
+        dtype=str,
     )
     logger.info(f"Loaded {len(df)} edges from Hetionet.")
     return df

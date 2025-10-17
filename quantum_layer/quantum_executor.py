@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class QuantumExecutor:
     """
-    Unified executor for quantum circuits supporting both simulator and IBM Heron.
+    Unified executor for quantum circuits supporting both simulator and IBM Heron/Torino.
     """
     
     def __init__(self, config_path: str = "config/quantum_config.yaml"):
@@ -42,11 +42,15 @@ class QuantumExecutor:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
         
-        # Substitute environment variables
+        # Substitute environment variables - FIXED to handle quotes/brackets
         def substitute_env_vars(obj):
             if isinstance(obj, str) and obj.startswith('${') and obj.endswith('}'):
                 var_name = obj[2:-1]
-                return os.getenv(var_name, obj)
+                value = os.getenv(var_name, obj)
+                # Clean the value - remove any surrounding quotes or brackets
+                if isinstance(value, str):
+                    value = value.strip().strip('"').strip("'").strip('{').strip('}')
+                return value
             elif isinstance(obj, dict):
                 return {k: substitute_env_vars(v) for k, v in obj.items()}
             elif isinstance(obj, list):
@@ -60,13 +64,20 @@ class QuantumExecutor:
         if self.execution_mode == "heron" or self.execution_mode == "auto":
             try:
                 token = self.config['quantum']['ibm_quantum']['token']
+                instance = self.config['quantum']['ibm_quantum'].get('instance')
+                channel = self.config['quantum']['ibm_quantum'].get('channel', 'ibm_quantum_platform')
+                
+                # Additional cleaning of token
+                if isinstance(token, str):
+                    token = token.strip().strip('"').strip("'").strip('{').strip('}')
+                
                 if token and token != "your_actual_token_here":
+                    # Use IBM Quantum Platform (simpler)
                     self.service = QiskitRuntimeService(
-                        channel="ibm_quantum",
-                        token=token,
-                        instance=self.config['quantum']['ibm_quantum']['instance']
+                        channel="ibm_quantum_platform",
+                        token=token
                     )
-                    logger.info("✅ Connected to IBM Quantum Runtime Service")
+                    logger.info("✅ Connected to IBM Quantum Platform")
                 else:
                     logger.warning("⚠️  IBM Quantum token not configured. Heron mode unavailable.")
                     if self.execution_mode == "heron":
@@ -77,47 +88,39 @@ class QuantumExecutor:
                 if self.execution_mode == "heron":
                     logger.info("🔄 Falling back to simulator mode")
                     self.execution_mode = "simulator"
-    
-    def _get_simulator_sampler(self) -> Tuple[BaseSampler, Optional[str]]:
-        """Get simulator sampler with optional noise model."""
-        sim_config = self.config['quantum']['simulator']
-        
-        if sim_config.get('noise_model') == "ibm_heron_noise" and self.service:
-            # Get realistic Heron noise model
-            try:
-                backend = self.service.backend("ibm_heron")
-                noise_model = NoiseModel.from_backend(backend)
-                simulator = AerSimulator(noise_model=noise_model)
-                logger.info("🧪 Using Heron noise model in simulator")
-            except Exception as e:
-                logger.warning(f"⚠️  Could not load Heron noise model: {e}")
-                simulator = AerSimulator()
-        else:
-            simulator = AerSimulator()
-        
-        # Configure shots
-        from qiskit.primitives import Sampler as LocalSampler
-        sampler = LocalSampler(backend=simulator, options={"shots": sim_config['shots']})
-        return sampler, "simulator"
-    
+
+    def _get_simulator_sampler(self):
+        """Get simulator sampler - fixed to return proper tuple"""
+        from qiskit.primitives import Sampler
+        try:
+            from qiskit.primitives import StatevectorSampler
+            return StatevectorSampler(), "simulator_statevector"
+        except Exception:
+            return Sampler(), "simulator"
+
     def _get_heron_sampler(self) -> Tuple[RuntimeSampler, str]:
-        """Get IBM Heron sampler with error mitigation."""
+        """Get IBM Heron/Torino sampler with error mitigation."""
         if not self.service:
             raise RuntimeError("IBM Quantum service not available")
         
         heron_config = self.config['quantum']['heron']
-        backend_name = self.config['quantum']['ibm_quantum']['backend']
+        backend_name = heron_config['backend']
         
         try:
             backend = self.service.backend(backend_name)
             logger.info(f"🚀 Using IBM Quantum backend: {backend_name}")
             
-            # Configure options
+            # Configure options - FIXED for new API (removed unsupported options)
             options = Options()
-            options.resilience_level = heron_config['resilience_level']
-            options.optimization_level = heron_config['optimization_level']
-            options.execution.shots = heron_config['shots']
-            options.max_execution_time = heron_config['max_runtime_minutes'] * 60
+            # New API uses different structure - check if execution exists
+            if hasattr(options, 'execution'):
+                options.execution.shots = heron_config['shots']
+            # max_execution_time may not be in Options anymore
+            if hasattr(options, 'max_execution_time'):
+                options.max_execution_time = heron_config['max_runtime_minutes'] * 60
+            
+            # Note: optimization_level and resilience_level were removed in newer API versions
+            # These are now handled at the transpiler level, not in Options
             
             # Create session for cost efficiency
             self.session = Session(backend=backend)
@@ -126,28 +129,29 @@ class QuantumExecutor:
             return sampler, backend_name
             
         except Exception as e:
-            logger.error(f"❌ Heron backend unavailable: {e}")
+            logger.error(f"❌ Backend {backend_name} unavailable: {e}")
             raise
-    
-    def get_sampler(self) -> Tuple[BaseSampler, str]:
-        """Get appropriate sampler based on execution mode."""
-        if self.execution_mode == "simulator":
+
+    def get_sampler(self):
+        """Get sampler - fixed to always return tuple"""
+        # Prefer exact sims locally (statevector if available)
+        if self.execution_mode in ("simulator", "auto", "statevector", "simulator_statevector"):
             return self._get_simulator_sampler()
-        elif self.execution_mode == "heron":
-            return self._get_heron_sampler()
-        elif self.execution_mode == "auto":
-            # Try Heron first, fallback to simulator
+
+        if self.execution_mode == "heron":
             try:
                 return self._get_heron_sampler()
             except Exception as e:
-                logger.warning(f"🔄 Heron unavailable, using simulator: {e}")
+                logger.warning(f"Heron unavailable, using simulator: {e}")
                 return self._get_simulator_sampler()
-        else:
-            raise ValueError(f"Unknown execution mode: {self.execution_mode}")
+
+        # safe default
+        return self._get_simulator_sampler()
     
     def optimize_circuit(self, circuit: QuantumCircuit) -> QuantumCircuit:
         """Apply circuit optimization passes."""
-        if not self.config['quantum']['circuit_optimization']:
+        # Check if circuit optimization is enabled (add to config if needed)
+        if not self.config['quantum'].get('circuit_optimization', True):
             return circuit
         
         optimized = circuit.copy()
@@ -156,7 +160,7 @@ class QuantumExecutor:
         if (self.execution_mode == "heron" and 
             self.config['quantum']['heron']['use_dynamical_decoupling']):
             try:
-                backend = self.service.backend("ibm_heron") if self.service else None
+                backend = self.service.backend(self.config['quantum']['heron']['backend']) if self.service else None
                 if backend:
                     dd_pass = DynamicalDecoupling(backend.target.dt, [XGate()])
                     pm = PassManager([dd_pass])

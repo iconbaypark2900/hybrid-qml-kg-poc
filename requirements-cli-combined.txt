@@ -9,6 +9,7 @@ PyYAML==6.0.1
 tqdm==4.67.1
 rich==13.9.4
 networkx==3.2.1
+dotenv==0.9.9
 
 # Quantum stack for run_pipeline.py
 qiskit==1.4.4

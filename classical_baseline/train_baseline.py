@@ -26,7 +26,7 @@ class ClassicalLinkPredictor:
     Supports Logistic Regression, SVM, and Random Forest.
     Optimized for biomedical tasks (imbalanced data, PR-AUC focus).
     """
-    
+
     def __init__(
         self,
         model_type: str = "LogisticRegression",
@@ -41,9 +41,9 @@ class ClassicalLinkPredictor:
         self.model = None
         self.scaler = None
         self.metrics: Dict[str, float] = {}
-        
+
         os.makedirs(model_dir, exist_ok=True)
-        
+
         # Initialize model
         if model_type == "LogisticRegression":
             self.model = LogisticRegression(
@@ -66,7 +66,7 @@ class ClassicalLinkPredictor:
             )
         else:
             raise ValueError(f"Unsupported model_type: {model_type}")
-    
+
     def prepare_features_and_labels(
         self,
         edge_df: pd.DataFrame,
@@ -74,19 +74,27 @@ class ClassicalLinkPredictor:
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Use the embedder to generate features and extract labels.
+
+        Args:
+            edge_df: DataFrame with columns ['source', 'target', 'label']
+            embedder: An embedding object with method `prepare_link_features`
+
+        Returns:
+            X: Feature matrix
+            y: Labels array
         """
         logger.info("Preparing features and labels...")
         X = embedder.prepare_link_features(edge_df)
         y = edge_df["label"].values
-        
+
         # Remove any rows where embedding failed (should be rare)
         valid_mask = ~np.isnan(X).any(axis=1)
         X_clean = X[valid_mask]
         y_clean = y[valid_mask]
-        
+
         logger.info(f"Feature matrix shape: {X_clean.shape}")
         return X_clean, y_clean
-    
+
     def train(
         self,
         train_df: pd.DataFrame,
@@ -95,50 +103,65 @@ class ClassicalLinkPredictor:
     ) -> Dict[str, float]:
         """
         Train the model and evaluate on test set (if provided).
+
+        Args:
+            train_df: Training DataFrame with columns ['source', 'target', 'label']
+            embedder: An embedding object with method `prepare_link_features`
+            test_df: Optional test DataFrame with columns ['source', 'target', 'label']
+
+        Returns:
+            metrics: Dictionary of evaluation metrics
         """
         # Prepare data
         X_train, y_train = self.prepare_features_and_labels(train_df, embedder)
-        
+
         # Scale features (important for SVM/LogReg)
         self.scaler = StandardScaler()
         X_train_scaled = self.scaler.fit_transform(X_train)
-        
+
         # Train
         logger.info(f"Training {self.model_type}...")
         self.model.fit(X_train_scaled, y_train)
-        
+
         # Evaluate on train set
         self._evaluate(X_train_scaled, y_train, "train")
-        
+
         # Evaluate on test set if provided
         if test_df is not None:
             X_test, y_test = self.prepare_features_and_labels(test_df, embedder)
             X_test_scaled = self.scaler.transform(X_test)
             self._evaluate(X_test_scaled, y_test, "test")
-        
+
         # Save model and scaler
         self.save_model()
         return self.metrics
-    
+
     def _evaluate(self, X: np.ndarray, y: np.ndarray, prefix: str = "test") -> None:
-        """Evaluate model and store metrics."""
+        """
+        Evaluate model and store metrics.
+
+        Args:
+            X: Feature matrix
+            y: Labels array
+            prefix: Prefix for metrics keys (e.g., "train" or "test")
+        """
         y_pred = self.model.predict(X)
         y_proba = self.model.predict_proba(X)[:, 1]  # Probability of positive class
-        
+
         # Core metrics
         acc = accuracy_score(y, y_pred)
         prec = precision_score(y, y_pred, zero_division=0)
         rec = recall_score(y, y_pred, zero_division=0)
         f1 = f1_score(y, y_pred, zero_division=0)
-        
+
         # AUC metrics (robust to imbalance)
         try:
             roc_auc = roc_auc_score(y, y_proba)
         except ValueError:
             roc_auc = float('nan')  # Only one class present
-        
+
         pr_auc = average_precision_score(y, y_proba)
-        
+
         # Store metrics
         self.metrics.update({
             f"{prefix}_accuracy": acc,
@@ -148,7 +171,7 @@ class ClassicalLinkPredictor:
             f"{prefix}_roc_auc": roc_auc,
             f"{prefix}_pr_auc": pr_auc
         })
-        
+
         logger.info(f"{prefix.capitalize()} Metrics:")
         logger.info(f"  Accuracy: {acc:.4f}")
         logger.info(f"  Precision: {prec:.4f}")
@@ -156,33 +179,43 @@ class ClassicalLinkPredictor:
         logger.info(f"  F1: {f1:.4f}")
         logger.info(f"  ROC-AUC: {roc_auc:.4f}")
         logger.info(f"  PR-AUC: {pr_auc:.4f}")
-        
+
         # Detailed report (for test set)
         if prefix == "test":
             logger.info("\nClassification Report:")
             logger.info(classification_report(y, y_pred))
-    
+
     def predict(self, X: np.ndarray) -> np.ndarray:
-        """Predict class probabilities for positive link."""
+        """
+        Predict class probabilities for positive link.
+        Args:
+            X: Feature matrix
+
+        Returns:
+            probs: Probability of positive class
+        """
         if self.scaler is None or self.model is None:
             raise RuntimeError("Model not trained. Call train() first.")
         X_scaled = self.scaler.transform(X)
         return self.model.predict_proba(X_scaled)[:, 1]
-    
+
     def save_model(self) -> None:
         """Save model and scaler to disk."""
         model_path = os.path.join(self.model_dir, f"classical_{self.model_type.lower()}.joblib")
         scaler_path = os.path.join(self.model_dir, "scaler.joblib")
-        
+
         joblib.dump(self.model, model_path)
         joblib.dump(self.scaler, scaler_path)
         logger.info(f"Saved model to {model_path}")
-    
+
     def load_model(self) -> bool:
-        """Load model and scaler from disk."""
+        """
+        Load model and scaler from disk.
+        Returns:
+            success: True if loaded successfully, False otherwise"""
         model_path = os.path.join(self.model_dir, f"classical_{self.model_type.lower()}.joblib")
         scaler_path = os.path.join(self.model_dir, "scaler.joblib")
-        
+
         if os.path.exists(model_path) and os.path.exists(scaler_path):
             self.model = joblib.load(model_path)
             self.scaler = joblib.load(scaler_path)

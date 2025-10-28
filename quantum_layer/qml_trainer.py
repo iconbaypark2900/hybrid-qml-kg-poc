@@ -20,14 +20,14 @@ logger = logging.getLogger(__name__)
 class QMLTrainer:
     """
     Trainer for Quantum Machine Learning models in the KG link prediction pipeline.
-    
+
     Handles:
       - Training QML models (VQC/QSVC)
       - Evaluating against classical baselines
       - Logging metrics for benchmarking
       - Saving results for dashboard integration
     """
-    
+
     def __init__(
         self,
         results_dir: str = "results",
@@ -36,11 +36,19 @@ class QMLTrainer:
         self.results_dir = results_dir
         self.random_state = random_state
         os.makedirs(results_dir, exist_ok=True)
-    
+
     def count_trainable_parameters(self, model) -> int:
         """
         Count trainable parameters in the quantum model.
         For VQC: number of ansatz parameters.
+
+        For QSVC: typically 0 (fixed kernel).
+
+        Args:
+            model: QMLLinkPredictor model instance
+
+        Returns:
+            int: Number of trainable parameters
         """
         if hasattr(model, 'ansatz') and hasattr(model.ansatz, 'num_parameters'):
             return model.ansatz.num_parameters
@@ -49,7 +57,7 @@ class QMLTrainer:
             return 0
         else:
             return -1  # Unknown
-    
+
     def evaluate_model(
         self,
         model,
@@ -59,30 +67,39 @@ class QMLTrainer:
     ) -> Dict[str, float]:
         """
         Evaluate model and return comprehensive metrics.
+
+        Args:
+            model: Trained model (QMLLinkPredictor or sklearn-like)
+            X_test: Test features
+            y_test: Test labels
+            model_name: Name for logging purposes
+
+        Returns:
+            Dict with metrics
         """
         logger.info(f"Evaluating {model_name} model...")
-        
+
         # Predictions
         y_pred = model.predict(X_test)
         y_proba = model.predict_proba(X_test)[:, 1]  # Probability of positive class
-        
+
         # Core metrics
         acc = accuracy_score(y_test, y_pred)
         prec = precision_score(y_test, y_pred, zero_division=0)
         rec = recall_score(y_test, y_pred, zero_division=0)
         f1 = f1_score(y_test, y_pred, zero_division=0)
-        
+
         # AUC metrics
         try:
             roc_auc = roc_auc_score(y_test, y_proba)
         except ValueError:
             roc_auc = float('nan')
-        
+
         pr_auc = average_precision_score(y_test, y_proba)
-        
+
         # Parameter count
         n_params = self.count_trainable_parameters(model)
-        
+
         metrics = {
             "accuracy": acc,
             "precision": prec,
@@ -93,7 +110,7 @@ class QMLTrainer:
             "num_parameters": n_params,
             "model_type": model_name
         }
-        
+
         logger.info(f"{model_name} Test Metrics:")
         logger.info(f"  Accuracy: {acc:.4f}")
         logger.info(f"  Precision: {prec:.4f}")
@@ -101,9 +118,9 @@ class QMLTrainer:
         logger.info(f"  F1: {f1:.4f}")
         logger.info(f"  PR-AUC: {pr_auc:.4f}")
         logger.info(f"  Trainable Parameters: {n_params}")
-        
+
         return metrics
-    
+
     def train_and_evaluate(
         self,
         train_df: pd.DataFrame,
@@ -115,14 +132,14 @@ class QMLTrainer:
     ) -> Dict[str, Dict[str, float]]:
         """
         Full training and evaluation pipeline.
-        
+
         Args:
             train_df, test_df: DataFrames with 'source', 'target', 'label'
             embedder: Trained HetionetEmbedder instance
             qml_config: Dict with QMLLinkPredictor kwargs
             classical_model_type: Baseline model type
             quantum_config_path: Path to quantum configuration file
-        
+
         Returns:
             Dict with 'classical' and 'quantum' metric dictionaries
         """
@@ -135,16 +152,16 @@ class QMLTrainer:
         X_test_classical = embedder.prepare_link_features(test_df)
         X_test_qml = embedder.prepare_link_features_qml(test_df)
         y_test = test_df["label"].values
-        
+
         # Remove any invalid samples (check both classical and qml features)
         valid_train = ~np.isnan(X_train_classical).any(axis=1) & ~np.isnan(X_train_qml).any(axis=1)
         valid_test = ~np.isnan(X_test_classical).any(axis=1) & ~np.isnan(X_test_qml).any(axis=1)
         X_train_classical, X_train_qml, y_train = X_train_classical[valid_train], X_train_qml[valid_train], y_train[valid_train]
         X_test_classical, X_test_qml, y_test = X_test_classical[valid_test], X_test_qml[valid_test], y_test[valid_test]
-        
+
         logger.info(f"Final train set: {X_train_classical.shape[0]} samples (classical: {X_train_classical.shape[1]}D, qml: {X_train_qml.shape[1]}D)")
         logger.info(f"Final test set: {X_test_classical.shape[0]} samples (classical: {X_test_classical.shape[1]}D, qml: {X_test_qml.shape[1]}D)")
-        
+
         # Train classical baseline
         logger.info("Training classical baseline...")
         classical_predictor = ClassicalLinkPredictor(
@@ -155,7 +172,7 @@ class QMLTrainer:
         classical_metrics = self.evaluate_model(
             classical_predictor.model, X_test_classical, y_test, "Classical"
         )
-        
+
         # Train QML model
         logger.info("Training QML model...")
 
@@ -248,37 +265,41 @@ class QMLTrainer:
                 "accuracy": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0,
                 "roc_auc": 0.0, "pr_auc": 0.0, "num_parameters": -1, "model_type": "Quantum"
             }
-        
+
         # Combine results
         results = {
             "classical": classical_metrics,
             "quantum": qml_metrics
         }
-        
+
         # Save results
         self.save_results(results, qml_config)
         return results
-    
+
     def save_results(self, results: Dict, qml_config: Dict) -> None:
         """
         Save results to CSV for dashboard and benchmarking.
+
+        Args:
+            results: Dict with 'classical' and 'quantum' metrics
+            qml_config: QML configuration used in the run
         """
         # Flatten results for CSV
         flat_results = {}
         for model_type, metrics in results.items():
             for key, value in metrics.items():
                 flat_results[f"{model_type}_{key}"] = value
-        
+
         # Add QML config
         for key, value in qml_config.items():
             flat_results[f"qml_{key}"] = str(value)
-        
+
         # Save as single-row CSV
         df = pd.DataFrame([flat_results])
         csv_path = os.path.join(self.results_dir, "latest_run.csv")
         df.to_csv(csv_path, index=False)
         logger.info(f"Saved results to {csv_path}")
-        
+
         # Also save full history (append mode)
         history_path = os.path.join(self.results_dir, "experiment_history.csv")
         if os.path.exists(history_path):
@@ -290,6 +311,29 @@ class QMLTrainer:
 
 # --- New function for precomputed QSVC kernel grid search ---
 def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
+    """
+    Trains a QSVC model with a precomputed kernel.
+
+    Parameters
+    ----------
+    X_train : np.ndarray
+        Training data.
+    y_train : np.ndarray
+        Training labels.
+    X_test : np.ndarray
+        Test data.
+    y_test : np.ndarray
+        Test labels.
+    args : object
+        An object containing the model parameters.
+    log : logging.Logger
+        The logger to use.
+
+    Returns
+    -------
+    tuple
+        A tuple containing the trained model, the training kernel, and the test kernel.
+    """
     # Build feature map
     from qiskit.circuit.library import ZZFeatureMap, ZFeatureMap
     if args.feature_map == "ZZ":

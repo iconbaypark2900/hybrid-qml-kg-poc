@@ -90,10 +90,26 @@ class QMLLinkPredictor:
     # Sanity / builders
     # ------------------------------------------------------------------
     def _ensure_qiskit_available(self):
+        """
+        Verifies that Qiskit libraries are installed and available.
+
+        Returns
+        -------
+        bool
+            True if Qiskit is available, otherwise raises an ImportError.
+        """
         # Import checks are already at file scope; this method exists for clarity & future guards.
         return True
 
     def _build_optimizer(self):
+        """
+        Constructs a Qiskit optimizer instance based on the specified optimizer name.
+
+        Returns
+        -------
+        qiskit_algorithms.optimizers.Optimizer
+            An instance of a Qiskit optimizer (e.g., COBYLA, SPSA).
+        """
         name = self.optimizer_name.upper()
         if name == "COBYLA":
             return COBYLA(maxiter=self.max_iter)
@@ -102,6 +118,14 @@ class QMLLinkPredictor:
         raise ValueError("optimizer must be one of: {'COBYLA','SPSA'}")
 
     def _build_ansatz(self):
+        """
+        Constructs a Qiskit ansatz (variational form) instance.
+
+        Returns
+        -------
+        qiskit.circuit.library.Ansatz
+            An instance of a Qiskit ansatz (e.g., RealAmplitudes, EfficientSU2).
+        """
         if self.ansatz_type == "RealAmplitudes":
             return RealAmplitudes(num_qubits=self.num_qubits, reps=self.ansatz_reps)
         if self.ansatz_type == "EfficientSU2":
@@ -109,6 +133,14 @@ class QMLLinkPredictor:
         raise ValueError("ansatz_type must be one of: {'RealAmplitudes','EfficientSU2'}")
 
     def _make_feature_map(self):
+        """
+        Constructs a Qiskit feature map instance.
+
+        Returns
+        -------
+        qiskit.circuit.library.FeatureMap
+            An instance of a Qiskit feature map (e.g., ZZFeatureMap, ZFeatureMap).
+        """
         if self.encoding_method != "feature_map":
             raise NotImplementedError("Only 'feature_map' encoding is supported.")
         if self.feature_map_type == "ZZ":
@@ -127,6 +159,18 @@ class QMLLinkPredictor:
     def _prepare_quantum_kernel(self, sampler: Sampler, exec_mode: str):
         """
         Construct a QSVC fidelity kernel consistent with execution mode.
+
+        Parameters
+        ----------
+        sampler : qiskit.primitives.Sampler
+            The sampler to use for quantum kernel evaluation.
+        exec_mode : str
+            The execution mode, e.g., "simulator_statevector", "simulator", etc.
+
+        Returns
+        -------
+        qiskit_machine_learning.kernels.QuantumKernel
+            The constructed quantum kernel.
         """
         fm = self._make_feature_map()
         if exec_mode in ("statevector", "simulator_statevector"):
@@ -138,7 +182,21 @@ class QMLLinkPredictor:
     # Public API
     # ------------------------------------------------------------------
     def fit(self, X: np.ndarray, y: np.ndarray) -> "QMLLinkPredictor":
-        """Train the selected model."""
+        """
+        Train the selected model.
+
+        Parameters
+        ----------
+        X : np.ndarray
+            The training data.
+        y : np.ndarray
+            The training labels.
+
+        Returns
+        -------
+        QMLLinkPredictor
+            The fitted QMLLinkPredictor instance.
+        """
         self._ensure_qiskit_available()
 
         # Choose sampler + exec mode (prefer exact sims)
@@ -188,11 +246,37 @@ class QMLLinkPredictor:
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
+        """
+        Makes predictions on new data.
+
+        Parameters
+        ----------
+        X : np.ndarray
+            The input data to make predictions on.
+
+        Returns
+        -------
+        np.ndarray
+            The predicted labels.
+        """
         if not self.is_fitted or self.model is None:
             raise RuntimeError("Model not fitted. Call fit() first.")
         return self.model.predict(X)
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """
+        Returns probability estimates for new data.
+
+        Parameters
+        ----------
+        X : np.ndarray
+            The input data to make predictions on.
+
+        Returns
+        -------
+        np.ndarray
+            The probability estimates of the classes.
+        """
         if not self.is_fitted or self.model is None:
             raise RuntimeError("Model not fitted. Call fit() first.")
         # VQC usually exposes predict_proba; QSVC may not (SVC w/ kernel)
@@ -212,6 +296,21 @@ class QMLLinkPredictor:
         return np.vstack([1 - y, y]).T.astype(float)
 
     def score(self, X: np.ndarray, y: np.ndarray) -> float:
+        """
+        Returns the mean accuracy on the given test data and labels.
+
+        Parameters
+        ----------
+        X : np.ndarray
+            The test data.
+        y : np.ndarray
+            The true labels for the test data.
+
+        Returns
+        -------
+        float
+            The mean accuracy.
+        """
         if not self.is_fitted or self.model is None:
             raise RuntimeError("Model not fitted. Call fit() first.")
         return float(self.model.score(X, y))

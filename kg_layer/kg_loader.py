@@ -43,6 +43,12 @@ def download_hetionet_if_missing(data_dir: str = "data") -> str:
     Ensure Hetionet edge list is present locally.
     Tries multiple mirrors/new branch layout. Stores an uncompressed TSV at:
         {data_dir}/hetionet-v1.0-edges.sif
+
+    Args:
+        data_dir: The directory to store the data in.
+
+    Returns:
+        The path to the edge file.
     """
     os.makedirs(data_dir, exist_ok=True)
     edge_file = os.path.join(data_dir, "hetionet-v1.0-edges.sif")
@@ -100,7 +106,12 @@ def download_hetionet_if_missing(data_dir: str = "data") -> str:
 def load_hetionet_edges(data_dir: str = "data") -> pd.DataFrame:
     """
     Load Hetionet edges from local cache (auto-downloads if missing).
-    Returns a DataFrame with columns: ['source', 'metaedge', 'target'] (dtype=str).
+
+    Args:
+        data_dir: The directory where the data is stored.
+
+    Returns:
+        A DataFrame with columns: ['source', 'metaedge', 'target'] (dtype=str).
     """
     edge_file = download_hetionet_if_missing(data_dir)
     df = pd.read_csv(
@@ -119,25 +130,25 @@ def extract_task_edges(
 ) -> Tuple[pd.DataFrame, Dict[str, int], Dict[int, str]]:
     """
     Extract edges for a specific task (e.g., drug-disease treatment).
-    
+
     Args:
         df_edges: Full Hetionet edge DataFrame
         relation_type: Metaedge code (e.g., 'CtD' for Compound-treats-Disease)
         max_entities: Optional cap on number of unique entities (for PoC scalability)
-    
+
     Returns:
         filtered_edges: DataFrame with only the desired relation
         entity_to_id: Mapping from entity ID (e.g., 'Compound::DB00001') to int
         id_to_entity: Reverse mapping
     """
     logger.info(f"Filtering for relation: {relation_type} ({METAEDGES.get(relation_type, 'Unknown')})")
-    
+
     task_edges = df_edges[df_edges["metaedge"] == relation_type].copy()
     logger.info(f"Found {len(task_edges)} '{relation_type}' edges.")
-    
+
     # Get all unique entities
     all_entities = pd.concat([task_edges["source"], task_edges["target"]]).unique()
-    
+
     if max_entities and len(all_entities) > max_entities:
         logger.info(f"Sampling {max_entities} entities for PoC scalability.")
         sampled_entities = pd.Series(all_entities).sample(n=max_entities, random_state=42)
@@ -146,20 +157,28 @@ def extract_task_edges(
             task_edges["target"].isin(sampled_entities)
         ]
         all_entities = pd.concat([task_edges["source"], task_edges["target"]]).unique()
-    
+
     # Create entity ID mapping
     entity_to_id = {entity: idx for idx, entity in enumerate(sorted(all_entities))}
     id_to_entity = {idx: entity for entity, idx in entity_to_id.items()}
-    
+
     # Add integer IDs to edges
     task_edges["source_id"] = task_edges["source"].map(entity_to_id)
     task_edges["target_id"] = task_edges["target"].map(entity_to_id)
-    
+
     logger.info(f"Final task graph: {len(task_edges)} edges, {len(all_entities)} unique entities.")
     return task_edges, entity_to_id, id_to_entity
 
 def create_networkx_graph(task_edges: pd.DataFrame) -> nx.DiGraph:
-    """Create a NetworkX graph from task-specific edges."""
+    """
+    Create a NetworkX graph from task-specific edges.
+
+    Args:
+        task_edges:
+
+    Returns:
+        G: A directed graph with edges from task_edges
+    """
     G = nx.DiGraph()
     for _, row in task_edges.iterrows():
         G.add_edge(row["source_id"], row["target_id"], relation=row["metaedge"])
@@ -173,25 +192,33 @@ def get_negative_samples(
     """
     Generate negative samples (non-existing links) for training.
     Simple random sampling without replacement.
+
+    Args:
+        task_edges:
+        num_negatives:
+        random_state:
+
+    Returns:
+        DataFrame with negative samples: ['source_id', 'target_id', 'label' (0)]
     """
     if num_negatives is None:
         num_negatives = len(task_edges)  # 1:1 ratio
-    
+
     sources = task_edges["source_id"].values
     targets = task_edges["target_id"].values
     existing_pairs = set(zip(sources, targets))
-    
+
     unique_sources = task_edges["source_id"].unique()
     unique_targets = task_edges["target_id"].unique()
-    
+
     import numpy as np
     np.random.seed(random_state)
-    
+
     neg_sources = []
     neg_targets = []
     attempts = 0
     max_attempts = num_negatives * 10
-    
+
     while len(neg_sources) < num_negatives and attempts < max_attempts:
         s = np.random.choice(unique_sources)
         t = np.random.choice(unique_targets)
@@ -199,7 +226,7 @@ def get_negative_samples(
             neg_sources.append(s)
             neg_targets.append(t)
         attempts += 1
-    
+
     logger.info(f"Generated {len(neg_sources)} negative samples.")
     return pd.DataFrame({
         "source_id": neg_sources,
@@ -215,29 +242,38 @@ def prepare_link_prediction_dataset(
     """
     Split edges into train/test and add negative samples.
     Returns train and test DataFrames with 'label' column.
+
+    Args:
+        task_edges:
+        test_size:
+        random_state:
+
+    Returns:
+        train_df: Training DataFrame with positive and negative samples
+        test_df: Testing DataFrame with positive and negative samples
     """
     from sklearn.model_selection import train_test_split
-    
+
     # Positive samples
     pos_df = task_edges[["source_id", "target_id"]].copy()
     pos_df["label"] = 1
-    
+
     # Train/test split on positive edges
     pos_train, pos_test = train_test_split(
         pos_df, test_size=test_size, random_state=random_state
     )
-    
+
     # Generate negatives
     neg_train = get_negative_samples(pos_train, random_state=random_state)
     neg_test = get_negative_samples(pos_test, random_state=random_state + 1)
-    
+
     # Combine
     train_df = pd.concat([pos_train, neg_train], ignore_index=True).sample(frac=1, random_state=random_state)
     test_df = pd.concat([pos_test, neg_test], ignore_index=True).sample(frac=1, random_state=random_state)
-    
+
     logger.info(f"Train set: {len(train_df)} samples ({train_df['label'].sum()} positive)")
     logger.info(f"Test set: {len(test_df)} samples ({test_df['label'].sum()} positive)")
-    
+
     return train_df, test_df
 
 # Example usage (uncomment for testing)

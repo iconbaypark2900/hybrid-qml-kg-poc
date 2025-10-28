@@ -35,12 +35,28 @@ SCALING_PLOT = Path("docs/scaling_projection.png")
 # Load latest results
 @st.cache_data
 def load_latest_results():
+    """
+    Loads the latest results from a CSV file.
+
+    Returns
+    -------
+    pd.DataFrame or None
+        A DataFrame containing the latest results, or None if the file does not exist.
+    """
     if LATEST_RUN.exists():
         return pd.read_csv(LATEST_RUN)
     return None
 
 @st.cache_data
 def load_history():
+    """
+    Loads the experiment history from a CSV file.
+
+    Returns
+    -------
+    pd.DataFrame or None
+        A DataFrame containing the experiment history, or None if the file does not exist.
+    """
     if HISTORY_FILE.exists():
         return pd.read_csv(HISTORY_FILE)
     return None

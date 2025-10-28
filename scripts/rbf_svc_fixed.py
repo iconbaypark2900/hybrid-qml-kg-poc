@@ -31,6 +31,15 @@ def _find_cols(df: pd.DataFrame) -> Tuple[str, str, str]:
     """
     Robustly infer (src, dst, label) column names.
     Handles variants like source_id/target_id and fuzzy matches.
+
+    Args:
+        df: DataFrame with edge data.
+
+    Returns:
+        (src_col, dst_col, y_col)
+
+    Raises:
+        ValueError if could not infer all three.
     """
     cols = list(df.columns)
     low2orig = {c.lower(): c for c in cols}
@@ -86,6 +95,14 @@ def _find_cols(df: pd.DataFrame) -> Tuple[str, str, str]:
 
 
 def _scores_to_continuous(estimator, X):
+    """
+    Args:
+        estimator: fitted sklearn estimator
+        X: feature matrix
+
+    Returns:
+        1D np.ndarray of continuous scores
+    """
     if hasattr(estimator, "decision_function"):
         s = estimator.decision_function(X)
         if isinstance(s, np.ndarray) and s.ndim == 2 and s.shape[1] == 2:
@@ -97,6 +114,15 @@ def _scores_to_continuous(estimator, X):
 
 
 def _compute_metrics(y_true, y_pred, y_score) -> Dict[str, float]:
+    """
+    Args:
+        y_true: true binary labels
+        y_pred: predicted binary labels
+        y_score: predicted continuous scores
+
+    Returns:
+        dict of metrics
+    """
     m = {
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "precision": float(precision_score(y_true, y_pred, zero_division=0)),
@@ -125,6 +151,15 @@ def _make_embedding_getter(embedder):
       2) matrix + mapping dict
       3) matrix + aligned id list
       4) **row-index fallback**: if eid can be cast to int and is in [0, nrows)
+
+    Args:
+        embedder: HetionetEmbedder instance
+
+    Returns:
+        (getter, dim_hint)
+
+    Raises:
+        AttributeError if could not find a way to get embeddings.
     """
     # 0) try to load saved embeddings if the embedder supports it
     M = None
@@ -246,11 +281,35 @@ def _make_embedding_getter(embedder):
 
 def _probe_dim_single(getter: Callable[[Any], Optional[np.ndarray]]) -> int:
     # we can only get dim once we see a vector; defer to runtime by returning -1 if unknown
+    """
+    Infer embedding dimension by probing a few dummy entities.
+
+    Args:
+        getter: embedding getter function
+
+    Returns:
+        embedding dimension, or -1 if unknown
+    """
     return -1
 
 
 def _infer_dim_from_data(getter: Callable[[Any], Optional[np.ndarray]],
                          df: pd.DataFrame, src_col: str, dst_col: str) -> int:
+    """
+    Infer embedding dimension by probing entities in the data.
+
+    Args:
+        getter: embedding getter function
+        df: DataFrame with edge data
+        src_col: source column name
+        dst_col: destination column name
+
+    Returns:
+        embedding dimension
+
+    Raises:
+        RuntimeError if could not infer dimension from any entity.
+    """
     for e in pd.concat([df[src_col], df[dst_col]], ignore_index=True):
         v = getter(e)
         if v is not None:
@@ -262,7 +321,16 @@ def _infer_dim_from_data(getter: Callable[[Any], Optional[np.ndarray]],
 # Feature construction
 # --------------------
 def _pair_features(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    """128-D classical features for 32-D (or 4*dim in general): [u, v, |u−v|, u*v]."""
+    """
+    128-D classical features for 32-D (or 4*dim in general): [u, v, |u−v|, u*v].
+
+    Args:
+        u: 1D np.ndarray source embedding
+        v: 1D np.ndarray destination embedding
+
+    Returns:
+        1D np.ndarray of concatenated features
+    """
     return np.concatenate([u, v, np.abs(u - v), u * v], axis=-1)
 
 
@@ -274,6 +342,20 @@ def _build_features_with_getter(
     getter: Callable[[Any], Optional[np.ndarray]],
     known_dim: int = -1,
 ) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Build classical 4*dim features using the provided embedding getter.
+
+    Args:
+        df: DataFrame with edge data
+        src_col: source column name
+        dst_col: destination column name
+        y_col: label column name
+        getter: embedding getter function
+        known_dim: known embedding dimension; if <=0, infer from data
+
+    Returns:
+        (features, labels)
+    """
     labels = df[y_col].astype(int).to_numpy()
 
     dim = known_dim if known_dim > 0 else _infer_dim_from_data(getter, df, src_col, dst_col)

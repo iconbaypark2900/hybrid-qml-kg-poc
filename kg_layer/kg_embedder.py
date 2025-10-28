@@ -63,6 +63,14 @@ def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
 
 class HetionetEmbedder:
     def __init__(self, embedding_dim: int = 32, qml_dim: int = 5, work_dir: str = "data"):
+        """
+        Initializes the HetionetEmbedder.
+
+        Args:
+            embedding_dim: The dimensionality of the KG embeddings.
+            qml_dim: The dimensionality of the reduced embeddings for QML.
+            work_dir: The directory to store embeddings and other artifacts.
+        """
         self.embedding_dim = int(embedding_dim)
         self.qml_dim = int(qml_dim)
         self.work_dir = work_dir
@@ -79,11 +87,23 @@ class HetionetEmbedder:
     # Persistence
     # --------------------------
     def _embeddings_paths(self) -> Tuple[str, str]:
+        """
+        Gets the paths for the embeddings and entity IDs files.
+
+        Returns:
+            A tuple containing the path to the embeddings file and the entity IDs file.
+        """
         emb_path = os.path.join(self.work_dir, "entity_embeddings.npy")
         ids_path = os.path.join(self.work_dir, "entity_ids.json")
         return emb_path, ids_path
 
     def load_saved_embeddings(self) -> bool:
+        """
+        Loads the embeddings and entity IDs from the work directory.
+
+        Returns:
+            True if the embeddings were loaded successfully, False otherwise.
+        """
         emb_path, ids_path = self._embeddings_paths()
         if os.path.exists(emb_path) and os.path.exists(ids_path):
             try:
@@ -102,6 +122,9 @@ class HetionetEmbedder:
         return False
 
     def _save_embeddings(self):
+        """
+        Saves the embeddings and entity IDs to the work directory.
+        """
         emb_path, ids_path = self._embeddings_paths()
         np.save(emb_path, self.entity_embeddings)
         with open(ids_path, "w") as f:
@@ -112,6 +135,12 @@ class HetionetEmbedder:
     # Building the vocab
     # --------------------------
     def _build_entity_vocab(self, triples_df: pd.DataFrame):
+        """
+        Builds the entity vocabulary from a DataFrame of triples.
+
+        Args:
+            triples_df: A DataFrame with columns for head and tail entities.
+        """
         h_col, _, t_col = _infer_ht_columns(triples_df)
         entities: Iterable[str] = pd.concat([triples_df[h_col], triples_df[t_col]], ignore_index=True).astype(str).unique()
         self.entity_to_id = {ent: i for i, ent in enumerate(entities)}
@@ -122,6 +151,15 @@ class HetionetEmbedder:
     # PyKEEN path
     # --------------------------
     def _create_pykeen_dataset(self, triples_df: pd.DataFrame) -> PathDataset:
+        """
+        Creates a PyKEEN dataset from a DataFrame of triples.
+
+        Args:
+            triples_df: A DataFrame with columns for head, relation, and tail entities.
+
+        Returns:
+            A PyKEEN PathDataset.
+        """
         h_col, r_col, t_col = _infer_ht_columns(triples_df)
         if r_col is None:
             # If we don't have a relation column (e.g., CtD fixed task), synthesize a single-relation column
@@ -141,6 +179,12 @@ class HetionetEmbedder:
         )
 
     def _train_with_pykeen(self, triples_df: pd.DataFrame):
+        """
+        Trains embeddings using PyKEEN.
+
+        Args:
+            triples_df: A DataFrame with columns for head, relation, and tail entities.
+        """
         dataset = self._create_pykeen_dataset(triples_df)
         logger.info(f"Training TransE embeddings with PyKEEN (dim={self.embedding_dim})...")
         result = pipeline(
@@ -173,6 +217,16 @@ class HetionetEmbedder:
     # --------------------------
     @staticmethod
     def _deterministic_vec(key: str, dim: int) -> np.ndarray:
+        """
+        Generates a deterministic vector for a given key.
+
+        Args:
+            key: The key to generate the vector for.
+            dim: The dimensionality of the vector.
+
+        Returns:
+            A deterministic vector.
+        """
         # Seed from SHA1 of the entity string for determinism across runs
         h = hashlib.sha1(key.encode("utf-8")).digest()
         seed = int.from_bytes(h[:8], "little", signed=False) % (2**32 - 1)
@@ -180,6 +234,12 @@ class HetionetEmbedder:
         return rng.standard_normal(size=dim).astype(np.float32)
 
     def _train_fallback(self, triples_df: pd.DataFrame):
+        """
+        Generates deterministic random embeddings as a fallback when PyKEEN is not available.
+
+        Args:
+            triples_df: A DataFrame with columns for head and tail entities.
+        """
         logger.info(
             f"PyKEEN not available → generating deterministic random embeddings (dim={self.embedding_dim})"
         )
@@ -206,6 +266,9 @@ class HetionetEmbedder:
         - a link-prediction table with columns plus a 'label' (we'll keep only positives)
 
         We ignore the label column for embedding training.
+
+        Args:
+            triples_like_df: DataFrame with triples or link data, expected to have
         """
         df = triples_like_df.copy()
         # If it's a link dataset, filter to positives for triples
@@ -224,6 +287,9 @@ class HetionetEmbedder:
         self._train_fallback(df[[h_col, t_col]])
 
     def reduce_to_qml_dim(self):
+        """
+        Reduces the dimensionality of the embeddings to the QML dimension using PCA.
+        """
         if self.entity_embeddings is None:
             raise RuntimeError("No entity_embeddings to reduce. Call train_embeddings() or load_saved_embeddings() first.")
         if self.qml_dim >= self.entity_embeddings.shape[1]:
@@ -237,6 +303,16 @@ class HetionetEmbedder:
 
     # Feature construction for link prediction
     def _get_vec(self, ent: str, reduced: bool = True) -> np.ndarray:
+        """
+        Gets the vector for a given entity.
+
+        Args:
+            ent: The entity to get the vector for.
+            reduced: Whether to get the reduced-dimension vector.
+
+        Returns:
+            The vector for the given entity.
+        """
         if ent not in self.entity_to_id:
             # unseen entity: deterministic vector
             vec = self._deterministic_vec(ent, self.embedding_dim)
@@ -253,6 +329,13 @@ class HetionetEmbedder:
         """
         Build pairwise features for (head, tail) edges in link_df:
         [h, t, |h - t|, h * t]  (concat)
+
+        Args:
+            link_df: DataFrame with head/source and tail/target columns.
+            reduced: Whether to use reduced-dimension embeddings.
+
+        Returns:
+            X: np.ndarray of shape [num_edges, feature_dim]
         """
         h_col, _, t_col = _infer_ht_columns(link_df)
         feats = []
@@ -271,6 +354,13 @@ class HetionetEmbedder:
           - "diff": |h - t|
           - "hadamard": h ⊙ t
           - "both": concat([|h - t|, h ⊙ t]) and project back to qml_dim via PCA fitted on train features
+
+        Args:
+            link_df: DataFrame with head/source and tail/target columns.
+            mode: One of "diff", "hadamard", or "both".
+
+        Returns:
+            X: np.ndarray of shape [num_edges, qml_dim]
         """
         if self.reduced_embeddings is None:
             if self.entity_embeddings is None:

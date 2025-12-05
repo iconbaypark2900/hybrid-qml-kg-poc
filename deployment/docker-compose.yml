@@ -6,7 +6,7 @@ services:
   kg-api:
     build:
       context: ..
-      dockerfile: deployment/Dockerfile.api
+      dockerfile: deployment/Dockerfile.cli
     ports:
       - "8000:8000"
     volumes:

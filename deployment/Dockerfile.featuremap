@@ -17,20 +17,18 @@ ENV PYTHONUNBUFFERED=1 \
     MPLBACKEND=Agg \
     PYTHONPATH=/app
 
+# Clone the repository and checkout the featuremap branch
+# This ensures we always get the correct branch code, regardless of build context
+ARG GIT_TOKEN
+ARG BRANCH=feat/mjgrav2001/featuremap
+RUN git clone --branch ${BRANCH} --single-branch \
+    https://iconbaypark2900:${GIT_TOKEN}@github.com/Quantum-Global-Group/hybrid-qml-kg-poc.git /tmp/repo && \
+    cp -r /tmp/repo/* /app/ && \
+    rm -rf /tmp/repo
+
 # Install Python deps (using CLI requirements for featuremap development)
-COPY requirements-cli-combined.txt .
 RUN pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements-cli-combined.txt
-
-# Copy application code
-COPY kg_layer/ ./kg_layer/
-COPY classical_baseline/ ./classical_baseline/
-COPY quantum_layer/ ./quantum_layer/
-COPY scripts/ ./scripts/
-COPY config/ ./config/
-COPY benchmarking/ ./benchmarking/
-# Include middleware if needed for testing
-COPY middleware/ ./middleware/
 
 # Data/models/results will usually be mounted from host; create dirs if missing
 RUN mkdir -p data models results

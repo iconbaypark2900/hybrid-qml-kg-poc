@@ -1,0 +1,34 @@
+# Classical Layer Configuration
+# Parameters for classical baseline models
+
+# Model Configuration
+model:
+  model_type: "LogisticRegression"  # Options: "LogisticRegression", "SVM", "RandomForest"
+  random_state: 42                  # Random seed for reproducibility
+
+# Directories
+directories:
+  data_dir: "data"                  # Data directory
+  model_dir: "models"               # Directory to save trained models
+
+# Logistic Regression Parameters
+logistic_regression:
+  max_iter: 1000                    # Maximum iterations for convergence
+  class_weight: "balanced"          # Handle imbalanced data
+
+# SVM Parameters
+svm:
+  kernel: "rbf"                     # Kernel type: "rbf", "linear", "poly"
+  probability: true                 # Enable probability estimates
+  class_weight: "balanced"          # Handle imbalanced data
+  C: 1.0                            # Regularization parameter
+  gamma: "scale"                    # Kernel coefficient
+
+# Random Forest Parameters
+random_forest:
+  n_estimators: 100                 # Number of trees in the forest
+  class_weight: "balanced"         # Handle imbalanced data
+  max_depth: null                   # Maximum depth (null = no limit)
+  min_samples_split: 2              # Minimum samples to split a node
+  min_samples_leaf: 1               # Minimum samples in a leaf node
+

@@ -4,6 +4,8 @@ import os
 import pandas as pd
 import networkx as nx
 from typing import Tuple, List, Dict, Optional
+from pathlib import Path
+import yaml
 import logging
 
 # Configure logging
@@ -37,6 +39,35 @@ METAEDGES = {
     'DlA': 'Disease localizes Anatomy',
     'N1': 'Node type 1',  # placeholder; full list in Hetionet docs
 }
+
+def load_kg_config(config_path: str = "config/kg_layer_config.yaml") -> Dict:
+    """
+    Load KG layer configuration from YAML file.
+
+    Args:
+        config_path: Path to the KG layer config YAML file.
+
+    Returns:
+        Dictionary containing configuration parameters.
+    """
+    if not Path(config_path).exists():
+        logger.warning(f"Config file not found at {config_path}, using defaults")
+        return {
+            "data_loading": {
+                "data_dir": "data",
+                "relation_type": "CtD",
+                "max_entities": 300,
+                "test_size": 0.2,
+                "random_state": 42,
+                "num_negatives": None
+            }
+        }
+
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    return config
+
 
 def download_hetionet_if_missing(data_dir: str = "data") -> str:
     """
@@ -103,16 +134,32 @@ def download_hetionet_if_missing(data_dir: str = "data") -> str:
     )
 
 
-def load_hetionet_edges(data_dir: str = "data") -> pd.DataFrame:
+def load_hetionet_edges(
+    data_dir: Optional[str] = None,
+    config_path: Optional[str] = None,
+    config: Optional[Dict] = None
+) -> pd.DataFrame:
     """
     Load Hetionet edges from local cache (auto-downloads if missing).
 
     Args:
-        data_dir: The directory where the data is stored.
+        data_dir: The directory where the data is stored (overrides config).
+        config_path: Path to KG layer config YAML file (default: "config/kg_layer_config.yaml").
+        config: Configuration dictionary (if provided, config_path is ignored).
 
     Returns:
         A DataFrame with columns: ['source', 'metaedge', 'target'] (dtype=str).
     """
+    # Load config if not provided
+    if config is None:
+        if config_path is None:
+            config_path = "config/kg_layer_config.yaml"
+        config = load_kg_config(config_path)
+
+    # Use provided parameter or fall back to config
+    if data_dir is None:
+        data_dir = config["data_loading"]["data_dir"]
+
     edge_file = download_hetionet_if_missing(data_dir)
     df = pd.read_csv(
         edge_file,
@@ -125,22 +172,38 @@ def load_hetionet_edges(data_dir: str = "data") -> pd.DataFrame:
 
 def extract_task_edges(
     df_edges: pd.DataFrame,
-    relation_type: str = "CtD",
-    max_entities: Optional[int] = None
+    relation_type: Optional[str] = None,
+    max_entities: Optional[int] = None,
+    config_path: Optional[str] = None,
+    config: Optional[Dict] = None
 ) -> Tuple[pd.DataFrame, Dict[str, int], Dict[int, str]]:
     """
     Extract edges for a specific task (e.g., drug-disease treatment).
 
     Args:
         df_edges: Full Hetionet edge DataFrame
-        relation_type: Metaedge code (e.g., 'CtD' for Compound-treats-Disease)
-        max_entities: Optional cap on number of unique entities (for PoC scalability)
+        relation_type: Metaedge code (e.g., 'CtD' for Compound-treats-Disease) (overrides config)
+        max_entities: Optional cap on number of unique entities (for PoC scalability) (overrides config)
+        config_path: Path to KG layer config YAML file (default: "config/kg_layer_config.yaml")
+        config: Configuration dictionary (if provided, config_path is ignored)
 
     Returns:
         filtered_edges: DataFrame with only the desired relation
         entity_to_id: Mapping from entity ID (e.g., 'Compound::DB00001') to int
         id_to_entity: Reverse mapping
     """
+    # Load config if not provided
+    if config is None:
+        if config_path is None:
+            config_path = "config/kg_layer_config.yaml"
+        config = load_kg_config(config_path)
+
+    # Use provided parameters or fall back to config
+    if relation_type is None:
+        relation_type = config["data_loading"]["relation_type"]
+    if max_entities is None:
+        max_entities = config["data_loading"].get("max_entities")
+
     logger.info(f"Filtering for relation: {relation_type} ({METAEDGES.get(relation_type, 'Unknown')})")
 
     task_edges = df_edges[df_edges["metaedge"] == relation_type].copy()
@@ -187,7 +250,9 @@ def create_networkx_graph(task_edges: pd.DataFrame) -> nx.DiGraph:
 def get_negative_samples(
     task_edges: pd.DataFrame,
     num_negatives: Optional[int] = None,
-    random_state: int = 42
+    random_state: Optional[int] = None,
+    config_path: Optional[str] = None,
+    config: Optional[Dict] = None
 ) -> pd.DataFrame:
     """
     Generate negative samples (non-existing links) for training.
@@ -195,14 +260,28 @@ def get_negative_samples(
 
     Args:
         task_edges:
-        num_negatives:
-        random_state:
+        num_negatives: Number of negative samples (overrides config)
+        random_state: Random seed (overrides config)
+        config_path: Path to KG layer config YAML file (default: "config/kg_layer_config.yaml")
+        config: Configuration dictionary (if provided, config_path is ignored)
 
     Returns:
         DataFrame with negative samples: ['source_id', 'target_id', 'label' (0)]
     """
+    # Load config if not provided
+    if config is None:
+        if config_path is None:
+            config_path = "config/kg_layer_config.yaml"
+        config = load_kg_config(config_path)
+
+    # Use provided parameters or fall back to config
     if num_negatives is None:
-        num_negatives = len(task_edges)  # 1:1 ratio
+        num_negatives = config["data_loading"].get("num_negatives")
+        if num_negatives is None:
+            num_negatives = len(task_edges)  # 1:1 ratio
+
+    if random_state is None:
+        random_state = config["data_loading"]["random_state"]
 
     sources = task_edges["source_id"].values
     targets = task_edges["target_id"].values
@@ -236,8 +315,10 @@ def get_negative_samples(
 
 def prepare_link_prediction_dataset(
     task_edges: pd.DataFrame,
-    test_size: float = 0.2,
-    random_state: int = 42
+    test_size: Optional[float] = None,
+    random_state: Optional[int] = None,
+    config_path: Optional[str] = None,
+    config: Optional[Dict] = None
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split edges into train/test and add negative samples.
@@ -245,13 +326,27 @@ def prepare_link_prediction_dataset(
 
     Args:
         task_edges:
-        test_size:
-        random_state:
+        test_size: Test set split ratio (overrides config)
+        random_state: Random seed (overrides config)
+        config_path: Path to KG layer config YAML file (default: "config/kg_layer_config.yaml")
+        config: Configuration dictionary (if provided, config_path is ignored)
 
     Returns:
         train_df: Training DataFrame with positive and negative samples
         test_df: Testing DataFrame with positive and negative samples
     """
+    # Load config if not provided
+    if config is None:
+        if config_path is None:
+            config_path = "config/kg_layer_config.yaml"
+        config = load_kg_config(config_path)
+
+    # Use provided parameters or fall back to config
+    if test_size is None:
+        test_size = config["data_loading"]["test_size"]
+    if random_state is None:
+        random_state = config["data_loading"]["random_state"]
+
     from sklearn.model_selection import train_test_split
 
     # Positive samples
@@ -264,8 +359,8 @@ def prepare_link_prediction_dataset(
     )
 
     # Generate negatives
-    neg_train = get_negative_samples(pos_train, random_state=random_state)
-    neg_test = get_negative_samples(pos_test, random_state=random_state + 1)
+    neg_train = get_negative_samples(pos_train, random_state=random_state, config=config)
+    neg_test = get_negative_samples(pos_test, random_state=random_state + 1, config=config)
 
     # Combine
     train_df = pd.concat([pos_train, neg_train], ignore_index=True).sample(frac=1, random_state=random_state)

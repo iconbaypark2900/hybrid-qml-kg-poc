@@ -5,11 +5,13 @@ import numpy as np
 import pandas as pd
 import logging
 from typing import Dict, Any, Optional
+from pathlib import Path
+import yaml
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     roc_auc_score, average_precision_score
 )
-from .qml_model import QMLLinkPredictor
+from .qml_model import QMLLinkPredictor, load_quantum_config
 from classical_baseline.train_baseline import ClassicalLinkPredictor
 from sklearn.preprocessing import MinMaxScaler
 
@@ -30,12 +32,22 @@ class QMLTrainer:
 
     def __init__(
         self,
-        results_dir: str = "results",
-        random_state: int = 42
+        results_dir: Optional[str] = None,
+        random_state: Optional[int] = None,
+        config_path: Optional[str] = None,
+        config: Optional[Dict] = None
     ):
-        self.results_dir = results_dir
-        self.random_state = random_state
-        os.makedirs(results_dir, exist_ok=True)
+        # Load config if not provided
+        if config is None:
+            if config_path is None:
+                config_path = "config/quantum_layer_config.yaml"
+            config = load_quantum_config(config_path)
+
+        # Use provided parameters or fall back to config
+        self.results_dir = results_dir if results_dir is not None else config["training"]["results_dir"]
+        self.random_state = random_state if random_state is not None else config["model"]["random_state"]
+        self.config = config
+        os.makedirs(self.results_dir, exist_ok=True)
 
     def count_trainable_parameters(self, model) -> int:
         """
@@ -126,9 +138,11 @@ class QMLTrainer:
         train_df: pd.DataFrame,
         test_df: pd.DataFrame,
         embedder,
-        qml_config: Dict[str, Any],
-        classical_model_type: str = "LogisticRegression",
-        quantum_config_path: str = "config/quantum_config.yaml"
+        qml_config: Optional[Dict[str, Any]] = None,
+        classical_model_type: Optional[str] = None,
+        quantum_config_path: Optional[str] = None,
+        config_path: Optional[str] = None,
+        config: Optional[Dict] = None
     ) -> Dict[str, Dict[str, float]]:
         """
         Full training and evaluation pipeline.
@@ -136,21 +150,69 @@ class QMLTrainer:
         Args:
             train_df, test_df: DataFrames with 'source', 'target', 'label'
             embedder: Trained HetionetEmbedder instance
-            qml_config: Dict with QMLLinkPredictor kwargs
-            classical_model_type: Baseline model type
-            quantum_config_path: Path to quantum configuration file
+            qml_config: Dict with QMLLinkPredictor kwargs (overrides config)
+            classical_model_type: Baseline model type (overrides config)
+            quantum_config_path: Path to quantum configuration file (overrides config)
+            config_path: Path to quantum layer config YAML file (default: "config/quantum_layer_config.yaml")
+            config: Configuration dictionary (if provided, config_path is ignored)
 
         Returns:
             Dict with 'classical' and 'quantum' metric dictionaries
         """
+        # Load config if not provided
+        if config is None:
+            if config_path is None:
+                config_path = "config/quantum_layer_config.yaml"
+            config = load_quantum_config(config_path)
+
+        # Merge qml_config with config if provided
+        if qml_config is None:
+            qml_config = {}
+
+        # Build qml_config from config file, allowing overrides
+        if not qml_config:
+            qml_config = {
+                "model_type": config["model"]["model_type"],
+                "encoding_method": config["model"]["encoding_method"],
+                "num_qubits": config["model"]["num_qubits"],
+                "feature_map_type": config["feature_map"]["feature_map_type"],
+                "feature_map_reps": config["feature_map"]["feature_map_reps"],
+                "ansatz_type": config["vqc"]["ansatz_type"],
+                "ansatz_reps": config["vqc"]["ansatz_reps"],
+                "optimizer": config["vqc"]["optimizer"],
+                "max_iter": config["vqc"]["max_iter"],
+                "random_state": config["model"]["random_state"]
+            }
+
+        if quantum_config_path is None:
+            quantum_config_path = config["quantum_executor"]["quantum_config_path"]
+
+        if classical_model_type is None:
+            # Load classical config
+            from classical_baseline.train_baseline import load_classical_config
+            classical_config = load_classical_config()
+            classical_model_type = classical_config["model"]["model_type"]
+
+        # Get qml_features_mode from embedder config or default
+        if hasattr(embedder, 'config') and embedder.config:
+            qml_features_mode = embedder.config.get("features", {}).get("qml_features_mode", "diff")
+        else:
+            # Fallback: try to get from kg_config if available, otherwise use default
+            try:
+                from kg_layer.kg_loader import load_kg_config
+                kg_config = load_kg_config()
+                qml_features_mode = kg_config.get("features", {}).get("qml_features_mode", "diff")
+            except Exception:
+                qml_features_mode = "diff"
+
         # Prepare features
         logger.info("Preparing features for training...")
         # Classical uses full 128-D features, quantum uses reduced qml_dim features
         X_train_classical = embedder.prepare_link_features(train_df)
-        X_train_qml = embedder.prepare_link_features_qml(train_df)
+        X_train_qml = embedder.prepare_link_features_qml(train_df, mode=qml_features_mode)
         y_train = train_df["label"].values
         X_test_classical = embedder.prepare_link_features(test_df)
-        X_test_qml = embedder.prepare_link_features_qml(test_df)
+        X_test_qml = embedder.prepare_link_features_qml(test_df, mode=qml_features_mode)
         y_test = test_df["label"].values
 
         # Remove any invalid samples (check both classical and qml features)
@@ -180,8 +242,17 @@ class QMLTrainer:
         if qml_config.get("model_type", "QSVC") == "QSVC":
             # Import qsvc_with_precomputed_kernel from this module
             from .qml_trainer import qsvc_with_precomputed_kernel
+            # Create args-like object from qml_config
+            args_dict = {
+                **qml_config,
+                "qml_dim": qml_config.get("num_qubits", config["model"]["num_qubits"]),
+                "feature_map": qml_config.get("feature_map_type", config["feature_map"]["feature_map_type"]),
+                "feature_map_reps": qml_config.get("feature_map_reps", config["feature_map"]["feature_map_reps"]),
+                "quantum_config": quantum_config_path
+            }
+            args = type('Args', (), args_dict)()
             # For logging, use logger - use QML features for quantum model
-            svc, K_train, K_test = qsvc_with_precomputed_kernel(X_train_qml, y_train, X_test_qml, y_test, type('Args', (), {**qml_config, "quantum_config": quantum_config_path}), logger)
+            svc, K_train, K_test = qsvc_with_precomputed_kernel(X_train_qml, y_train, X_test_qml, y_test, args, logger)
             # Compute metrics using svc, y_train/y_test, K_train/K_test
             def _metrics_precomputed(K, y, split, svc):
                 y_pred = svc.predict(K)

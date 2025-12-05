@@ -16,6 +16,8 @@ import json
 import hashlib
 import logging
 from typing import Dict, Tuple, Optional, Iterable
+from pathlib import Path
+import yaml
 
 import numpy as np
 import pandas as pd
@@ -61,19 +63,61 @@ def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
     )
 
 
+def load_kg_config(config_path: str = "config/kg_layer_config.yaml") -> Dict:
+    """
+    Load KG layer configuration from YAML file.
+
+    Args:
+        config_path: Path to the KG layer config YAML file.
+
+    Returns:
+        Dictionary containing configuration parameters.
+    """
+    if not Path(config_path).exists():
+        logger.warning(f"Config file not found at {config_path}, using defaults")
+        return {
+            "embedding": {"embedding_dim": 32, "qml_dim": 5, "work_dir": "data"},
+            "features": {"qml_features_mode": "diff", "use_reduced": True}
+        }
+
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    return config
+
+
 class HetionetEmbedder:
-    def __init__(self, embedding_dim: int = 32, qml_dim: int = 5, work_dir: str = "data"):
+    def __init__(
+        self,
+        embedding_dim: Optional[int] = None,
+        qml_dim: Optional[int] = None,
+        work_dir: Optional[str] = None,
+        config_path: Optional[str] = None,
+        config: Optional[Dict] = None
+    ):
         """
         Initializes the HetionetEmbedder.
 
         Args:
-            embedding_dim: The dimensionality of the KG embeddings.
-            qml_dim: The dimensionality of the reduced embeddings for QML.
-            work_dir: The directory to store embeddings and other artifacts.
+            embedding_dim: The dimensionality of the KG embeddings (overrides config).
+            qml_dim: The dimensionality of the reduced embeddings for QML (overrides config).
+            work_dir: The directory to store embeddings and other artifacts (overrides config).
+            config_path: Path to KG layer config YAML file (default: "config/kg_layer_config.yaml").
+            config: Configuration dictionary (if provided, config_path is ignored).
         """
-        self.embedding_dim = int(embedding_dim)
-        self.qml_dim = int(qml_dim)
-        self.work_dir = work_dir
+        # Load config if not provided
+        if config is None:
+            if config_path is None:
+                config_path = "config/kg_layer_config.yaml"
+            config = load_kg_config(config_path)
+
+        # Use provided parameters or fall back to config
+        self.embedding_dim = int(embedding_dim if embedding_dim is not None else config["embedding"]["embedding_dim"])
+        self.qml_dim = int(qml_dim if qml_dim is not None else config["embedding"]["qml_dim"])
+        self.work_dir = work_dir if work_dir is not None else config["embedding"]["work_dir"]
+
+        # Store config for reference
+        self.config = config
 
         self.entity_to_id: Dict[str, int] = {}
         self.id_to_entity: Dict[int, str] = {}

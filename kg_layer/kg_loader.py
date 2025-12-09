@@ -371,8 +371,43 @@ def prepare_link_prediction_dataset(
 
     return train_df, test_df
 
+
+def prepare_full_graph_for_embeddings(
+    df_edges: pd.DataFrame,
+    task_entities: List[str]
+) -> pd.DataFrame:
+    """
+    Prepare full-graph edges for embedding training.
+    Returns ALL edges from Hetionet where at least one entity is in the task entity set.
+    This provides richer context for embedding training by including all relation types.
+
+    Args:
+        df_edges: Full Hetionet edge DataFrame with columns ['source', 'metaedge', 'target']
+        task_entities: List of entity strings (e.g., ['Compound::DB00001', 'Disease::DOID:1234'])
+
+    Returns:
+        DataFrame with all edges involving task entities, with columns ['source', 'metaedge', 'target']
+    """
+    task_entity_set = set(task_entities)
+    
+    # Filter to edges where source OR target is in task entities
+    # This captures all relations involving these entities
+    full_graph_edges = df_edges[
+        df_edges["source"].isin(task_entity_set) | 
+        df_edges["target"].isin(task_entity_set)
+    ].copy()
+    
+    logger.info(f"Full graph scan: {len(df_edges)} total edges")
+    logger.info(f"Filtered to task entities: {len(full_graph_edges)} edges "
+               f"({full_graph_edges['metaedge'].nunique()} relation types)")
+    
+    return full_graph_edges
+
+
 # Example usage (uncomment for testing)
 # if __name__ == "__main__":
 #     df = load_hetionet_edges()
 #     task_edges, ent2id, id2ent = extract_task_edges(df, relation_type="CtD", max_entities=500)
 #     train, test = prepare_link_prediction_dataset(task_edges)
+#     task_entities = list(ent2id.keys())
+#     full_graph = prepare_full_graph_for_embeddings(df, task_entities)

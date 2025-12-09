@@ -269,7 +269,10 @@ class QMLTrainer:
                 )
                 logger.info(f"{split} Metrics:")
                 for k, v in m.items():
-                    logger.info(f"  {k}: {v:.4f}")
+                    if isinstance(v, (int, float)):
+                        logger.info(f"  {k}: {v:.4f}")
+                    else:
+                        logger.info(f"  {k}: {v}")
                 try:
                     from sklearn.metrics import classification_report
                     rpt = classification_report(y, y_pred)

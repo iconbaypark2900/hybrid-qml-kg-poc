@@ -1,6 +1,6 @@
 ## 1. Quantum classifier algorithms QSVC and VQC with ZFeatureMap, ZZFeatureMap and PauliFeatureMap as quantum embeddings
 
-Quantum support vector classifiers (QSVC) in Qiskit are scikit-learn SVC variants that use a quantum kernel built from a feature-map circuit $U_{\boldsymbol{x}}$, typically instantiated as ZFeatureMap, ZZFeatureMap, or PauliFeatureMap from the circuit library. Variational quantum classifiers (VQC) instead combine a data-encoding feature map with a trainable ansatz and optimize parameters via classical gradient-based or heuristic routines, but can be benchmarked with the same circuit-level and model-level metrics as QSVC. ZFeatureMap implements first‑order, single‑qubit $Z$-rotations with no entangling gates, while ZZFeatureMap introduces entangling $ZZ$ rotations via CNOT–RZ–CNOT patterns, and PauliFeatureMap generalizes this to arbitrary single- and multi-qubit Pauli terms, allowing systematic control of expressivity versus entangling-gate count and, hence, noise sensitivity.
+Quantum support vector classifiers (QSVC) in Qiskit are scikit-learn SVC variants that use a quantum kernel built from a feature-map circuit $U_{\boldsymbol{x}}$, typically instantiated as ZFeatureMap, ZZFeatureMap, or PauliFeatureMap from the circuit library. Variational quantum classifiers (VQC) instead combine a data-encoding feature map with a trainable ansatz and optimize parameters via classical gradient-based or heuristic routines, but can be benchmarked with the same circuit-level and model-level metrics as QSVC. ZFeatureMap implements first‑order, single‑qubit $Z$-rotations with no entangling gates, while ZZFeatureMap introduces entangling $ZZ$ rotations via $C_{NOT}–R_Z–C_{NOT}$ patterns, and PauliFeatureMap generalizes this to arbitrary single- and multi-qubit Pauli terms, allowing systematic control of expressivity versus entangling-gate count and, hence, noise sensitivity.
 
 ## 2. Quantum kernels, fidelity, similarity metrics, and mitigated vs unmitigated comparisons
 
@@ -11,7 +11,11 @@ K(\boldsymbol{x},\boldsymbol{y}) = \bigl|\langle \psi(\boldsymbol{x}) \mid \psi(
 \quad \ket{\psi(\boldsymbol{x})}=U_{\boldsymbol{x}}\ket{0}^{\otimes n},
 $$
 
-and is efficiently estimated in Qiskit via the compute–uncompute method using the probability of measuring the all-zero outcome after preparing $U_{\boldsymbol{x}}^{\dagger}U_{\boldsymbol{y}}\ket{0}^{\otimes n}$. At the circuit level, state fidelity between ideal and noisy states is often quantified by $F(\rho,\sigma)=\bigl(\text{Tr}\sqrt{\sqrt{\rho}\sigma\sqrt{\rho}}\bigr)^{2}$, while kernel-matrix similarity under noise is captured with metrics such as relative Frobenius drift
+and is efficiently estimated in Qiskit via the compute–uncompute method using the probability of measuring the all-zero outcome after preparing $U_{\boldsymbol{x}}^{\dagger}U_{\boldsymbol{y}}\ket{0}^{\otimes n}$. At the circuit level, state fidelity between ideal and noisy states is often quantified by 
+
+$F(\rho,\sigma)=\bigl(\text{Tr}\sqrt{\sqrt{\rho}\sigma\sqrt{\rho}}\bigr)^{2}$, 
+
+while kernel-matrix similarity under noise is captured with metrics such as relative Frobenius drift
 
 $$
 \Delta_{\mathrm{rel}} = \frac{\lVert K_{\text{noisy}} - K_{\text{ideal}}\rVert_{F}}{\lVert K_{\text{ideal}}\rVert_{F}}
@@ -25,7 +29,7 @@ A(K_{\text{noisy}}, K_{\text{ideal}}) =
 \lVert K_{\text{noisy}}\rVert_{F}\,\lVert K_{\text{ideal}}\rVert_{F}},
 $$
 
-which make it possible to compare unmitigated, mitigated, and ideal kernels across ideal simulators, noise-model simulators, and hardware backends.[^3][^4][^1][^2]
+which make it possible to compare unmitigated, mitigated, and ideal kernels across ideal simulators, noise-model simulators, and hardware backends.
 
 ## 3. Circuit‑, kernel‑, and model‑level benchmarking metrics
 
@@ -50,7 +54,7 @@ Noise-aware QSVC benchmarking emphasizes lightweight mitigation profiles that co
 
 ## 5. Circuit complexity, transpilation metrics, and compute resources
 
-Because two-qubit errors dominate on current hardware, benchmarking pipelines explicitly track transpiled circuit complexity and execution resources for each feature map and mitigation profile. After transpilation to a concrete backend, Qiskit exposes depth, gate counts, and number of nonlocal gates (e.g., via $\mathrm{depth}$, $\mathrm{count_ops}$, $\mathrm{num_{non local gates}}$), while execution metadata and harness logic record wall-clock time, number of executed circuits, and total shots, which then feed into the same cost function used for mitigation ranking. Empirically, shallow, weakly entangling embeddings such as ZFeatureMap often yield lower depth and zero two-qubit gates, whereas ZZFeatureMap and expressive PauliFeatureMaps produce deeper circuits with many entanglers; correlating these complexity measures with kernel drift and QSVC accuracy under noise is central to designing scalable, noise-aware QSVC and VQC benchmarks.
+Because two-qubit errors dominate on current hardware, benchmarking pipelines explicitly track transpiled circuit complexity and execution resources for each feature map and mitigation profile. After transpilation to a concrete backend, Qiskit exposes depth, gate counts, and number of nonlocal gates (e.g., via $depth$, $count_\text{ops}$, $num_\text{non local gates}$), while execution metadata and harness logic record wall-clock time, number of executed circuits, and total shots, which then feed into the same cost function used for mitigation ranking. Empirically, shallow, weakly entangling embeddings such as ZFeatureMap often yield lower depth and zero two-qubit gates, whereas ZZFeatureMap and expressive PauliFeatureMaps produce deeper circuits with many entanglers; correlating these complexity measures with kernel drift and QSVC accuracy under noise is central to designing scalable, noise-aware QSVC and VQC benchmarks.
 
 ***
 

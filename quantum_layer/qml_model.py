@@ -229,8 +229,10 @@ class QMLLinkPredictor:
         fm = self._make_feature_map()
         if exec_mode in ("statevector", "simulator_statevector"):
             return FidelityStatevectorKernel(feature_map=fm)
+        # Decompose composite feature maps so Aer/backends don't error on unknown instructions
+        fm_exec = fm.decompose(reps=10)
         fidelity = ComputeUncompute(sampler=sampler)
-        return FidelityQuantumKernel(feature_map=fm, fidelity=fidelity)
+        return FidelityQuantumKernel(feature_map=fm_exec, fidelity=fidelity)
 
     # ------------------------------------------------------------------
     # Public API
@@ -261,14 +263,23 @@ class QMLLinkPredictor:
             qx = QuantumExecutor(self.quantum_config_path)
             sampler, exec_mode = qx.get_sampler()
         except Exception as e:
-            logger.info(f"QuantumExecutor fallback to local Sampler: {e}")
-            sampler = Sampler()
-            exec_mode = "simulator_statevector"
+            logger.info(f"QuantumExecutor fallback to local sampler: {e}")
+            try:
+                from qiskit.primitives import StatevectorSampler
+                sampler = StatevectorSampler()
+                exec_mode = "simulator_statevector"
+            except Exception:
+                # Very defensive: use Aer SamplerV2 for a shot-based ideal fallback
+                from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
+                sampler = AerSamplerV2(default_shots=1024)
+                exec_mode = "simulator"
 
         if self.model_type == "VQC":
             if self.encoding_method != "feature_map":
                 raise NotImplementedError("VQC supports only 'feature_map' in this project.")
             feature_map = self._make_feature_map()
+            if exec_mode not in ("statevector", "simulator_statevector"):
+                feature_map = feature_map.decompose(reps=10)
             ansatz = self._build_ansatz()
             optimizer = self._build_optimizer()
             self.model = VQC(

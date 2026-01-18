@@ -61,7 +61,7 @@ Once trained, the models can identify drug–disease pairs that **might represen
 - **Quantum ML Implementation** – QSVC and VQC built with Qiskit and trained with SPSA.
 - **Classical Baselines** – Logistic Regression and other standard machine learning models.
 - **IBM Quantum Integration** – Ready to run on real IBM Quantum hardware (Heron, Brisbane, Torino) or simulators.
-- **Interactive Dashboard** – Streamlit app to visualize metrics and predictions.
+- **Interactive Dashboard** – Streamlit app to tell the end-to-end story (data → models → benchmarks) and run benchmarks / view evidence-backed predictions.
 - **REST API** – FastAPI service for programmatic predictions.
 
 ---

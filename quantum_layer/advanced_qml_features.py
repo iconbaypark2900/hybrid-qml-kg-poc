@@ -37,24 +37,35 @@ class QuantumFeatureEngineer:
         encoding_strategy: EncodingStrategy = 'hybrid',
         feature_selection_method: Optional[str] = 'mutual_info',
         use_kernel_pca: bool = False,
-        random_state: int = 42
+        random_state: int = 42,
+        reduction_method: str = 'pca',
+        feature_select_k_mult: float = 4.0,
+        pre_pca_dim: int = 0
     ):
         """
         Args:
             num_qubits: Number of qubits (determines feature dimensionality)
             encoding_strategy: Quantum encoding strategy
-            feature_selection_method: Method for feature selection ('mutual_info', 'variance', None)
+            feature_selection_method: Method for feature selection ('mutual_info', 'f_classif', 'chi2', None)
             use_kernel_pca: Use kernel PCA for non-linear reduction
             random_state: Random seed
+            reduction_method: 'pca', 'lda', or 'kernel_pca'
+            feature_select_k_mult: Multiplier for feature selection (select k_mult * num_qubits features)
+            pre_pca_dim: Pre-PCA dimension (0 = disabled, >0 = reduce to this dim before main reduction)
         """
         self.num_qubits = num_qubits
         self.encoding_strategy = encoding_strategy
         self.feature_selection_method = feature_selection_method
         self.use_kernel_pca = use_kernel_pca
         self.random_state = random_state
+        self.reduction_method = reduction_method
+        self.feature_select_k_mult = feature_select_k_mult
+        self.pre_pca_dim = pre_pca_dim
 
         # Fitted components
         self.pca: Optional[PCA] = None
+        self.pre_pca: Optional[PCA] = None  # Pre-PCA for initial reduction
+        self.lda: Optional[Any] = None  # Linear Discriminant Analysis
         self.kpca: Optional[KernelPCA] = None
         self.feature_selector: Optional[SelectKBest] = None
         self.feature_scaler: Optional[Any] = None  # StandardScaler for feature hygiene
@@ -109,16 +120,44 @@ class QuantumFeatureEngineer:
         embeddings = self.feature_scaler.fit_transform(embeddings)
         logger.info(f"Standardized features: {embeddings.shape}")
 
+        # Step 0.5: Pre-PCA reduction (if enabled)
+        if self.pre_pca_dim > 0 and embeddings.shape[1] > self.pre_pca_dim:
+            logger.info(f"Pre-PCA reduction: {embeddings.shape[1]} -> {self.pre_pca_dim}")
+            self.pre_pca = PCA(n_components=self.pre_pca_dim, random_state=self.random_state)
+            embeddings = self.pre_pca.fit_transform(embeddings)
+            logger.info(f"Pre-PCA completed: {embeddings.shape[1]}D")
+        
         # Step 1: Feature selection (if supervised)
-        if self.feature_selection_method == 'mutual_info' and labels is not None:
-            # Select top features by mutual information
-            k = min(embeddings.shape[1], self.num_qubits * 4)  # Select 4x target features
-            self.feature_selector = SelectKBest(score_func=mutual_info_classif, k=k)
+        if self.feature_selection_method and labels is not None:
+            # Select top features based on method
+            k = min(embeddings.shape[1], int(self.num_qubits * self.feature_select_k_mult))
+            
+            if self.feature_selection_method == 'mutual_info':
+                from sklearn.feature_selection import mutual_info_classif
+                score_func = mutual_info_classif
+            elif self.feature_selection_method == 'f_classif':
+                from sklearn.feature_selection import f_classif
+                score_func = f_classif
+            elif self.feature_selection_method == 'chi2':
+                from sklearn.feature_selection import chi2
+                score_func = chi2
+            else:
+                score_func = mutual_info_classif
+            
+            self.feature_selector = SelectKBest(score_func=score_func, k=k)
             embeddings = self.feature_selector.fit_transform(embeddings, labels)
-            logger.info(f"Feature selection: {embeddings.shape[1]} features selected")
+            logger.info(f"Feature selection ({self.feature_selection_method}): {embeddings.shape[1]} features selected (k={k})")
 
         # Step 2: Dimensionality reduction
-        if self.use_kernel_pca:
+        if self.reduction_method == 'lda' and labels is not None:
+            # Linear Discriminant Analysis (supervised)
+            from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+            n_components = min(self.num_qubits, embeddings.shape[0], embeddings.shape[1], len(np.unique(labels)) - 1)
+            self.lda = LinearDiscriminantAnalysis(n_components=n_components)
+            self.lda.fit(embeddings, labels)
+            reduced = self.lda.transform(embeddings)
+            logger.info(f"LDA fitted: {embeddings.shape[1]} -> {n_components}D")
+        elif self.use_kernel_pca or self.reduction_method == 'kernel_pca':
             # Non-linear reduction with RBF kernel
             self.kpca = KernelPCA(
                 n_components=self.num_qubits,
@@ -131,7 +170,7 @@ class QuantumFeatureEngineer:
             reduced = self.kpca.transform(embeddings)
             logger.info(f"Kernel PCA fitted: {embeddings.shape[1]} -> {self.num_qubits}D")
         else:
-            # Linear PCA (faster)
+            # Linear PCA (default)
             n_components = min(self.num_qubits, embeddings.shape[0], embeddings.shape[1])
             self.pca = PCA(n_components=n_components, random_state=self.random_state)
             self.pca.fit(embeddings)
@@ -158,12 +197,18 @@ class QuantumFeatureEngineer:
         if self.feature_scaler is not None:
             embeddings = self.feature_scaler.transform(embeddings)
 
+        # Apply pre-PCA if enabled
+        if self.pre_pca is not None:
+            embeddings = self.pre_pca.transform(embeddings)
+        
         # Apply feature selection
         if self.feature_selector is not None:
             embeddings = self.feature_selector.transform(embeddings)
 
         # Apply dimensionality reduction
-        if self.kpca is not None:
+        if self.lda is not None:
+            reduced = self.lda.transform(embeddings)
+        elif self.kpca is not None:
             reduced = self.kpca.transform(embeddings)
         elif self.pca is not None:
             reduced = self.pca.transform(embeddings)

@@ -47,6 +47,9 @@ class QMLTrainer:
         self.results_dir = results_dir if results_dir is not None else config["training"]["results_dir"]
         self.random_state = random_state if random_state is not None else config["model"]["random_state"]
         self.config = config
+        self.last_model = None  # Store last trained model for calibration
+        self.last_train_features = None  # Store training features for calibration
+        self.last_test_features = None  # Store test features for calibration
         os.makedirs(self.results_dir, exist_ok=True)
 
     def count_trainable_parameters(self, model) -> int:
@@ -364,6 +367,10 @@ class QMLTrainer:
             # attach observables for logging
             if isinstance(kernel_obs, dict):
                 results["observables"] = kernel_obs
+            # Store model and features for potential calibration
+            self.last_model = svc
+            self.last_train_features = K_train
+            self.last_test_features = K_test
             self.save_results(results, qml_config, quantum_config_path)
             return results
 
@@ -573,8 +580,9 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
     """
     # Build feature map
     from qiskit.circuit.library import ZZFeatureMap, ZFeatureMap
+    entanglement = getattr(args, "entanglement", "linear")  # Default to linear if not specified
     if args.feature_map == "ZZ":
-        fm = ZZFeatureMap(feature_dimension=args.qml_dim, reps=args.feature_map_reps, entanglement="linear")
+        fm = ZZFeatureMap(feature_dimension=args.qml_dim, reps=args.feature_map_reps, entanglement=entanglement)
     else:
         fm = ZFeatureMap(feature_dimension=args.qml_dim, reps=args.feature_map_reps)
 
@@ -599,6 +607,14 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
     nystrom_m = getattr(args, "nystrom_m", None)
     n_train = int(getattr(X_train, "shape", [len(X_train)])[0])
     n_test = int(getattr(X_test, "shape", [len(X_test)])[0])
+    
+    # Auto-enable Nyström for large datasets to speed up computation
+    if nystrom_m is None and n_train > 500:
+        # Use Nyström approximation for datasets > 500 samples
+        nystrom_m = min(200, int(n_train * 0.25))  # Use 25% of samples as landmarks, max 200
+        log.info(f"[QSVC-precomputed] Auto-enabling Nyström approximation (m={nystrom_m}) for large dataset (n={n_train})")
+        log.info(f"[QSVC-precomputed] This will significantly speed up kernel computation")
+    
     nystrom_enabled = bool(nystrom_m is not None and int(nystrom_m) >= 2 and int(nystrom_m) < n_train)
     nystrom_landmark_mitigation = bool(getattr(args, "nystrom_landmark_mitigation", True))
     nystrom_ridge = float(getattr(args, "nystrom_ridge", 1e-6))
@@ -713,62 +729,127 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
 
         return _entrywise_linear_zne(scales, mats)
 
-    # Precompute kernels (full or Nyström-approx)
-    if nystrom_enabled:
+    # Phase 3: Kernel caching for faster re-runs
+    import hashlib
+    import pickle
+    from pathlib import Path
+    
+    cache_dir = Path("data/kernel_cache")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create cache key from configuration and data hash
+    config_str = f"{args.qml_dim}_{args.feature_map}_{args.feature_map_reps}_{nystrom_enabled}_{nystrom_m if nystrom_enabled else 'full'}"
+    data_hash = hashlib.md5(
+        np.concatenate([X_train.flatten(), X_test.flatten()]).tobytes()
+    ).hexdigest()[:16]
+    cache_key = f"{config_str}_{data_hash}"
+    cache_file = cache_dir / f"kernel_{cache_key}.pkl"
+    
+    K_train = None
+    K_test = None
+    kernel_cached = False
+    
+    # Try to load cached kernels
+    if cache_file.exists():
+        try:
+            log.info(f"[QSVC-precomputed] Loading cached kernels from {cache_file}")
+            with open(cache_file, 'rb') as f:
+                cached_data = pickle.load(f)
+                if (cached_data.get('config') == config_str and 
+                    cached_data.get('data_hash') == data_hash):
+                    K_train = cached_data.get('K_train')
+                    K_test = cached_data.get('K_test')
+                    kernel_cached = True
+                    log.info(f"[QSVC-precomputed] ✓ Loaded cached kernels (train: {K_train.shape if K_train is not None else None}, test: {K_test.shape if K_test is not None else None})")
+        except Exception as e:
+            log.warning(f"[QSVC-precomputed] Failed to load cache: {e}")
+    
+    # Precompute kernels (full or Nyström-approx) if not cached
+    if not kernel_cached:
         import time as _time
         t0 = _time.perf_counter()
-        rng = np.random.default_rng(int(getattr(args, "random_state", 42)))
-        m = int(nystrom_m)
-        y_arr = np.asarray(y_train).astype(int)
-        landmark_idx = _select_landmarks_stratified(y_arr, m, rng)
-        X_L = np.asarray(X_train)[landmark_idx]
+        if nystrom_enabled:
+            rng = np.random.default_rng(int(getattr(args, "random_state", 42)))
+            m = int(nystrom_m)
+            y_arr = np.asarray(y_train).astype(int)
+            landmark_idx = _select_landmarks_stratified(y_arr, m, rng)
+            X_L = np.asarray(X_train)[landmark_idx]
 
-        log.info(f"[QSVC-precomputed] Using Nyström approximation: m={m}, n_train={n_train}, n_test={n_test}")
-        if nystrom_landmark_mitigation:
-            log.info("[QSVC-precomputed] Landmark mitigation: enabled (entrywise ZNE when scalable)")
+            log.info(f"[QSVC-precomputed] Using Nyström approximation: m={m}, n_train={n_train}, n_test={n_test}")
+            if nystrom_landmark_mitigation:
+                log.info("[QSVC-precomputed] Landmark mitigation: enabled (entrywise ZNE when scalable)")
 
-        # Evaluate landmark blocks (optionally mitigated)
-        t_mm0 = _time.perf_counter()
-        K_mm = _eval_block_with_optional_mitigation(X_L, X_L)
-        t_mm1 = _time.perf_counter()
-        t_nm0 = _time.perf_counter()
-        K_nm = _eval_block_with_optional_mitigation(np.asarray(X_train), X_L)
-        t_nm1 = _time.perf_counter()
-        t_tm0 = _time.perf_counter()
-        K_tm = _eval_block_with_optional_mitigation(np.asarray(X_test), X_L)
-        t_tm1 = _time.perf_counter()
+            # Evaluate landmark blocks (optionally mitigated)
+            t_mm0 = _time.perf_counter()
+            log.info(f"[QSVC-precomputed] Computing K_mm (landmark x landmark): {m}x{m} = {m*m} kernel evaluations...")
+            K_mm = _eval_block_with_optional_mitigation(X_L, X_L)
+            t_mm1 = _time.perf_counter()
+            log.info(f"[QSVC-precomputed] ✓ K_mm computed in {t_mm1 - t_mm0:.1f}s")
+            t_nm0 = _time.perf_counter()
+            log.info(f"[QSVC-precomputed] Computing K_nm (train x landmark): {n_train}x{m} = {n_train*m} kernel evaluations...")
+            K_nm = _eval_block_with_optional_mitigation(np.asarray(X_train), X_L)
+            t_nm1 = _time.perf_counter()
+            log.info(f"[QSVC-precomputed] ✓ K_nm computed in {t_nm1 - t_nm0:.1f}s")
+            t_tm0 = _time.perf_counter()
+            log.info(f"[QSVC-precomputed] Computing K_tm (test x landmark): {n_test}x{m} = {n_test*m} kernel evaluations...")
+            K_tm = _eval_block_with_optional_mitigation(np.asarray(X_test), X_L)
+            t_tm1 = _time.perf_counter()
+            log.info(f"[QSVC-precomputed] ✓ K_tm computed in {t_tm1 - t_tm0:.1f}s")
 
-        # Stabilize and invert K_mm
-        K_mm = np.asarray(K_mm, dtype=float)
-        K_mm = (K_mm + K_mm.T) / 2.0
-        np.fill_diagonal(K_mm, 1.0)
-        W_inv = np.linalg.pinv(K_mm + (nystrom_ridge * np.eye(m)))
+            # Stabilize and invert K_mm
+            K_mm = np.asarray(K_mm, dtype=float)
+            K_mm = (K_mm + K_mm.T) / 2.0
+            np.fill_diagonal(K_mm, 1.0)
+            W_inv = np.linalg.pinv(K_mm + (nystrom_ridge * np.eye(m)))
 
-        # Nyström approximation
-        K_nm = np.asarray(K_nm, dtype=float)
-        K_tm = np.asarray(K_tm, dtype=float)
-        K_train = K_nm @ W_inv @ K_nm.T
-        K_test = K_tm @ W_inv @ K_nm.T
+            # Nyström approximation
+            K_nm = np.asarray(K_nm, dtype=float)
+            K_tm = np.asarray(K_tm, dtype=float)
+            K_train = K_nm @ W_inv @ K_nm.T
+            K_test = K_tm @ W_inv @ K_nm.T
 
-        # Clean up numerical issues
-        K_train = (K_train + K_train.T) / 2.0
-        np.fill_diagonal(K_train, 1.0)
-        K_train = np.clip(K_train, 0.0, 1.0)
-        K_test = np.clip(K_test, 0.0, 1.0)
-        t1 = _time.perf_counter()
-    else:
-        import time as _time
-        t0 = _time.perf_counter()
-        t_tr0 = _time.perf_counter()
-        K_train = qk.evaluate(X_train)                 # (n_train, n_train)
-        t_tr1 = _time.perf_counter()
-        t_te0 = _time.perf_counter()
-        K_test  = qk.evaluate(X_test, X_train)         # (n_test,  n_train)
-        t_te1 = _time.perf_counter()
-        t1 = _time.perf_counter()
+            # Clean up numerical issues
+            K_train = (K_train + K_train.T) / 2.0
+            np.fill_diagonal(K_train, 1.0)
+            K_train = np.clip(K_train, 0.0, 1.0)
+            K_test = np.clip(K_test, 0.0, 1.0)
+            t1 = _time.perf_counter()
+        else:
+            t_tr0 = _time.perf_counter()
+            log.info(f"[QSVC-precomputed] Computing training kernel matrix ({n_train}x{n_train})...")
+            log.info(f"[QSVC-precomputed] This may take several minutes for large datasets...")
+            K_train = qk.evaluate(X_train)                 # (n_train, n_train)
+            t_tr1 = _time.perf_counter()
+            log.info(f"[QSVC-precomputed] ✓ Training kernel computed in {t_tr1 - t_tr0:.1f}s")
+            t_te0 = _time.perf_counter()
+            log.info(f"[QSVC-precomputed] Computing test kernel matrix ({n_test}x{n_train})...")
+            K_test  = qk.evaluate(X_test, X_train)         # (n_test,  n_train)
+            t_te1 = _time.perf_counter()
+            log.info(f"[QSVC-precomputed] ✓ Test kernel computed in {t_te1 - t_te0:.1f}s")
+            t1 = _time.perf_counter()
 
+    # Save kernels to cache if computed (not loaded from cache)
+    if not kernel_cached and K_train is not None and K_test is not None:
+        try:
+            log.info(f"[QSVC-precomputed] Saving kernels to cache: {cache_file}")
+            cache_data = {
+                'config': config_str,
+                'data_hash': data_hash,
+                'K_train': K_train,
+                'K_test': K_test,
+                'n_train': n_train,
+                'n_test': n_test
+            }
+            with open(cache_file, 'wb') as f:
+                pickle.dump(cache_data, f)
+            log.info(f"[QSVC-precomputed] ✓ Cached kernels saved")
+        except Exception as e:
+            log.warning(f"[QSVC-precomputed] Failed to save cache: {e}")
+    
     # Base (raw) kernel observables (from the full kernel used for training)
     observables = _kernel_observables(K_train, y_train)
+    if kernel_cached:
+        observables['kernel_cached'] = 1
     # Timing + sizes (for professional benchmarking)
     try:
         observables.update({
@@ -1135,12 +1216,13 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
             pass
         log.warning(f"[ZNE] skipped due to error: {e}")
 
-    # Grid over C quickly
+    # Grid over C quickly (expanded grid for better hyperparameter search)
     from sklearn.svm import SVC
     from sklearn.metrics import average_precision_score
 
     best = (float("-inf"), None, None)  # (pr_auc, C, model)
-    for C in [0.1, 0.3, 1.0, 3.0, 10.0]:
+    # Expanded C grid: [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0]
+    for C in [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0]:
         svc = SVC(kernel="precomputed", C=C, class_weight="balanced")
         svc.fit(K_train, y_train)
         y_score = svc.decision_function(K_test)
@@ -1339,7 +1421,8 @@ if __name__ == "__main__":
     def _try_qsvc_with_C_grid():
         if args.model_type != "QSVC":
             return None
-        c_grid = [0.1, 0.3, 1.0, 3.0, 10.0]
+        # Expanded C grid: [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0]
+        c_grid = [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0]
         best = None
         for c in c_grid:
             # reuse same predictor, just swap underlying C

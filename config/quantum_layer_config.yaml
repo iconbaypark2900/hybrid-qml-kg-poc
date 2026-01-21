@@ -1,0 +1,36 @@
+# Quantum Layer Configuration
+# Parameters for quantum machine learning models
+
+# Model Configuration
+model:
+  model_type: "QSVC"                # Options: "QSVC", "VQC"
+  encoding_method: "feature_map"    # Encoding method: "amplitude", "basis", "feature_map"
+  num_qubits: 5                     # Number of qubits (must match qml_dim from kg_layer_config)
+  random_state: 42                  # Random seed for reproducibility
+
+# Feature Map Configuration
+feature_map:
+  feature_map_type: "ZZ"            # Feature map type: "ZZ", "Z", "Pauli"
+  feature_map_reps: 2               # Number of repetition blocks in feature map
+
+# Variational Quantum Classifier (VQC) Parameters
+vqc:
+  ansatz_type: "RealAmplitudes"     # Ansatz type: "RealAmplitudes", "EfficientSU2"
+  ansatz_reps: 3                    # Number of repetition blocks in ansatz
+  optimizer: "COBYLA"               # Optimizer: "COBYLA", "SPSA"
+  max_iter: 50                     # Maximum iterations for optimization
+
+# Quantum Support Vector Classifier (QSVC) Parameters
+qsvc:
+  C_values: [0.1, 0.3, 1.0, 3.0, 10.0]  # Regularization parameter grid for grid search
+  class_weight: "balanced"        # Handle imbalanced data
+
+# Training Configuration
+training:
+  results_dir: "results"            # Directory to save training results
+  train_limit: 0                    # If > 0, subsample this many training examples (0 = use all)
+
+# Quantum Executor Configuration (references quantum_config.yaml)
+quantum_executor:
+  quantum_config_path: "config/quantum_config.yaml"  # Path to quantum execution config
+

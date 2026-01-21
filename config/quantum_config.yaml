@@ -1,28 +1,17 @@
 quantum:
-  # Execution mode: "simulator", "heron", or "auto"
-  execution_mode: "simulator"
-  
-  # IBM Quantum credentials
-  ibm_quantum:
-    token: "${IBM_QUANTUM_TOKEN}"
-    instance: "ibm-q/open/main"
-    backend: "ibm_heron"
-  
-  # Simulator settings
+  execution_mode: heron   # simulator | heron | auto
+
   simulator:
-    backend: "aer_simulator_statevector"
-    shots: 1024
-    noise_model: null
-  
-  # Heron settings
+    shots: 2048
+    noise_model: null         # e.g., "ibm_heron_noise" if you have a saved model
+
   heron:
-    shots: 4000
-    resilience_level: 1
-    optimization_level: 3
+    backend: ibm_torino
+    shots: 2000
+    # optimization_level: 3  # REMOVED - not supported in new API
+    max_runtime_minutes: 20
     use_dynamical_decoupling: true
-    max_runtime_minutes: 120
-  
-  # Common settings
-  circuit_optimization: true
-  error_mitigation: true
-  cost_monitoring: true
+
+  ibm_quantum:
+    token: ${IBM_Q_TOKEN}     # pulled from .env
+    instance: ibm-q/open/main # put your hub/group/project here if different

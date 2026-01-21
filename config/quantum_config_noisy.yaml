@@ -1,0 +1,36 @@
+quantum:
+  execution_mode: simulator   # simulator | heron | auto
+
+  simulator:
+    shots: 2048
+    noise_model: depolarizing:0.01
+    # Minimal zero-noise extrapolation (ZNE) for *simulator depolarizing noise only*.
+    # This mitigates scalar "fidelity-style" kernel observables for benchmarking/analysis,
+    # not the full kernel matrix used to train QSVC (full-kernel ZNE would be too expensive).
+    zne:
+      enabled: true
+      # Noise amplification scales. Must include 1.0 to anchor to the physical noise level.
+      scales: [1.0, 1.5, 2.0]
+      # Safety knobs to keep runs affordable:
+      max_train_for_zne: 120
+      sample_size: 256
+    # Readout mitigation (calibration-matrix) for *small qubit counts only*.
+    # This is applied to the same scalar observable used by ZNE (kernel_posneg_mean),
+    # via explicit compute-uncompute circuits.
+    readout_mitigation:
+      enabled: true
+      max_qubits: 8
+      # Calibration uses 2^n circuits; keep this small.
+      calibration_shots: 2048
+      # Ridge regularization for inverting the assignment matrix.
+      ridge_lambda: 0.01
+
+  heron:
+    backend: ibm_torino
+    shots: 2000
+    max_runtime_minutes: 20
+    use_dynamical_decoupling: true
+
+  ibm_quantum:
+    token: ${IBM_Q_TOKEN}
+    instance: ibm-q/open/main

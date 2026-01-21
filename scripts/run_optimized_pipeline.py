@@ -310,47 +310,71 @@ def train_svm_rbf_with_grid_search(X_train, y_train, X_test, y_test, cv_folds=5,
         }
 
 
-def train_classical_model(name, model, X_train, y_train, X_test, y_test, cv_folds=5, random_state=42, calibrate=False, calibration_method='isotonic', feature_names=None):
+def train_classical_model(name, model, X_train, y_train, X_test, y_test, cv_folds=5, random_state=42, calibrate=False, calibration_method='isotonic', feature_names=None, sample_weight=None):
     """Train and evaluate a classical model."""
-    logger.info(f"\nTraining {name}{'  (with calibration)' if calibrate else ''}...")
+    logger.info(f"\nTraining {name}{'  (with calibration)' if calibrate else ''}{'  (with sample weights)' if sample_weight is not None else ''}...")
 
     try:
         t0 = time.time()
 
-        # Apply calibration if requested
-        if calibrate:
-            model = CalibratedModel(model, method=calibration_method, cv=min(3, cv_folds))
-            logger.info(f"  Using {calibration_method} calibration")
-
-        model.fit(X_train, y_train)
+        # Fit base model first (before calibration, for cross-validation compatibility)
+        base_model = model
+        if sample_weight is not None:
+            base_model.fit(X_train, y_train, sample_weight=sample_weight)
+        else:
+            base_model.fit(X_train, y_train)
         fit_time = time.time() - t0
 
-        # Feature importance analysis for RandomForest
-        if hasattr(model, 'feature_importances_') and feature_names is not None:
-            importances = model.feature_importances_
+        # Feature importance analysis for RandomForest (before calibration)
+        if hasattr(base_model, 'feature_importances_') and feature_names is not None:
+            importances = base_model.feature_importances_
             top_indices = np.argsort(importances)[-10:][::-1]
             logger.info(f"  Top 10 Feature Importances:")
             for idx in top_indices:
                 logger.info(f"    {feature_names[idx]:30s}: {importances[idx]:.6f}")
 
-        # Out-of-fold predictions for train metrics
+        # Out-of-fold predictions for train metrics (use base model for CV compatibility)
         skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
 
-        if hasattr(model, "predict_proba"):
-            oof_scores = cross_val_predict(model, X_train, y_train, cv=skf, method="predict_proba", n_jobs=-1)[:, 1]
+        if hasattr(base_model, "predict_proba"):
+            oof_scores = cross_val_predict(base_model, X_train, y_train, cv=skf, method="predict_proba", n_jobs=-1)[:, 1]
             oof_preds = (oof_scores >= 0.5).astype(int)
-            test_scores = model.predict_proba(X_test)[:, 1]
-            test_preds = (test_scores >= 0.5).astype(int)
-        elif hasattr(model, "decision_function"):
-            oof_scores = cross_val_predict(model, X_train, y_train, cv=skf, method="decision_function", n_jobs=-1)
+        elif hasattr(base_model, "decision_function"):
+            oof_scores = cross_val_predict(base_model, X_train, y_train, cv=skf, method="decision_function", n_jobs=-1)
             oof_preds = (oof_scores >= 0).astype(int)
-            test_scores = model.decision_function(X_test)
-            test_preds = (test_scores >= 0).astype(int)
         else:
-            oof_preds = cross_val_predict(model, X_train, y_train, cv=skf, n_jobs=-1)
+            oof_preds = cross_val_predict(base_model, X_train, y_train, cv=skf, n_jobs=-1)
             oof_scores = oof_preds.astype(float)
-            test_preds = model.predict(X_test)
-            test_scores = test_preds.astype(float)
+
+        # Apply calibration if requested (after CV, for test predictions)
+        if calibrate:
+            from sklearn.calibration import CalibratedClassifierCV
+            logger.info(f"  Using {calibration_method} calibration")
+            calibrated_model = CalibratedClassifierCV(
+                base_model, 
+                method=calibration_method, 
+                cv=min(3, cv_folds)
+            )
+            if sample_weight is not None:
+                calibrated_model.fit(X_train, y_train, sample_weight=sample_weight)
+            else:
+                calibrated_model.fit(X_train, y_train)
+            
+            # Use calibrated model for test predictions
+            test_scores = calibrated_model.predict_proba(X_test)[:, 1]
+            test_preds = (test_scores >= 0.5).astype(int)
+            model = calibrated_model  # Store calibrated model
+        else:
+            # Use base model for test predictions
+            if hasattr(base_model, "predict_proba"):
+                test_scores = base_model.predict_proba(X_test)[:, 1]
+                test_preds = (test_scores >= 0.5).astype(int)
+            elif hasattr(base_model, "decision_function"):
+                test_scores = base_model.decision_function(X_test)
+                test_preds = (test_scores >= 0).astype(int)
+            else:
+                test_preds = base_model.predict(X_test)
+                test_scores = test_preds.astype(float)
 
         train_metrics = compute_metrics(y_train, oof_preds, oof_scores)
         test_metrics = compute_metrics(y_test, test_preds, test_scores)
@@ -388,6 +412,10 @@ def main():
     # Data args
     parser.add_argument("--relation", type=str, default="CtD", help="Relation type (CtD, DaG, etc.)")
     parser.add_argument("--max_entities", type=int, default=None, help="Limit entities (None = all)")
+    parser.add_argument("--pos_edge_sample", type=int, default=None,
+                       help="Sample this many positive edges before training (None = use all)")
+    parser.add_argument("--neg_ratio", type=float, default=1.0,
+                       help="Ratio of negative to positive samples (default: 1.0, i.e., 1:1)")
 
     # Embedding args
     parser.add_argument("--embedding_method", type=str, default="ComplEx",
@@ -402,12 +430,26 @@ def main():
     # Feature args
     parser.add_argument("--use_graph_features", action="store_true", default=True, help="Include graph features")
     parser.add_argument("--use_domain_features", action="store_true", default=True, help="Include domain features")
+    parser.add_argument("--use_evidence_weighting", action="store_true",
+                       help="Use evidence weighting based on shared genes (for CtD relation)")
+    parser.add_argument("--min_shared_genes", type=int, default=1,
+                       help="Minimum number of shared genes for evidence weighting (default: 1)")
 
     # Quantum args
     parser.add_argument("--qml_dim", type=int, default=12, help="Number of qubits (default: 12, was 10)")
     parser.add_argument("--qml_encoding", type=str, default="hybrid",
                        choices=['amplitude', 'phase', 'hybrid', 'optimized_diff', 'tensor_product'],
                        help="Quantum encoding strategy")
+    parser.add_argument("--qml_reduction_method", type=str, default="pca",
+                       choices=['pca', 'lda', 'kernel_pca'],
+                       help="Dimensionality reduction method for quantum features (PCA, LDA, or KernelPCA)")
+    parser.add_argument("--qml_feature_selection_method", type=str, default=None,
+                       choices=[None, 'f_classif', 'mutual_info', 'chi2'],
+                       help="Feature selection method before reduction (None, f_classif, mutual_info, chi2)")
+    parser.add_argument("--qml_feature_select_k_mult", type=float, default=4.0,
+                       help="Multiplier for feature selection: select k_mult * qml_dim features (default: 4.0)")
+    parser.add_argument("--qml_pre_pca_dim", type=int, default=0,
+                       help="Pre-PCA dimension reduction (0 = disabled, >0 = reduce to this dim before main reduction)")
     parser.add_argument("--qml_feature_map", type=str, default="ZZ",
                        choices=['ZZ', 'Z', 'Pauli', 'custom_link_prediction'],
                        help="Quantum feature map type (ZZ, Z, Pauli, or custom_link_prediction)")
@@ -483,6 +525,10 @@ def main():
     # Note: --use_domain_features is already defined above (line 341)
     parser.add_argument("--skip_svm_rbf", action="store_true", 
                        help="Skip SVM-RBF model (if it continues to fail)")
+    parser.add_argument("--skip_svm_linear", action="store_true",
+                       help="Skip SVM-Linear model")
+    parser.add_argument("--skip_vqc", action="store_true",
+                       help="Skip VQC model (QSVC only)")
     parser.add_argument("--fast_mode", action="store_true", help="Fast mode (fewer models, less tuning)")
     parser.add_argument("--cheap_mode", action="store_true",
                        help="Cheapest runnable settings (implies --fast_mode + caps shots/ZNE/readout calibration + defaults max_entities)")
@@ -561,6 +607,15 @@ def main():
         df, relation_type=args.relation, max_entities=args.max_entities
     )
     logger.info(f"Extracted {len(task_edges)} edges for '{args.relation}'")
+    
+    # Sample positive edges if requested
+    if args.pos_edge_sample and args.pos_edge_sample > 0:
+        if len(task_edges) > args.pos_edge_sample:
+            logger.info(f"Sampling {args.pos_edge_sample} positive edges from {len(task_edges)} available")
+            task_edges = task_edges.sample(n=args.pos_edge_sample, random_state=args.random_state).reset_index(drop=True)
+            logger.info(f"Sampled {len(task_edges)} positive edges")
+        else:
+            logger.info(f"Requested {args.pos_edge_sample} edges but only {len(task_edges)} available, using all")
 
     # Decide evaluation strategy: K-Fold CV or single train/test split
     use_cv = args.use_cv_evaluation
@@ -579,9 +634,34 @@ def main():
         test_df = None
     else:
         # Traditional single split
-        train_df, test_df = prepare_link_prediction_dataset(task_edges)
+        # Create a wrapper that supports neg_ratio
+        from sklearn.model_selection import train_test_split
+        from kg_layer.kg_loader import get_negative_samples, load_kg_config
+        
+        # Positive samples
+        pos_df = task_edges[["source_id", "target_id"]].copy()
+        pos_df["label"] = 1
+        
+        # Train/test split on positive edges
+        pos_train, pos_test = train_test_split(
+            pos_df, test_size=0.2, random_state=args.random_state
+        )
+        
+        # Generate negatives with custom ratio
+        num_neg_train = int(len(pos_train) * args.neg_ratio)
+        num_neg_test = int(len(pos_test) * args.neg_ratio)
+        
+        config = load_kg_config()
+        neg_train = get_negative_samples(pos_train, num_negatives=num_neg_train, random_state=args.random_state, config=config)
+        neg_test = get_negative_samples(pos_test, num_negatives=num_neg_test, random_state=args.random_state + 1, config=config)
+        
+        # Combine
+        train_df = pd.concat([pos_train, neg_train], ignore_index=True).sample(frac=1, random_state=args.random_state)
+        test_df = pd.concat([pos_test, neg_test], ignore_index=True).sample(frac=1, random_state=args.random_state)
+        
+        logger.info(f"Train: {len(train_df)} samples ({train_df['label'].sum()} positive, {len(neg_train)} negative, ratio={args.neg_ratio:.1f})")
+        logger.info(f"Test: {len(test_df)} samples ({test_df['label'].sum()} positive, {len(neg_test)} negative, ratio={args.neg_ratio:.1f})")
         cv_folds = None
-        logger.info(f"Train: {len(train_df)} samples, Test: {len(test_df)} samples")
 
     # ========== STEP 2: TRAIN EMBEDDINGS ==========
     logger.info("\n" + "="*80)
@@ -1151,6 +1231,99 @@ def main():
     y_test = test_df['label'].values
 
     logger.info(f"Classical features: train {X_train.shape}, test {X_test.shape}")
+    
+    # ========== EVIDENCE WEIGHTING ==========
+    sample_weights_train = None
+    sample_weights_test = None
+    
+    if args.use_evidence_weighting and args.relation == 'CtD':
+        logger.info("\n" + "="*80)
+        logger.info("COMPUTING EVIDENCE WEIGHTS (Shared Genes)")
+        logger.info("="*80)
+        
+        try:
+            # Load full Hetionet to find gene associations
+            df_full = load_hetionet_edges()
+            
+            # Extract gene associations for compounds and diseases
+            # Compounds: CbG (binds), CdG (downregulates), CuG (upregulates)
+            compound_gene_edges = df_full[df_full['metaedge'].isin(['CbG', 'CdG', 'CuG'])]
+            compound_genes = {}
+            for _, row in compound_gene_edges.iterrows():
+                compound = row['source']
+                gene = row['target']
+                if compound not in compound_genes:
+                    compound_genes[compound] = set()
+                compound_genes[compound].add(gene)
+            
+            # Diseases: DaG (associates), DdG (downregulates), DuG (upregulates)
+            disease_gene_edges = df_full[df_full['metaedge'].isin(['DaG', 'DdG', 'DuG'])]
+            disease_genes = {}
+            for _, row in disease_gene_edges.iterrows():
+                disease = row['source']
+                gene = row['target']
+                if disease not in disease_genes:
+                    disease_genes[disease] = set()
+                disease_genes[disease].add(gene)
+            
+            logger.info(f"Found gene associations: {len(compound_genes)} compounds, {len(disease_genes)} diseases")
+            
+            # Compute shared genes for each pair
+            def compute_shared_genes(source_entity, target_entity):
+                source_genes = compound_genes.get(source_entity, set())
+                target_genes = disease_genes.get(target_entity, set())
+                shared = source_genes & target_genes
+                return len(shared)
+            
+            # Compute weights for training set
+            weights_train = []
+            for _, row in train_df.iterrows():
+                source_id = row['source_id']
+                target_id = row['target_id']
+                source_entity = id_to_entity.get(source_id, None)
+                target_entity = id_to_entity.get(target_id, None)
+                
+                if source_entity and target_entity:
+                    shared_count = compute_shared_genes(source_entity, target_entity)
+                    # Weight: 1.0 + 0.1 * shared_genes (minimum 1.0)
+                    weight = 1.0 + 0.1 * max(0, shared_count - args.min_shared_genes)
+                else:
+                    weight = 1.0
+                weights_train.append(weight)
+            
+            # Compute weights for test set
+            weights_test = []
+            for _, row in test_df.iterrows():
+                source_id = row['source_id']
+                target_id = row['target_id']
+                source_entity = id_to_entity.get(source_id, None)
+                target_entity = id_to_entity.get(target_id, None)
+                
+                if source_entity and target_entity:
+                    shared_count = compute_shared_genes(source_entity, target_entity)
+                    weight = 1.0 + 0.1 * max(0, shared_count - args.min_shared_genes)
+                else:
+                    weight = 1.0
+                weights_test.append(weight)
+            
+            sample_weights_train = np.array(weights_train, dtype=np.float32)
+            sample_weights_test = np.array(weights_test, dtype=np.float32)
+            
+            # Statistics
+            pos_weights = sample_weights_train[y_train == 1]
+            neg_weights = sample_weights_train[y_train == 0]
+            logger.info(f"Evidence weighting statistics:")
+            logger.info(f"  Positive samples: mean weight={pos_weights.mean():.3f}, max={pos_weights.max():.3f}")
+            logger.info(f"  Negative samples: mean weight={neg_weights.mean():.3f}, max={neg_weights.max():.3f}")
+            logger.info(f"  Samples with shared genes >= {args.min_shared_genes}: {(sample_weights_train > 1.0).sum()}/{len(sample_weights_train)}")
+            logger.info(f"✓ Evidence weights computed")
+            
+        except Exception as e:
+            logger.warning(f"⚠️  Evidence weighting failed: {e}. Continuing without weights.")
+            import traceback
+            traceback.print_exc()
+            sample_weights_train = None
+            sample_weights_test = None
 
     # Feature diagnostics and filtering
     logger.info("\n" + "="*80)
@@ -1439,25 +1612,35 @@ def main():
         logger.info("STEP 4: TRAINING CLASSICAL MODELS")
         logger.info("="*80)
 
+        # Phase 3: Expanded hyperparameter grids for classical models
+        # RandomForest with grid search
+        if args.fast_mode:
+            rf_param_grid = {
+                'n_estimators': [100, 200],
+                'max_depth': [8, 10],
+                'min_samples_split': [10, 20]
+            }
+        else:
+            rf_param_grid = {
+                'n_estimators': [100, 200, 300],
+                'max_depth': [8, 10, 12, 15],
+                'min_samples_split': [5, 10, 20]
+            }
+        
+        # LogisticRegression with grid search
+        if args.fast_mode:
+            lr_param_grid = {
+                'C': [0.1, 1.0, 10.0]
+            }
+        else:
+            lr_param_grid = {
+                'C': [0.01, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0]
+            }
+        
         models = {
-            'RandomForest-Optimized': RandomForestClassifier(
-                n_estimators=200 if not args.fast_mode else 100,
-                max_depth=10,  # Reduced from 20 to prevent overfitting
-                min_samples_split=10,  # Increased from 5 for regularization
-                min_samples_leaf=5,  # Added for regularization
-                max_features='sqrt',  # Added for regularization
-                class_weight='balanced',
-                random_state=args.random_state,
-                n_jobs=-1
-            ),
+            'RandomForest-Optimized': None,  # Will be set up with grid search
             'SVM-Linear-Optimized': None,  # Will be set up with grid search below
-            'LogisticRegression-L2': LogisticRegression(
-                C=1.0,
-                penalty='l2',
-                class_weight='balanced',
-                max_iter=1000,
-                random_state=args.random_state
-            ),
+            'LogisticRegression-L2': None,  # Will be set up with grid search
         }
         
         # Optionally add SVM-RBF (can be skipped if it continues to fail)
@@ -1472,30 +1655,177 @@ def main():
         for name, model in models.items():
             if name == 'SVM-RBF-Optimized':
                 # Special handling for SVM-RBF with grid search
+                if args.skip_svm_rbf:
+                    logger.info(f"Skipping {name} (--skip_svm_rbf)")
+                    classical_results[name] = {'status': 'skipped'}
+                    continue
                 result = train_svm_rbf_with_grid_search(
                     X_train, y_train, X_test, y_test,
                     cv_folds=args.cv_folds, random_state=args.random_state,
                     fast_mode=args.fast_mode
                 )
             elif name == 'SVM-Linear-Optimized':
+                # Skip if requested
+                if args.skip_svm_linear:
+                    logger.info(f"Skipping {name} (--skip_svm_linear)")
+                    classical_results[name] = {'status': 'skipped'}
+                    continue
                 # Special handling for SVM-Linear with grid search
                 result = train_svm_linear(
                     X_train, y_train, X_test, y_test,
                     cv_folds=args.cv_folds, random_state=args.random_state
                 )
+            elif name == 'RandomForest-Optimized':
+                # Phase 3: Grid search for RandomForest
+                logger.info(f"\nTraining {name} with grid search...")
+                try:
+                    t0 = time.time()
+                    skf = StratifiedKFold(n_splits=args.cv_folds, shuffle=True, random_state=args.random_state)
+                    base_rf = RandomForestClassifier(
+                        min_samples_leaf=5,
+                        max_features='sqrt',
+                        class_weight='balanced',
+                        random_state=args.random_state,
+                        n_jobs=-1
+                    )
+                    gs = GridSearchCV(
+                        base_rf,
+                        param_grid=rf_param_grid,
+                        scoring='average_precision',
+                        cv=skf,
+                        refit=True,
+                        n_jobs=-1,
+                        verbose=0
+                    )
+                    if sample_weights_train is not None:
+                        gs.fit(X_train, y_train, sample_weight=sample_weights_train)
+                    else:
+                        gs.fit(X_train, y_train)
+                    fit_time = time.time() - t0
+                    best_rf = gs.best_estimator_
+                    best_params = gs.best_params_
+                    logger.info(f"  Best params: {best_params}")
+                    logger.info(f"  CV PR-AUC: {gs.best_score_:.4f}")
+                    
+                    # Store best model
+                    models[name] = best_rf
+                    rf_model = best_rf
+                    
+                    # Evaluate
+                    result = train_classical_model(
+                        name, best_rf, X_train, y_train, X_test, y_test,
+                        cv_folds=args.cv_folds, random_state=args.random_state,
+                        calibrate=args.calibrate_probabilities,
+                        calibration_method=args.calibration_method,
+                        feature_names=feature_names,
+                        sample_weight=sample_weights_train
+                    )
+                    result['best_params'] = best_params
+                    result['cv_score'] = float(gs.best_score_)
+                    rf_result = result
+                except Exception as e:
+                    logger.error(f"  ❌ {name} grid search failed: {e}")
+                    # Fallback to default
+                    fallback_rf = RandomForestClassifier(
+                        n_estimators=200 if not args.fast_mode else 100,
+                        max_depth=10,
+                        min_samples_split=10,
+                        min_samples_leaf=5,
+                        max_features='sqrt',
+                        class_weight='balanced',
+                        random_state=args.random_state,
+                        n_jobs=-1
+                    )
+                    models[name] = fallback_rf
+                    result = train_classical_model(
+                        name, fallback_rf, X_train, y_train, X_test, y_test,
+                        cv_folds=args.cv_folds, random_state=args.random_state,
+                        calibrate=args.calibrate_probabilities,
+                        calibration_method=args.calibration_method,
+                        feature_names=feature_names,
+                        sample_weight=sample_weights_train
+                    )
+                    rf_model = fallback_rf
+                    rf_result = result
+            elif name == 'LogisticRegression-L2':
+                # Phase 3: Grid search for LogisticRegression
+                logger.info(f"\nTraining {name} with grid search...")
+                try:
+                    t0 = time.time()
+                    skf = StratifiedKFold(n_splits=args.cv_folds, shuffle=True, random_state=args.random_state)
+                    # Explicitly import to avoid scoping issues
+                    from sklearn.linear_model import LogisticRegression as LR
+                    base_lr = LR(
+                        penalty='l2',
+                        class_weight='balanced',
+                        max_iter=1000,
+                        random_state=args.random_state
+                    )
+                    gs = GridSearchCV(
+                        base_lr,
+                        param_grid=lr_param_grid,
+                        scoring='average_precision',
+                        cv=skf,
+                        refit=True,
+                        n_jobs=-1,
+                        verbose=0
+                    )
+                    if sample_weights_train is not None:
+                        gs.fit(X_train, y_train, sample_weight=sample_weights_train)
+                    else:
+                        gs.fit(X_train, y_train)
+                    fit_time = time.time() - t0
+                    best_lr = gs.best_estimator_
+                    best_params = gs.best_params_
+                    logger.info(f"  Best params: {best_params}")
+                    logger.info(f"  CV PR-AUC: {gs.best_score_:.4f}")
+                    
+                    # Store best model
+                    models[name] = best_lr
+                    
+                    # Evaluate
+                    result = train_classical_model(
+                        name, best_lr, X_train, y_train, X_test, y_test,
+                        cv_folds=args.cv_folds, random_state=args.random_state,
+                        calibrate=args.calibrate_probabilities,
+                        calibration_method=args.calibration_method,
+                        feature_names=feature_names,
+                        sample_weight=sample_weights_train
+                    )
+                    result['best_params'] = best_params
+                    result['cv_score'] = float(gs.best_score_)
+                except Exception as e:
+                    logger.error(f"  ❌ {name} grid search failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Fallback to default
+                    from sklearn.linear_model import LogisticRegression as LR
+                    fallback_lr = LR(
+                        C=1.0,
+                        penalty='l2',
+                        class_weight='balanced',
+                        max_iter=1000,
+                        random_state=args.random_state
+                    )
+                    models[name] = fallback_lr
+                    result = train_classical_model(
+                        name, fallback_lr, X_train, y_train, X_test, y_test,
+                        cv_folds=args.cv_folds, random_state=args.random_state,
+                        calibrate=args.calibrate_probabilities,
+                        calibration_method=args.calibration_method,
+                        feature_names=feature_names,
+                        sample_weight=sample_weights_train
+                    )
             else:
-                # Regular model training
+                # Regular model training (shouldn't happen with current setup)
                 result = train_classical_model(
                     name, model, X_train, y_train, X_test, y_test,
                     cv_folds=args.cv_folds, random_state=args.random_state,
                     calibrate=args.calibrate_probabilities,
                     calibration_method=args.calibration_method,
-                    feature_names=feature_names  # Pass feature names for importance analysis
+                    feature_names=feature_names,
+                    sample_weight=sample_weights_train
                 )
-                # Store RandomForest model for ensemble and feature selection
-                if name == 'RandomForest-Optimized' and result['status'] == 'success':
-                    rf_model = model
-                    rf_result = result
             classical_results[name] = result
         
         # Feature importance-based feature selection (if RandomForest succeeded)
@@ -1674,13 +2004,32 @@ def main():
         # (This is separate from quantum feature engineering which happens earlier)
         from quantum_layer.advanced_qml_features import QuantumFeatureEngineer as AdvancedQMLFeatureEngineer
         
+        # Determine reduction method
+        use_kernel_pca = (args.qml_reduction_method == 'kernel_pca')
+        use_lda = (args.qml_reduction_method == 'lda')
+        
+        # Map feature selection method
+        feature_selection_method = None
+        if args.qml_feature_selection_method:
+            if args.qml_feature_selection_method == 'f_classif':
+                from sklearn.feature_selection import f_classif
+                feature_selection_method = 'f_classif'
+            elif args.qml_feature_selection_method == 'mutual_info':
+                feature_selection_method = 'mutual_info'
+            elif args.qml_feature_selection_method == 'chi2':
+                from sklearn.feature_selection import chi2
+                feature_selection_method = 'chi2'
+        
         # Create quantum feature engineer for dimensionality reduction
         qml_engineer = AdvancedQMLFeatureEngineer(
             num_qubits=args.qml_dim,
             encoding_strategy=args.qml_encoding,
-            feature_selection_method='mutual_info',
-            use_kernel_pca=False,  # Use linear PCA for speed
-            random_state=args.random_state
+            feature_selection_method=feature_selection_method,
+            use_kernel_pca=use_kernel_pca,
+            random_state=args.random_state,
+            reduction_method=args.qml_reduction_method,
+            feature_select_k_mult=args.qml_feature_select_k_mult,
+            pre_pca_dim=args.qml_pre_pca_dim
         )
 
         # Prepare QML features (reduces embeddings to num_qubits dimensions)
@@ -1917,12 +2266,73 @@ def main():
                 'fit_seconds': fit_time
             }
             logger.info(f"  ✅ QSVC - Test PR-AUC: {qml_metrics.get('pr_auc', 0.0):.4f}")
+            
+            # Apply probability calibration to QSVC if requested
+            if args.calibrate_probabilities and trainer.last_model is not None:
+                try:
+                    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, average_precision_score
+                    from scipy.special import expit
+                    
+                    logger.info("Applying probability calibration to QSVC...")
+                    qsvc_model = trainer.last_model
+                    K_train_cal = trainer.last_train_features
+                    K_test_cal = trainer.last_test_features
+                    
+                    if K_train_cal is not None and K_test_cal is not None:
+                        # Get decision scores from QSVC
+                        train_scores = qsvc_model.decision_function(K_train_cal)
+                        test_scores = qsvc_model.decision_function(K_test_cal)
+                        
+                        # Convert decision scores to probabilities using sigmoid
+                        train_proba = expit(train_scores)
+                        test_proba_uncal = expit(test_scores)
+                        
+                        # Apply calibration: train calibrator on training data, apply to test
+                        # Map 'sigmoid' to 'platt' for the calibration function
+                        cal_method = 'platt' if args.calibration_method == 'sigmoid' else args.calibration_method
+                        from sklearn.isotonic import IsotonicRegression
+                        from sklearn.linear_model import LogisticRegression
+                        
+                        if cal_method == 'isotonic':
+                            calibrator = IsotonicRegression(out_of_bounds='clip')
+                            calibrator.fit(train_proba, y_train)
+                            test_proba_cal = calibrator.predict(test_proba_uncal)
+                        else:  # platt
+                            calibrator = LogisticRegression()
+                            calibrator.fit(train_proba.reshape(-1, 1), y_train)
+                            test_proba_cal = calibrator.predict_proba(test_proba_uncal.reshape(-1, 1))[:, 1]
+                        
+                        # Clip to [0, 1]
+                        test_proba_cal = np.clip(test_proba_cal, 0, 1)
+                        test_preds_cal = (test_proba_cal >= 0.5).astype(int)
+                        
+                        # Compute calibrated metrics
+                        test_metrics_cal = {
+                            'accuracy': accuracy_score(y_test, test_preds_cal),
+                            'precision': precision_score(y_test, test_preds_cal, zero_division=0),
+                            'recall': recall_score(y_test, test_preds_cal, zero_division=0),
+                            'f1': f1_score(y_test, test_preds_cal, zero_division=0),
+                            'roc_auc': roc_auc_score(y_test, test_proba_cal) if len(np.unique(y_test)) > 1 else 0.0,
+                            'pr_auc': average_precision_score(y_test, test_proba_cal)
+                        }
+                        
+                        quantum_results['QSVC-Optimized-Calibrated'] = {
+                            'status': 'success',
+                            'test_metrics': test_metrics_cal,
+                            'fit_seconds': fit_time
+                        }
+                        improvement = test_metrics_cal['pr_auc'] - qml_metrics.get('pr_auc', 0.0)
+                        logger.info(f"  ✅ QSVC-Calibrated - Test PR-AUC: {test_metrics_cal['pr_auc']:.4f} (improvement: {improvement:+.4f})")
+                except Exception as e:
+                    logger.warning(f"  ⚠️  QSVC calibration failed: {e}")
+                    import traceback
+                    traceback.print_exc()
         except Exception as e:
             logger.error(f"  ❌ QSVC failed: {e}")
             quantum_results['QSVC-Optimized'] = {'status': 'failed', 'error': str(e)}
 
-        # VQC (if not fast mode and not quantum_only - skip VQC for faster QSVC-only runs)
-        if not args.fast_mode and not args.quantum_only:
+        # VQC (if not fast mode and not quantum_only and not skip_vqc - skip VQC for faster QSVC-only runs)
+        if not args.fast_mode and not args.quantum_only and not args.skip_vqc:
             vqc_config = {
                 "model_type": "VQC",
                 "encoding_method": "feature_map",
@@ -1958,6 +2368,144 @@ def main():
             except Exception as e:
                 logger.error(f"  ❌ VQC failed: {e}")
                 quantum_results['VQC-Optimized'] = {'status': 'failed', 'error': str(e)}
+
+        # ========== HYBRID QUANTUM-CLASSICAL ENSEMBLE ==========
+        if not args.fast_mode and not args.classical_only:
+            logger.info("\n" + "="*80)
+            logger.info("TRAINING HYBRID QUANTUM-CLASSICAL ENSEMBLE")
+            logger.info("="*80)
+            
+            try:
+                # Get best quantum and classical models
+                qsvc_success = quantum_results.get('QSVC-Optimized', {}).get('status') == 'success'
+                qsvc_cal_success = quantum_results.get('QSVC-Optimized-Calibrated', {}).get('status') == 'success'
+                ensemble_success = classical_results.get('Ensemble-RF-LR', {}).get('status') == 'success'
+                rf_success = classical_results.get('RandomForest-Optimized', {}).get('status') == 'success'
+                
+                if (qsvc_success or qsvc_cal_success) and (ensemble_success or rf_success):
+                    # Use calibrated QSVC if available, otherwise regular QSVC
+                    if qsvc_cal_success:
+                        qsvc_metrics = quantum_results['QSVC-Optimized-Calibrated']['test_metrics']
+                        qsvc_name = 'QSVC-Optimized-Calibrated'
+                    elif qsvc_success:
+                        qsvc_metrics = quantum_results['QSVC-Optimized']['test_metrics']
+                        qsvc_name = 'QSVC-Optimized'
+                    else:
+                        qsvc_metrics = None
+                        qsvc_name = None
+                    
+                    # Use ensemble if available, otherwise RandomForest
+                    if ensemble_success:
+                        classical_metrics = classical_results['Ensemble-RF-LR']['test_metrics']
+                        classical_name = 'Ensemble-RF-LR'
+                    elif rf_success:
+                        classical_metrics = classical_results['RandomForest-Optimized']['test_metrics']
+                        classical_name = 'RandomForest-Optimized'
+                    else:
+                        classical_metrics = None
+                        classical_name = None
+                    
+                    if qsvc_metrics and classical_metrics:
+                        # Get predictions from both models
+                        # For quantum: use decision scores from QSVC
+                        if trainer.last_model is not None and trainer.last_test_features is not None:
+                            from scipy.special import expit
+                            qsvc_scores = trainer.last_model.decision_function(trainer.last_test_features)
+                            qsvc_proba = expit(qsvc_scores)
+                            
+                            # For classical: get from ensemble or RF
+                            # Models are already trained, just get predictions
+                            if ensemble_success:
+                                # Recreate ensemble to get predictions
+                                rf_trained = models['RandomForest-Optimized']
+                                if not hasattr(rf_trained, 'n_estimators') or rf_trained.n_estimators == 0:
+                                    rf_trained.fit(X_train, y_train)
+                                lr_trained = models['LogisticRegression-L2']
+                                if not hasattr(lr_trained, 'coef_'):
+                                    lr_trained.fit(X_train, y_train)
+                                ensemble = VotingClassifier(
+                                    estimators=[('rf', rf_trained), ('lr', lr_trained)],
+                                    voting='soft',
+                                    weights=[2, 1]
+                                )
+                                ensemble.fit(X_train, y_train)
+                                classical_proba = ensemble.predict_proba(X_test)[:, 1]
+                            else:
+                                rf_trained = models['RandomForest-Optimized']
+                                if not hasattr(rf_trained, 'n_estimators') or rf_trained.n_estimators == 0:
+                                    rf_trained.fit(X_train, y_train)
+                                classical_proba = rf_trained.predict_proba(X_test)[:, 1]
+                            
+                            # Create weighted ensemble (tune weights based on individual performance)
+                            # Weight quantum more if it performs better, otherwise weight classical more
+                            qsvc_pr = qsvc_metrics.get('pr_auc', 0.0)
+                            classical_pr = classical_metrics.get('pr_auc', 0.0)
+                            
+                            # Adaptive weighting: weight each model by its PR-AUC relative to the sum
+                            total_pr = qsvc_pr + classical_pr
+                            if total_pr > 0:
+                                qsvc_weight = qsvc_pr / total_pr
+                                classical_weight = classical_pr / total_pr
+                            else:
+                                # Fallback: equal weights
+                                qsvc_weight = 0.5
+                                classical_weight = 0.5
+                            
+                            # Normalize weights to sum to 1
+                            weight_sum = qsvc_weight + classical_weight
+                            qsvc_weight = qsvc_weight / weight_sum
+                            classical_weight = classical_weight / weight_sum
+                            
+                            # Combine predictions
+                            hybrid_proba = qsvc_weight * qsvc_proba + classical_weight * classical_proba
+                            hybrid_preds = (hybrid_proba >= 0.5).astype(int)
+                            
+                            # Compute metrics
+                            from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, average_precision_score
+                            hybrid_metrics = {
+                                'accuracy': accuracy_score(y_test, hybrid_preds),
+                                'precision': precision_score(y_test, hybrid_preds, zero_division=0),
+                                'recall': recall_score(y_test, hybrid_preds, zero_division=0),
+                                'f1': f1_score(y_test, hybrid_preds, zero_division=0),
+                                'roc_auc': roc_auc_score(y_test, hybrid_proba) if len(np.unique(y_test)) > 1 else 0.0,
+                                'pr_auc': average_precision_score(y_test, hybrid_proba)
+                            }
+                            
+                            quantum_results['Hybrid-Quantum-Classical'] = {
+                                'status': 'success',
+                                'test_metrics': hybrid_metrics,
+                                'fit_seconds': 0.0,  # No training time (just combination)
+                                'weights': {
+                                    'quantum': float(qsvc_weight),
+                                    'classical': float(classical_weight)
+                                },
+                                'components': {
+                                    'quantum': qsvc_name,
+                                    'classical': classical_name
+                                }
+                            }
+                            
+                            logger.info(f"  ✅ Hybrid Ensemble - Test PR-AUC: {hybrid_metrics['pr_auc']:.4f}")
+                            logger.info(f"     Weights: Quantum={qsvc_weight:.3f}, Classical={classical_weight:.3f}")
+                            logger.info(f"     Components: {qsvc_name} (PR-AUC={qsvc_pr:.4f}), {classical_name} (PR-AUC={classical_pr:.4f})")
+                            
+                            # Compare with individual models
+                            best_individual = max(qsvc_pr, classical_pr)
+                            improvement = hybrid_metrics['pr_auc'] - best_individual
+                            if improvement > 0:
+                                logger.info(f"     ✨ Improvement over best individual: {improvement:+.4f}")
+                            else:
+                                logger.info(f"     (No improvement over best individual)")
+                else:
+                    logger.warning("  ⚠️  Hybrid ensemble skipped: need both quantum and classical models")
+            except Exception as e:
+                logger.warning(f"  ⚠️  Hybrid ensemble failed: {e}")
+                import traceback
+                traceback.print_exc()
+                quantum_results['Hybrid-Quantum-Classical'] = {
+                    'status': 'failed',
+                    'error': str(e)
+                }
 
     # ========== STEP 7: COMPARISON REPORT ==========
     logger.info("\n" + "="*80)

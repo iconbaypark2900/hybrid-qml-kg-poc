@@ -1,0 +1,23 @@
+# Knowledge Graph Layer Configuration
+# Parameters for KG embedding and data loading
+
+# Embedding Configuration
+embedding:
+  embedding_dim: 32          # Dimensionality of KG embeddings
+  qml_dim: 5                 # Reduced dimensionality for QML (PCA output)
+  work_dir: "data"           # Directory to store embeddings and artifacts
+
+# Data Loading Configuration
+data_loading:
+  data_dir: "data"           # Directory for KG data files
+  relation_type: "CtD"       # Hetionet relation type (e.g., CtD, DaG, GiG)
+  max_entities: 300          # Maximum number of entities (for scalability/PoC)
+  test_size: 0.2            # Test set split ratio
+  random_state: 42          # Random seed for reproducibility
+  num_negatives: null       # Number of negative samples (null = 1:1 ratio with positives)
+
+# Feature Preparation
+features:
+  qml_features_mode: "diff"  # QML feature mode: "diff", "hadamard", or "both"
+  use_reduced: true         # Whether to use reduced-dimension embeddings for QML
+

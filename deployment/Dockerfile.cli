@@ -1,0 +1,28 @@
+# CLI-only image for rbf_svc_fixed.py and run_pipeline.py
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    MPLBACKEND=Agg \
+    PYTHONPATH=/app
+
+# Install Python deps (minimal stack for rbf + pipeline)
+COPY requirements-cli-combined.txt .
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements-cli-combined.txt
+
+# Copy only required code
+COPY kg_layer/ ./kg_layer/
+COPY classical_baseline/ ./classical_baseline/
+COPY quantum_layer/ ./quantum_layer/
+COPY scripts/ ./scripts/
+COPY config/ ./config/
+# Optional: if run_pipeline’s scalability uses benchmarking utilities
+COPY benchmarking/ ./benchmarking/
+
+# Data/models/results will usually be mounted from host; create dirs if missing
+RUN mkdir -p data models results
+
+CMD ["/bin/bash"]

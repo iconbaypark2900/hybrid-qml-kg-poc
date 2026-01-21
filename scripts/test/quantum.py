@@ -3,28 +3,45 @@
 Simple quantum computing script that works with:
 - Local simulator (option 3)
 - IBM Brisbane and Torino (options 1 and 2)
+- Uses QuantumExecutor for consistent API handling
 """
 
 import os
+import sys
 import random
 from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
 from qiskit import QuantumCircuit
-from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
-from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
+from quantum_layer.quantum_executor import QuantumExecutor
 
 def load_env():
-    """Load .env file"""
-    env_path = Path('.env')
-    if env_path.exists():
-        with open(env_path) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    if '=' in line:
-                        key, value = line.split('=', 1)
-                        value = value.strip().strip('"').strip("'")
-                        if value and value != 'your_token_here':
-                            os.environ[key.strip()] = value
+    """Load .env.working file first, then .env file"""
+    # Try .env.working first (created by test_token.py)
+    env_files = ['.env.working', '.env']
+    
+    for env_file in env_files:
+        env_path = Path(env_file)
+        if env_path.exists():
+            print(f"📁 Loading environment from: {env_file}")
+            with open(env_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        if '=' in line:
+                            key, value = line.split('=', 1)
+                            # Clean the value - remove quotes and brackets
+                            value = value.strip().strip('"').strip("'").strip('{').strip('}')
+                            if value and value != 'your_token_here':
+                                os.environ[key.strip()] = value
+            return True
+    
+    print("⚠️  No .env.working or .env file found")
+    print("   Run 'python scripts/test/test_token.py' first to create .env.working")
+    return False
 
 def simulate_locally(shots=1024):
     """Simple local simulation - no quantum resources needed"""
@@ -46,13 +63,108 @@ def simulate_locally(shots=1024):
     
     return counts
 
+def run_with_executor(circuit, backend_choice, shots=1024):
+    """Use QuantumExecutor to run circuit on specified backend"""
+    # Create executor with heron mode
+    executor = QuantumExecutor()
+    
+    # Override execution mode based on choice
+    if backend_choice == "3":
+        executor.execution_mode = "simulator"
+    elif backend_choice == "1":
+        executor.execution_mode = "heron"
+        executor.config['quantum']['heron']['backend'] = "ibm_brisbane"
+    else:  # choice == "2"
+        executor.execution_mode = "heron"
+        executor.config['quantum']['heron']['backend'] = "ibm_torino"
+    
+    try:
+        sampler, backend_name = executor.get_sampler()
+        
+        if executor.execution_mode == "simulator":
+            # For simulator, we can run directly
+            job = sampler.run([circuit], shots=shots)
+            result = job.result()
+            
+            # Extract counts - handle different result formats
+            counts = {}
+            try:
+                # Try to get counts directly
+                counts = result[0].data.c.get_counts()
+            except:
+                try:
+                    # Try alternative count format
+                    counts = result[0].data.meas.get_counts()
+                except:
+                    try:
+                        # Try probabilities and convert to counts
+                        probs = result[0].data.c.get_probabilities()
+                        for i, prob in enumerate(probs):
+                            state = format(i, f'0{circuit.num_qubits}b')
+                            counts[state] = int(prob * shots)
+                    except Exception as e:
+                        print(f"❌ Could not extract results: {e}")
+                        return {}, backend_name
+            
+            return counts, backend_name
+        
+        else:
+            # For real hardware, we need to transpile first
+            from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
+            
+            print(f"\n🔬 Using: {backend_name}")
+            if executor.service:
+                try:
+                    backend = executor.service.backend(backend_name)
+                    print(f"   Queue: {backend.status().pending_jobs} jobs")
+                except:
+                    print(f"   Backend: {backend_name}")
+            
+            # Transpile with optimization level
+            print("\nTranspiling circuit...")
+            backend = executor.service.backend(backend_name)
+            # Use optimization_level from config during transpilation
+            optimization_level = executor.config['quantum']['heron'].get('optimization_level', 1)
+            pm = generate_preset_pass_manager(backend=backend, optimization_level=optimization_level)
+            isa_circuit = pm.run(circuit)
+            
+            # Submit job
+            print(f"Submitting job...")
+            job = sampler.run([isa_circuit], shots=shots)
+            
+            print(f"Job ID: {job.job_id()}")
+            print("⏳ Waiting in queue...")
+            
+            # Get results
+            result = job.result()
+            
+            # Extract counts
+            try:
+                counts = result[0].data.c.get_counts()
+            except:
+                try:
+                    counts = result[0].data.meas.get_counts()
+                except:
+                    print("Error extracting results")
+                    return {}, backend_name
+            
+            return counts, backend_name
+            
+    except Exception as e:
+        print(f"❌ Error running circuit: {e}")
+        return {}, "Error"
+    finally:
+        executor.close_session()
+
 def main():
     print("=" * 70)
-    print("IBM Quantum Circuit Test - semantics instance")
+    print("IBM Quantum Circuit Test - Using QuantumExecutor")
     print("=" * 70)
     
     # Load environment
-    load_env()
+    if not load_env():
+        print("\n❌ Cannot proceed without environment configuration")
+        return
     
     # Show options
     print("\nOPTIONS:")
@@ -87,22 +199,6 @@ def main():
     else:
         # REAL QUANTUM COMPUTER
         print("\nConnecting to IBM Quantum...")
-        try:
-            service = QiskitRuntimeService(channel="ibm_quantum_platform")
-            print("✅ Connected to semantics instance")
-        except Exception as e:
-            print(f"❌ Connection failed: {e}")
-            return
-        
-        # Select backend
-        if choice == "1":
-            backend = service.backend("ibm_brisbane")
-        else:  # choice == "2" or anything else
-            backend = service.backend("ibm_torino")
-        
-        backend_name = backend.name
-        print(f"\n🔬 Using: {backend_name}")
-        print(f"   Queue: {backend.status().pending_jobs} jobs")
         
         # Confirm
         print(f"\n⚠️  This will use quantum time (10 minutes available)")
@@ -111,31 +207,11 @@ def main():
             print("Cancelled.")
             return
         
-        # Transpile
-        print("\nTranspiling circuit...")
-        pm = generate_preset_pass_manager(backend=backend, optimization_level=1)
-        isa_circuit = pm.run(circuit)
+        counts, backend_name = run_with_executor(circuit, choice, shots)
         
-        # Submit job
-        print(f"Submitting job...")
-        sampler = Sampler(backend=backend)
-        job = sampler.run([isa_circuit], shots=shots)
-        
-        print(f"Job ID: {job.job_id()}")
-        print("⏳ Waiting in queue...")
-        
-        # Get results
-        result = job.result()
-        
-        # Extract counts
-        try:
-            counts = result[0].data.c.get_counts()
-        except:
-            try:
-                counts = result[0].data.meas.get_counts()
-            except:
-                print("Error extracting results")
-                return
+        if not counts:
+            print("❌ Failed to get results")
+            return
     
     # Display results
     print("\n" + "=" * 70)
@@ -153,7 +229,7 @@ def main():
     # Analyze entanglement
     bell_states = counts.get('00', 0) + counts.get('11', 0)
     other_states = counts.get('01', 0) + counts.get('10', 0)
-    bell_percentage = (bell_states / total) * 100
+    bell_percentage = (bell_states / total) * 100 if total > 0 else 0
     
     print(f"\nEntanglement: {bell_percentage:.1f}% Bell states")
     

@@ -19,11 +19,19 @@ logger = logging.getLogger(__name__)
 def plot_confusion_matrix(y_true, y_pred, classes=['Negative', 'Positive'], title="Confusion Matrix"):
     """
     Plot confusion matrix with proper labeling.
+
+    Args:
+        y_true: True labels
+        y_pred: Predicted labels
+        classes: List of class names
+
+    Returns:
+        Matplotlib figure object
     """
     cm = confusion_matrix(y_true, y_pred)
-    
+
     plt.figure(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=classes, yticklabels=classes)
     plt.title(title)
     plt.xlabel('Predicted')
@@ -34,12 +42,19 @@ def plot_confusion_matrix(y_true, y_pred, classes=['Negative', 'Positive'], titl
 def plot_roc_curve(y_true, y_proba, title="ROC Curve"):
     """
     Plot ROC curve with AUC score.
+
+    Args:
+        y_true: True labels
+        y_proba: Predicted probabilities for the positive class
+
+    Returns:
+        Matplotlib figure object
     """
     fpr, tpr, _ = roc_curve(y_true, y_proba)
     roc_auc = roc_auc_score(y_true, y_proba)
-    
+
     plt.figure(figsize=(8, 6))
-    plt.plot(fpr, tpr, color='darkorange', lw=2, 
+    plt.plot(fpr, tpr, color='darkorange', lw=2,
              label=f'ROC curve (AUC = {roc_auc:.4f})')
     plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='Random')
     plt.xlim([0.0, 1.0])
@@ -55,10 +70,17 @@ def plot_roc_curve(y_true, y_proba, title="ROC Curve"):
 def plot_precision_recall_curve(y_true, y_proba, title="Precision-Recall Curve"):
     """
     Plot Precision-Recall curve with AP score.
+
+    Args:
+        y_true: True labels
+        y_proba: Predicted probabilities for the positive class
+
+    Returns:
+        Matplotlib figure object
     """
     precision, recall, _ = precision_recall_curve(y_true, y_proba)
     ap_score = average_precision_score(y_true, y_proba)
-    
+
     plt.figure(figsize=(8, 6))
     plt.plot(recall, precision, color='darkgreen', lw=2,
              label=f'PR curve (AP = {ap_score:.4f})')
@@ -73,12 +95,20 @@ def plot_precision_recall_curve(y_true, y_proba, title="Precision-Recall Curve")
 def calculate_comprehensive_metrics(y_true, y_pred, y_proba):
     """
     Calculate comprehensive set of evaluation metrics.
+
+    Args:
+        y_true: True labels
+        y_pred: Predicted labels
+        y_proba: Predicted probabilities for the positive class
+
+    Returns:
+        Dict of calculated metrics
     """
     from sklearn.metrics import (
         accuracy_score, precision_score, recall_score, f1_score,
         matthews_corrcoef, balanced_accuracy_score
     )
-    
+
     metrics = {
         'accuracy': accuracy_score(y_true, y_pred),
         'balanced_accuracy': balanced_accuracy_score(y_true, y_pred),
@@ -89,31 +119,34 @@ def calculate_comprehensive_metrics(y_true, y_pred, y_proba):
         'roc_auc': roc_auc_score(y_true, y_proba),
         'average_precision': average_precision_score(y_true, y_proba)
     }
-    
+
     return metrics
 
 def compare_models(results_dict, metric='average_precision'):
     """
     Compare multiple models on a specific metric.
-    
+
     Args:
         results_dict: Dict with model names as keys and results as values
         metric: Metric to compare (e.g., 'average_precision', 'roc_auc', 'f1_score')
+
+    Returns:
+        Matplotlib figure object
     """
     models = list(results_dict.keys())
     scores = [results_dict[model][metric] for model in models]
-    
+
     plt.figure(figsize=(10, 6))
     bars = plt.bar(models, scores, color=['#2E86AB', '#A23B72', '#F24236', '#4ECDC4'])
     plt.ylabel(metric.replace('_', ' ').title())
     plt.title(f'Model Comparison: {metric.replace("_", " ").title()}')
     plt.xticks(rotation=45, ha='right')
-    
+
     # Add value labels on bars
     for bar, score in zip(bars, scores):
         plt.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.01,
                 f'{score:.4f}', ha='center', va='bottom')
-    
+
     plt.grid(True, alpha=0.3, axis='y')
     plt.tight_layout()
     return plt.gcf()
@@ -121,14 +154,23 @@ def compare_models(results_dict, metric='average_precision'):
 def generate_evaluation_report(y_true, y_pred, y_proba, model_name="Model"):
     """
     Generate a comprehensive evaluation report.
+
+    Args:
+        y_true: True labels
+        y_pred: Predicted labels
+        y_proba: Predicted probabilities for the positive class
+        model_name: Name of the model being evaluated
+
+    Returns:
+        Tuple of metrics and report string
     """
     metrics = calculate_comprehensive_metrics(y_true, y_pred, y_proba)
-    
+
     report = f"""
     {'='*60}
     EVALUATION REPORT: {model_name}
     {'='*60}
-    
+
     Accuracy:           {metrics['accuracy']:.4f}
     Balanced Accuracy:  {metrics['balanced_accuracy']:.4f}
     Precision:          {metrics['precision']:.4f}
@@ -137,16 +179,20 @@ def generate_evaluation_report(y_true, y_pred, y_proba, model_name="Model"):
     Matthews Corr:      {metrics['matthews_corrcoef']:.4f}
     ROC-AUC:            {metrics['roc_auc']:.4f}
     Average Precision:  {metrics['average_precision']:.4f}
-    
+
     {'='*60}
     """
-    
+
     logger.info(report)
     return metrics, report
 
 def save_evaluation_results(metrics_dict, filename="evaluation_results.csv"):
     """
     Save evaluation results to CSV file.
+
+    Args:
+        metrics_dict: Dict of evaluation metrics
+        filename: Output CSV filename
     """
     df = pd.DataFrame([metrics_dict])
     df.to_csv(filename, index=False)
@@ -156,20 +202,29 @@ def save_evaluation_results(metrics_dict, filename="evaluation_results.csv"):
 def evaluate_classical_model(model, X_test, y_test, model_name="Classical Model"):
     """
     Complete evaluation pipeline for a classical model.
+
+    Args:
+        model: Trained model object
+        X_test: Test features
+        y_test: True test labels
+        model_name: Name of the model being evaluated
+
+    Returns:
+        Tuple of metrics dict and list of matplotlib figure objects
     """
     # Get predictions
     y_pred = model.predict(X_test)
     y_proba = model.predict_proba(X_test)[:, 1]
-    
+
     # Generate report
     metrics, report = generate_evaluation_report(y_test, y_pred, y_proba, model_name)
-    
+
     # Create plots
     fig1 = plot_confusion_matrix(y_test, y_pred, title=f"{model_name} - Confusion Matrix")
     fig2 = plot_roc_curve(y_test, y_proba, title=f"{model_name} - ROC Curve")
     fig3 = plot_precision_recall_curve(y_test, y_proba, title=f"{model_name} - PR Curve")
-    
+
     # Save results
     save_evaluation_results(metrics, f"{model_name.lower().replace(' ', '_')}_evaluation.csv")
-    
+
     return metrics, [fig1, fig2, fig3]

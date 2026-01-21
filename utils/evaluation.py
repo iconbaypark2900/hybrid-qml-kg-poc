@@ -27,7 +27,11 @@ def stratified_kfold_cv(
     task_edges: pd.DataFrame,
     entity_to_id: Dict[str, int],
     n_folds: int = 5,
-    random_state: int = 42
+    random_state: int = 42,
+    *,
+    neg_ratio: float = 1.0,
+    negative_sampling: str = "random",
+    diversity_weight: float = 0.5,
 ) -> List[Tuple[pd.DataFrame, pd.DataFrame]]:
     """
     Create stratified K-Fold splits for link prediction.
@@ -69,13 +73,19 @@ def stratified_kfold_cv(
         # This prevents leakage - negatives are sampled fresh each time
         neg_train = get_negative_samples(
             pd.DataFrame(pos_train),
-            num_negatives=len(pos_train),
+            num_negatives=int(round(len(pos_train) * float(neg_ratio))),
             random_state=random_state + fold_idx * 1000  # Different seed per fold
+            ,
+            strategy=str(negative_sampling),
+            diversity_weight=float(diversity_weight),
         )
         neg_test = get_negative_samples(
             pd.DataFrame(pos_test),
-            num_negatives=len(pos_test),
+            num_negatives=int(round(len(pos_test) * float(neg_ratio))),
             random_state=random_state + fold_idx * 1000 + 1
+            ,
+            strategy=str(negative_sampling),
+            diversity_weight=float(diversity_weight),
         )
 
         # Combine and shuffle

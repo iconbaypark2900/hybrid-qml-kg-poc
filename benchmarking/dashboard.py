@@ -6,12 +6,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import sys
+import shlex
 import logging
 from pathlib import Path
 import json
 import time
 import subprocess
 import joblib
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,6 +44,133 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # Ensure local project modules (kg_layer/, quantum_layer/, etc.) are importable in Streamlit
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+# Optional: node metadata (human-readable names for node IDs)
+NODE_METADATA_CSV = PROJECT_ROOT / "data" / "hetionet_nodes_metadata.csv"
+HETIONET_NODES_TSV = PROJECT_ROOT / "data" / "hetionet-v1.0-nodes.tsv"
+
+# ------------------------------
+# Human-readable node labeling
+# ------------------------------
+@st.cache_resource
+def load_node_metadata():
+    try:
+        from kg_layer.node_metadata import load_node_metadata_csv
+        return load_node_metadata_csv(NODE_METADATA_CSV)
+    except Exception:
+        return {}
+
+@st.cache_data(show_spinner=False)
+def node_metadata_coverage() -> dict:
+    """
+    Returns coverage stats for metadata names, split by common Hetionet node types.
+    """
+    meta = load_node_metadata() or {}
+    keys = list(meta.keys())
+    def _named(k: str) -> bool:
+        m = meta.get(k)
+        return bool(getattr(m, "name", None))
+    total = len(keys)
+    named = sum(1 for k in keys if _named(k))
+    comp = [k for k in keys if k.startswith("Compound::")]
+    dis = [k for k in keys if k.startswith("Disease::")]
+    cov = {
+        "total_nodes": int(total),
+        "named_nodes": int(named),
+        "compound_total": int(len(comp)),
+        "compound_named": int(sum(1 for k in comp if _named(k))),
+        "disease_total": int(len(dis)),
+        "disease_named": int(sum(1 for k in dis if _named(k))),
+    }
+    cov["named_frac"] = float(cov["named_nodes"] / cov["total_nodes"]) if cov["total_nodes"] else 0.0
+    cov["compound_named_frac"] = float(cov["compound_named"] / cov["compound_total"]) if cov["compound_total"] else 0.0
+    cov["disease_named_frac"] = float(cov["disease_named"] / cov["disease_total"]) if cov["disease_total"] else 0.0
+    return cov
+
+def render_names_status_panel():
+    """
+    Renders a global panel to explain and fix missing human-readable names.
+    """
+    cov = node_metadata_coverage()
+    with st.sidebar:
+        st.subheader("Names (metadata)")
+        if cov["total_nodes"] == 0:
+            st.warning("Node metadata not loaded yet.")
+        else:
+            st.caption(
+                f"Named nodes: {cov['named_nodes']}/{cov['total_nodes']} "
+                f"({cov['named_frac']*100:.1f}%)"
+            )
+            st.caption(
+                f"Compounds named: {cov['compound_named']}/{cov['compound_total']} "
+                f"({cov['compound_named_frac']*100:.1f}%)"
+            )
+            st.caption(
+                f"Diseases named: {cov['disease_named']}/{cov['disease_total']} "
+                f"({cov['disease_named_frac']*100:.1f}%)"
+            )
+
+        st.caption("If names are missing, the dashboard falls back to readable IDs (e.g., `Compound DB00688`).")
+        can_local = HETIONET_NODES_TSV.exists()
+        allow_download = st.checkbox("Allow downloading nodes table if missing", value=False)
+        if st.button("Enrich names now"):
+            log_container = st.empty()
+            cmd = [sys.executable, "scripts/enrich_node_metadata.py"]
+            if allow_download and not can_local:
+                cmd.append("--download_if_missing")
+            rc = run_command(cmd, log_container)
+            if rc == 0:
+                st.cache_data.clear()
+                st.cache_resource.clear()
+                st.success("Name enrichment completed. Refresh pages/dropdowns.")
+            else:
+                st.error("Name enrichment failed. See logs above.")
+
+
+# NOTE: render_names_status_panel() is invoked after run_command() is defined (further below)
+
+
+def _parse_node_id(node_id: str) -> tuple[str | None, str | None]:
+    try:
+        if not isinstance(node_id, str):
+            return None, None
+        if "::" not in node_id:
+            return None, node_id
+        kind, rest = node_id.split("::", 1)
+        return kind.strip() or None, rest.strip() or None
+    except Exception:
+        return None, None
+
+def node_label(node_id: str, node_meta: dict) -> str:
+    """
+    Friendly display string for a Hetionet node ID.
+    Falls back to a readable 'Type identifier' even if `name` is missing in metadata.
+    """
+    if not isinstance(node_id, str) or not node_id:
+        return str(node_id)
+    try:
+        m = node_meta.get(node_id)
+        if m is not None and getattr(m, "name", None):
+            return f"{m.name} ({node_id})"
+        kind, ident = _parse_node_id(node_id)
+        if kind and ident:
+            # Display without double-colons so non-technical audiences can read it quickly.
+            ns = getattr(m, "namespace", None) if m is not None else None
+            if ns:
+                return f"{kind} {ident} ({ns})"
+            return f"{kind} {ident}"
+        return node_id
+    except Exception:
+        return node_id
+
+def add_node_labels(df: pd.DataFrame, node_meta: dict, cols: list[str]) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    for c in cols:
+        if c in out.columns:
+            out[f"{c}_label"] = out[c].apply(lambda x: node_label(str(x), node_meta))
+    return out
 
 # Load latest results
 @st.cache_data
@@ -240,6 +369,9 @@ def run_command(cmd: list, log_container):
         log_container.error(f"Failed to run command: {e}")
         return 1
 
+# Global metadata status + fix button (generic drug names, disease names, etc.)
+render_names_status_panel()
+
 # Sidebar: Navigation
 st.sidebar.title("Navigation")
 if st.sidebar.button("Refresh data"):
@@ -275,34 +407,67 @@ It predicts whether a given **Compound** is likely to **treat** a given **Diseas
 This is a research/prototyping system: it produces **ranking signals** and **benchmarks**, not clinical guidance.
 """)
 
-    st.subheader("Problem statement and task definition")
+    st.subheader("Goal and hypothesis")
+    st.markdown("""
+- **Goal**: rank candidate Compound→Disease links so that true treatments rise to the top.
+- **Hypothesis**: graph embeddings + engineered features give strong classical baselines; quantum models can be competitive on the same reduced feature space when the signal is real and leakage-free.
+""")
+
+    st.subheader("Task definition")
     st.markdown("""
 - **Input**: Hetionet triples (edges) and a target relation (e.g., CtD)
 - **Task**: binary link prediction (edge exists vs not)
 - **Output**: a probability/score used for ranking candidate edges
 """)
 
-    st.subheader("Representations and model inputs")
+    st.subheader("Baseline stack (what we compare)")
     st.markdown("""
-- **Classical**: embeddings + derived pairwise features
-- **Quantum**: reduced quantum-ready vectors sized to number of qubits, used by QSVC/VQC
+- **Classical**: Logistic Regression / Random Forest / ExtraTrees / HistGradientBoosting over embedding-derived features
+- **PyKEEN (direct)**: RotatE/ComplEx link prediction on a context graph (scoring triples directly)
+- **GNN**: GraphSAGE/GIN-style link prediction with edge decoder
+- **Quantum**: QSVC / VQC over reduced, qubit-sized features
 """)
 
-    st.subheader("Implemented components (end-to-end)")
+    st.subheader("Recommended run ladder (increasing cost, better evidence)")
     st.markdown("""
-- Embedding training artifacts in `data/` (multiple embedding families supported)
-- Classical baseline training artifacts in `models/` (model + scaler)
-- Quantum execution modes (ideal/noisy simulator + hardware option)
-- Benchmark scripts and experiment history logging
+1. **Cheapest sanity**: tiny sample to verify the pipeline and UI wiring.
+2. **Classical ceiling**: full classical baselines on larger data; validates signal.
+3. **PyKEEN direct**: sanity-check link prediction with a KG-native baseline.
+4. **GNN baseline**: compares a modern graph model to embedding+ML.
+5. **Quantum vs classical**: run QSVC/VQC alongside classical for fairness.
+6. **Learning curve**: sweep sample sizes to see how PR-AUC scales.
+""")
+
+    st.subheader("Representations and model inputs")
+    st.markdown("""
+- **Embeddings**: ComplEx / RotatE / DistMult with optional full-graph context.
+- **Classical features**: [h, t, |h−t|, h⊙t] plus graph/domain features.
+- **Quantum features**: reduced vectors sized to the number of qubits (PCA + feature selection).
 """)
 
     st.subheader("Benchmarking context and current status")
     if df_latest is None:
-        st.warning("No `results/latest_run.csv` found yet. Run a benchmark from “Run Benchmarks”.")
+        st.warning("No `results/latest_run.csv` found yet. Run a benchmark from 'Run Benchmarks'.")
     else:
+        classical_pr = float(df_latest["classical_pr_auc"].iloc[0]) if "classical_pr_auc" in df_latest.columns else np.nan
+        quantum_pr = float(df_latest["quantum_pr_auc"].iloc[0]) if "quantum_pr_auc" in df_latest.columns else np.nan
+        pykeen_pr = float(df_latest["pykeen_pr_auc"].iloc[0]) if "pykeen_pr_auc" in df_latest.columns else np.nan
+        gnn_pr = float(df_latest["gnn_pr_auc"].iloc[0]) if "gnn_pr_auc" in df_latest.columns else np.nan
+        
+        # Show best performance
+        all_prs = [("Classical", classical_pr), ("Quantum", quantum_pr), ("PyKEEN", pykeen_pr), ("GNN", gnn_pr)]
+        valid_prs = [(name, pr) for name, pr in all_prs if not pd.isna(pr)]
+        if valid_prs:
+            best_name, best_pr = max(valid_prs, key=lambda x: x[1])
+            st.success(f"🏆 **Current Best**: {best_name} with PR-AUC = {best_pr:.4f}")
+            if best_pr >= 0.80:
+                st.balloons()
+        
         st.json({
-            "classical_pr_auc": float(df_latest["classical_pr_auc"].iloc[0]),
-            "quantum_pr_auc": float(df_latest["quantum_pr_auc"].iloc[0]),
+            "classical_pr_auc": classical_pr,
+            "quantum_pr_auc": quantum_pr,
+            "pykeen_pr_auc": pykeen_pr if not pd.isna(pykeen_pr) else None,
+            "gnn_pr_auc": gnn_pr if not pd.isna(gnn_pr) else None,
             "execution_mode": str(safe_get(df_latest, "execution_mode", "N/A")),
             "noise_model": str(safe_get(df_latest, "noise_model", "N/A")),
             "backend_label": str(safe_get(df_latest, "backend_label", "N/A")),
@@ -322,6 +487,7 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
     st.markdown("""
 - **PR-AUC**: best for imbalanced link prediction; higher is better.
 - **Ideal vs noisy**: shows sensitivity to noise model / backend.
+- **Leakage guard**: cached embeddings or graphs that include test positives can inflate scores; use leakage-safe settings for honest metrics.
 - **A single score is not evidence**: use the “Evidence” section in Live Prediction.
 """)
 
@@ -332,11 +498,61 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 - Add robust evaluation (seeds/CV) and artifact linking per run
 """)
 
+    st.subheader("Human-readable compound and disease names (metadata enrichment)")
+    st.markdown("""
+This dashboard can display **human-readable names** for compounds and diseases if `data/hetionet_nodes_metadata.csv`
+contains a populated `name` column.
+
+If names are missing, the dashboard falls back to readable IDs like `Compound DB00688` and `Disease DOID:0060048`.
+
+To enrich names (best-effort; may require network access):
+`python3 scripts/enrich_node_metadata.py --download_if_missing`
+""")
+
+    st.markdown("You can also run enrichment directly from this dashboard (recommended once, then reuse the cached file).")
+    col_enrich_a, col_enrich_b = st.columns([2, 3])
+    with col_enrich_a:
+        allow_download = st.checkbox("Allow downloading Hetionet nodes table if missing", value=False)
+        st.caption("Enable only if your environment allows outbound network access.")
+    with col_enrich_b:
+        if st.button("Enrich names now"):
+            log_container = st.empty()
+            cmd = [sys.executable, "scripts/enrich_node_metadata.py"]
+            if allow_download:
+                cmd.append("--download_if_missing")
+            rc = run_command(cmd, log_container)
+            if rc == 0:
+                st.cache_data.clear()
+                st.cache_resource.clear()
+                st.success("Metadata enrichment completed. Refresh dropdowns/tables or click Refresh data in the sidebar.")
+            else:
+                st.error("Metadata enrichment failed. See logs above; you may need to provide a local nodes table in `data/`.")
+
 # ==============================
 # PAGE 1: RESULTS OVERVIEW
 # ==============================
 elif page == "Results (latest run)":
     st.header("Results: latest run summary")
+
+    # Recent improvements highlight
+    if df_latest is not None:
+        classical_pr = safe_get(df_latest, "classical_pr_auc", np.nan)
+        quantum_pr = safe_get(df_latest, "quantum_pr_auc", np.nan)
+        pykeen_pr = safe_get(df_latest, "pykeen_pr_auc", np.nan) if "pykeen_pr_auc" in df_latest.columns else np.nan
+        gnn_pr = safe_get(df_latest, "gnn_pr_auc", np.nan) if "gnn_pr_auc" in df_latest.columns else np.nan
+        
+        max_pr = max([pr for pr in [classical_pr, quantum_pr, pykeen_pr, gnn_pr] if not pd.isna(pr)], default=np.nan)
+        
+        if not pd.isna(max_pr) and max_pr >= 0.75:
+            st.info(f"""
+            🎯 **Recent Achievement**: Models are achieving **PR-AUC ≥ 0.75**, with best performance at **{max_pr:.4f}**.
+            This demonstrates strong signal extraction from the Hetionet knowledge graph.
+            """)
+        elif not pd.isna(max_pr) and max_pr >= 0.70:
+            st.info(f"""
+            📈 **Progress**: Models are achieving **PR-AUC ≥ 0.70**, with best performance at **{max_pr:.4f}**.
+            Continue tuning to reach the 0.75-0.80 target range.
+            """)
 
     st.markdown("""
 **What was built**
@@ -350,6 +566,7 @@ elif page == "Results (latest run)":
 - Centralized seed control for consistent runs
 - Full-graph embedding option and richer feature engineering
 - Ideal vs noisy simulator runs with side-by-side comparisons
+- **Recent improvements**: Evidence weighting, contrastive learning, LDA reduction, and advanced negative sampling
 """)
 
     st.subheader("Latest run snapshot")
@@ -367,6 +584,100 @@ elif page == "Results (latest run)":
     run_cols[3].metric("Execution", exec_mode)
 
     st.caption(f"Backend: {backend_label} | Noise: {noise_model}")
+
+    # Scoreboard: summarize all baselines present in this run.
+    st.subheader("Scoreboard (PR-AUC)")
+    rows = []
+    if df_latest is not None:
+        def _row(name: str, pr: str, acc: str | None = None, extra: dict | None = None):
+            r = {"Model": name, "PR-AUC": safe_get(df_latest, pr, np.nan)}
+            if acc:
+                r["Accuracy"] = safe_get(df_latest, acc, np.nan)
+            if extra:
+                r.update(extra)
+            rows.append(r)
+
+        _row("Classical", "classical_pr_auc", "classical_accuracy", {"Type": safe_get(df_latest, "classical_model_type", "")})
+        _row("Quantum", "quantum_pr_auc", "quantum_accuracy", {"Type": safe_get(df_latest, "quantum_model_type", "")})
+        if "pykeen_pr_auc" in df_latest.columns:
+            _row("PyKEEN (direct)", "pykeen_pr_auc", None, {"Type": safe_get(df_latest, "pykeen_model_type", "")})
+        if "gnn_pr_auc" in df_latest.columns:
+            _row("GNN", "gnn_pr_auc", None, {"Type": safe_get(df_latest, "gnn_model_type", "")})
+
+    if rows:
+        df_scoreboard = pd.DataFrame(rows)
+        # Sort by PR-AUC descending, handling NaN
+        df_scoreboard = df_scoreboard.sort_values("PR-AUC", ascending=False, na_last=True)
+        
+        # Add performance badges
+        def _get_badge(pr_auc):
+            if pd.isna(pr_auc):
+                return ""
+            if pr_auc >= 0.80:
+                return "🏆 Excellent (≥0.80)"
+            elif pr_auc >= 0.75:
+                return "⭐ Strong (≥0.75)"
+            elif pr_auc >= 0.70:
+                return "✓ Good (≥0.70)"
+            else:
+                return ""
+        
+        df_scoreboard["Performance"] = df_scoreboard["PR-AUC"].apply(_get_badge)
+        
+        # Highlight best model
+        best_idx = df_scoreboard["PR-AUC"].idxmax() if not df_scoreboard["PR-AUC"].isna().all() else None
+        if best_idx is not None:
+            best_model = df_scoreboard.loc[best_idx, "Model"]
+            best_pr = df_scoreboard.loc[best_idx, "PR-AUC"]
+            st.success(f"🏆 **Best Model**: {best_model} with PR-AUC = {best_pr:.4f}")
+        
+        st.dataframe(df_scoreboard, width="stretch", hide_index=True)
+
+    # Dataset-size sanity (helps interpret PR-AUC stability)
+    if df_latest is not None and "obs_data_test_n" in df_latest.columns and "obs_data_pos_edges_total" in df_latest.columns:
+        try:
+            tn = int(float(df_latest["obs_data_test_n"].iloc[0]))
+            tp = int(float(df_latest["obs_data_test_pos"].iloc[0])) if "obs_data_test_pos" in df_latest.columns else None
+            total_pos = int(float(df_latest["obs_data_pos_edges_total"].iloc[0]))
+            st.caption(f"Dataset: test_n={tn}, test_pos={tp}, positives_total={total_pos}")
+        except Exception:
+            pass
+
+    # Warn if metrics look suspiciously perfect on non-trivial test sets (often indicates leakage)
+    try:
+        tn = int(float(df_latest["obs_data_test_n"].iloc[0])) if df_latest is not None and "obs_data_test_n" in df_latest.columns else 0
+        q_pr = float(df_latest["quantum_pr_auc"].iloc[0]) if df_latest is not None and "quantum_pr_auc" in df_latest.columns else None
+        c_pr = float(df_latest["classical_pr_auc"].iloc[0]) if df_latest is not None and "classical_pr_auc" in df_latest.columns else None
+        if tn >= 200 and ((q_pr is not None and abs(q_pr - 1.0) < 1e-12) or (c_pr is not None and abs(c_pr - 1.0) < 1e-12)):
+            st.warning("Perfect PR-AUC on a large test set is unusual. If you recently changed representation learning, verify leakage guards are active (held-out positives excluded from representation training).")
+    except Exception:
+        pass
+
+    # Optional: PyKEEN direct scoring baseline (if present in latest_run.csv)
+    if df_latest is not None and "pykeen_pr_auc" in df_latest.columns:
+        st.subheader("PyKEEN direct scoring baseline (link prediction model)")
+        pk_cols = st.columns(3)
+        pk_cols[0].metric("PyKEEN PR-AUC", f"{float(df_latest['pykeen_pr_auc'].iloc[0]):.4f}")
+        if "pykeen_model_type" in df_latest.columns:
+            pk_cols[1].metric("PyKEEN Model", str(df_latest["pykeen_model_type"].iloc[0]))
+        if "pykeen_train_seconds" in df_latest.columns:
+            try:
+                pk_cols[2].metric("PyKEEN Train (s)", f"{float(df_latest['pykeen_train_seconds'].iloc[0]):.1f}")
+            except Exception:
+                pk_cols[2].metric("PyKEEN Train (s)", str(df_latest["pykeen_train_seconds"].iloc[0]))
+
+    # Optional: GNN baseline (if present in latest_run.csv)
+    if df_latest is not None and "gnn_pr_auc" in df_latest.columns:
+        st.subheader("GNN baseline (GraphSAGE/GIN)")
+        g_cols = st.columns(3)
+        g_cols[0].metric("GNN PR-AUC", f"{float(df_latest['gnn_pr_auc'].iloc[0]):.4f}")
+        if "gnn_model_type" in df_latest.columns:
+            g_cols[1].metric("GNN Model", str(df_latest["gnn_model_type"].iloc[0]))
+        if "gnn_train_seconds" in df_latest.columns:
+            try:
+                g_cols[2].metric("GNN Train (s)", f"{float(df_latest['gnn_train_seconds'].iloc[0]):.1f}")
+            except Exception:
+                g_cols[2].metric("GNN Train (s)", str(df_latest["gnn_train_seconds"].iloc[0]))
 
     st.header("Model Performance Comparison")
     
@@ -503,6 +814,7 @@ elif page == "Live prediction (interactive)":
     
     model, scaler, model_path, scaler_path = load_classical_artifacts()
     embeddings, entity_ids, emb_name = load_entity_embeddings()
+    node_meta = load_node_metadata()
 
     st.caption(f"Classical model: `{model_path}` | Scaler: `{scaler_path}` | Embeddings: `{emb_name}`")
 
@@ -539,6 +851,7 @@ elif page == "Live prediction (interactive)":
                     "Compound (from embeddings)",
                     options=compounds_list,
                     index=compounds_list.index(default_compound),
+                    format_func=lambda x: node_label(x, node_meta),
                     key="drug_select"
                 )
             else:
@@ -553,6 +866,7 @@ elif page == "Live prediction (interactive)":
                     "Disease (from embeddings)",
                     options=diseases_list,
                     index=diseases_list.index(default_disease),
+                    format_func=lambda x: node_label(x, node_meta),
                     key="disease_select"
                 )
             else:
@@ -584,13 +898,13 @@ elif page == "Live prediction (interactive)":
                     st.error(f"Compound not found in embeddings: {compound_id}")
                     st.info("This embedding set contains a sampled subset of Hetionet entities. Try one of these available compounds:")
                     suggestions = suggest_available(entity_ids, "Compound::", compound_id.split("::")[-1], k=15)
-                    st.code("\n".join(suggestions))
+                    st.code("\n".join([node_label(s, node_meta) for s in suggestions]))
                     st.stop()
                 elif d_idx is None:
                     st.error(f"Disease not found in embeddings: {disease_id}")
                     st.info("Try one of these available diseases:")
                     suggestions = suggest_available(entity_ids, "Disease::", disease_id.split("::")[-1], k=15)
-                    st.code("\n".join(suggestions))
+                    st.code("\n".join([node_label(s, node_meta) for s in suggestions]))
                     st.stop()
                 else:
                     qml_dim = int(safe_get(df_latest, "qml_num_qubits", 12) or 12)
@@ -605,6 +919,7 @@ elif page == "Live prediction (interactive)":
                         "embedding": emb_name,
                         "qml_dim_used_for_features": qml_dim,
                     }
+                    st.caption(f"Selected: **{node_label(compound_id, node_meta)}** → **{node_label(disease_id, node_meta)}**")
 
                     if method == "classical_model":
                         if model is None or scaler is None:
@@ -808,8 +1123,12 @@ elif page == "Experiments (history)":
     st.header("Experiments: history of benchmarked runs")
     
     if df_history is not None and len(df_history) > 0:
+        st.caption(
+            "Use filters to isolate comparable runs. For trustworthy trends, prefer leakage-safe runs "
+            "(no cached embeddings when hold-outs exist) and consistent sampling."
+        )
         st.subheader("Filters")
-        cols = st.columns(5)
+        cols = st.columns(6)
         with cols[0]:
             model_options = df_history.get("quantum_model_type", pd.Series(dtype=object)).dropna().unique().tolist()
             model_filter = st.multiselect("Model Type", model_options)
@@ -823,6 +1142,8 @@ elif page == "Experiments (history)":
             max_rows = st.number_input("Max rows", min_value=10, max_value=500, value=200, step=10)
         with cols[4]:
             hide_quantum_zero = st.checkbox("Hide quantum=0 rows", value=False)
+        with cols[5]:
+            require_pykeen = st.checkbox("Require PyKEEN", value=False)
 
         filtered = df_history.copy()
         if model_filter and "quantum_model_type" in filtered.columns:
@@ -833,7 +1154,49 @@ elif page == "Experiments (history)":
             filtered = filtered[filtered["noise_model"].fillna("ideal").isin(noise_filter)]
         if hide_quantum_zero and "quantum_pr_auc" in filtered.columns:
             filtered = filtered[filtered["quantum_pr_auc"] > 0]
+        if require_pykeen and "pykeen_pr_auc" in filtered.columns:
+            filtered = filtered[filtered["pykeen_pr_auc"].notna()]
         filtered = filtered.tail(int(max_rows))
+
+        st.subheader("Quick summary")
+        summary_cols = st.columns(5)
+        with summary_cols[0]:
+            st.metric("Runs (filtered)", int(len(filtered)))
+        with summary_cols[1]:
+            c_mean = float(pd.to_numeric(filtered.get("classical_pr_auc"), errors="coerce").mean())
+            c_max = float(pd.to_numeric(filtered.get("classical_pr_auc"), errors="coerce").max())
+            st.metric("Classical PR-AUC", f"{c_mean:.4f}", delta=f"Max: {c_max:.4f}" if not pd.isna(c_max) else None)
+        with summary_cols[2]:
+            if "quantum_pr_auc" in filtered.columns:
+                q_mean = float(pd.to_numeric(filtered.get("quantum_pr_auc"), errors="coerce").mean())
+                q_max = float(pd.to_numeric(filtered.get("quantum_pr_auc"), errors="coerce").max())
+                st.metric("Quantum PR-AUC", f"{q_mean:.4f}", delta=f"Max: {q_max:.4f}" if not pd.isna(q_max) else None)
+        with summary_cols[3]:
+            if "pykeen_pr_auc" in filtered.columns:
+                pk_mean = float(pd.to_numeric(filtered.get("pykeen_pr_auc"), errors="coerce").mean())
+                pk_max = float(pd.to_numeric(filtered.get("pykeen_pr_auc"), errors="coerce").max())
+                st.metric("PyKEEN PR-AUC", f"{pk_mean:.4f}", delta=f"Max: {pk_max:.4f}" if not pd.isna(pk_max) else None)
+        with summary_cols[4]:
+            if "gnn_pr_auc" in filtered.columns:
+                g_mean = float(pd.to_numeric(filtered.get("gnn_pr_auc"), errors="coerce").mean())
+                g_max = float(pd.to_numeric(filtered.get("gnn_pr_auc"), errors="coerce").max())
+                st.metric("GNN PR-AUC", f"{g_mean:.4f}", delta=f"Max: {g_max:.4f}" if not pd.isna(g_max) else None)
+        
+        # Best overall performance highlight
+        all_maxes = []
+        if not pd.isna(c_max):
+            all_maxes.append(("Classical", c_max))
+        if "quantum_pr_auc" in filtered.columns and not pd.isna(q_max):
+            all_maxes.append(("Quantum", q_max))
+        if "pykeen_pr_auc" in filtered.columns and not pd.isna(pk_max):
+            all_maxes.append(("PyKEEN", pk_max))
+        if "gnn_pr_auc" in filtered.columns and not pd.isna(g_max):
+            all_maxes.append(("GNN", g_max))
+        
+        if all_maxes:
+            best_name, best_val = max(all_maxes, key=lambda x: x[1])
+            if best_val >= 0.75:
+                st.success(f"🏆 **Best Performance in History**: {best_name} achieved PR-AUC = {best_val:.4f}")
 
         st.subheader("Artifacts")
         st.download_button(
@@ -850,6 +1213,10 @@ elif page == "Experiments (history)":
         fig, ax = plt.subplots(figsize=(10, 4))
         ax.plot(filtered.index, filtered['classical_pr_auc'], 'o-', label='Classical PR-AUC', color='blue')
         ax.plot(filtered.index, filtered['quantum_pr_auc'], 's-', label='Quantum PR-AUC', color='purple')
+        if "pykeen_pr_auc" in filtered.columns:
+            ax.plot(filtered.index, filtered["pykeen_pr_auc"], '^-', label='PyKEEN PR-AUC', color='teal')
+        if "gnn_pr_auc" in filtered.columns:
+            ax.plot(filtered.index, filtered["gnn_pr_auc"], 'd-', label='GNN PR-AUC', color='orange')
         ax.set_xlabel('Experiment #')
         ax.set_ylabel('PR-AUC')
         ax.set_title('PR-AUC Over Experiments')
@@ -857,13 +1224,14 @@ elif page == "Experiments (history)":
         ax.grid(True)
         st.pyplot(fig)
 
-        st.subheader("Quantum vs Classical PR-AUC Delta")
-        delta = filtered["quantum_pr_auc"] - filtered["classical_pr_auc"]
-        fig3, ax3 = plt.subplots(figsize=(10, 3))
-        ax3.bar(filtered.index, delta, color=["green" if v >= 0 else "red" for v in delta])
-        ax3.axhline(0, color="black", linewidth=1)
-        ax3.set_ylabel("Δ PR-AUC (Q - C)")
-        st.pyplot(fig3)
+        if "quantum_pr_auc" in filtered.columns:
+            st.subheader("Quantum vs Classical PR-AUC Delta")
+            delta = filtered["quantum_pr_auc"] - filtered["classical_pr_auc"]
+            fig3, ax3 = plt.subplots(figsize=(10, 3))
+            ax3.bar(filtered.index, delta, color=["green" if v >= 0 else "red" for v in delta])
+            ax3.axhline(0, color="black", linewidth=1)
+            ax3.set_ylabel("Δ PR-AUC (Q - C)")
+            st.pyplot(fig3)
 
         # Kernel observables (if present)
         obs_cols = [c for c in filtered.columns if c.startswith("obs_")]
@@ -971,10 +1339,15 @@ elif page == "Experiments (history)":
             filtered.to_csv(snapshot_path, index=False)
 
             # PR-AUC plot (if present)
-            if "quantum_pr_auc" in filtered.columns:
+            if "classical_pr_auc" in filtered.columns:
                 fig, ax = plt.subplots(figsize=(10, 3))
                 ax.plot(filtered.index, filtered.get("classical_pr_auc"), "o-", label="Classical PR-AUC", color="gray")
-                ax.plot(filtered.index, filtered.get("quantum_pr_auc"), "s-", label="Quantum PR-AUC", color="purple")
+                if "quantum_pr_auc" in filtered.columns:
+                    ax.plot(filtered.index, filtered.get("quantum_pr_auc"), "s-", label="Quantum PR-AUC", color="purple")
+                if "pykeen_pr_auc" in filtered.columns:
+                    ax.plot(filtered.index, filtered.get("pykeen_pr_auc"), "^-", label="PyKEEN PR-AUC", color="teal")
+                if "gnn_pr_auc" in filtered.columns:
+                    ax.plot(filtered.index, filtered.get("gnn_pr_auc"), "d-", label="GNN PR-AUC", color="orange")
                 ax.set_title("PR-AUC over runs")
                 ax.set_xlabel("Experiment #")
                 ax.set_ylabel("PR-AUC")
@@ -1036,87 +1409,111 @@ elif page == "Comparison (classical vs quantum)":
             if col in dfc.columns:
                 dfc[col] = pd.to_numeric(dfc[col], errors="coerce")
 
-        # Only keep rows where both are present
-        paired = dfc.dropna(subset=["classical_pr_auc", "quantum_pr_auc"]).copy()
+        # Allow comparing multiple baselines to the classical score recorded in the same run row.
+        candidates = []
+        if "quantum_pr_auc" in dfc.columns:
+            candidates.append(("Quantum", "quantum_pr_auc"))
+        if "pykeen_pr_auc" in dfc.columns:
+            candidates.append(("PyKEEN (direct)", "pykeen_pr_auc"))
+        if "gnn_pr_auc" in dfc.columns:
+            candidates.append(("GNN", "gnn_pr_auc"))
+
+        if not candidates:
+            st.warning("No baselines found in history yet (need columns like quantum_pr_auc / pykeen_pr_auc / gnn_pr_auc).")
+            st.stop()
+
+        label_to_col = {lbl: col for lbl, col in candidates}
+        baseline_choice = st.selectbox("Baseline to compare against Classical", [lbl for lbl, _ in candidates], index=0)
+        bcol = label_to_col[baseline_choice]
+
+        paired = dfc.dropna(subset=["classical_pr_auc", bcol]).copy()
+        # For quantum, treat 0 as missing (older runs stored quantum_pr_auc=0 when not run)
+        if baseline_choice == "Quantum" and "quantum_pr_auc" in paired.columns:
+            paired.loc[paired["quantum_pr_auc"] == 0, "quantum_pr_auc"] = np.nan
+            paired = paired.dropna(subset=["classical_pr_auc", "quantum_pr_auc"]).copy()
+
         if len(paired) == 0:
-            st.warning("No paired classical+quantum rows found yet (some runs are quantum-only or classical-only).")
-        else:
-            paired["delta_pr_auc"] = paired["quantum_pr_auc"] - paired["classical_pr_auc"]
-            paired["quantum_variant"] = paired.get("obs_kernel_source", pd.Series(["unknown"] * len(paired))).fillna("unknown")
-            paired["execution_bucket"] = (
-                paired.get("execution_mode", "unknown").fillna("unknown").astype(str)
-                + " | " + paired.get("backend_label", "unknown").fillna("unknown").astype(str)
-                + " | " + paired.get("noise_model", "ideal").fillna("ideal").astype(str)
-            )
+            st.warning(f"No paired rows found yet for Classical + {baseline_choice}.")
+            st.stop()
 
-            st.subheader("Summary")
-            cols = st.columns(4)
-            with cols[0]:
-                st.metric("Paired runs", int(len(paired)))
-            with cols[1]:
-                st.metric("Mean Classical PR-AUC", float(paired["classical_pr_auc"].mean()))
-            with cols[2]:
-                st.metric("Mean Quantum PR-AUC", float(paired["quantum_pr_auc"].mean()))
-            with cols[3]:
-                st.metric("Mean Δ (Q - C)", float(paired["delta_pr_auc"].mean()))
+        paired["delta_pr_auc"] = pd.to_numeric(paired[bcol], errors="coerce") - pd.to_numeric(paired["classical_pr_auc"], errors="coerce")
+        paired["baseline"] = baseline_choice
+        paired["execution_bucket"] = (
+            paired.get("execution_mode", "unknown").fillna("unknown").astype(str)
+            + " | " + paired.get("backend_label", "unknown").fillna("unknown").astype(str)
+            + " | " + paired.get("noise_model", "ideal").fillna("ideal").astype(str)
+        )
+        paired["quantum_variant"] = paired.get("obs_kernel_source", pd.Series(["unknown"] * len(paired))).fillna("unknown")
+        
+        st.subheader("Summary")
+        cols = st.columns(4)
+        with cols[0]:
+            st.metric("Paired runs", int(len(paired)))
+        with cols[1]:
+            st.metric("Mean Classical PR-AUC", float(paired["classical_pr_auc"].mean()))
+        with cols[2]:
+            st.metric(f"Mean {baseline_choice} PR-AUC", float(pd.to_numeric(paired[bcol], errors="coerce").mean()))
+        with cols[3]:
+            st.metric("Mean Δ (Q - C)", float(paired["delta_pr_auc"].mean()))
 
-            st.subheader("Statistical rigor (paired)")
-            st.caption("Bootstrap is over paired runs (re-sampling runs with replacement). This quantifies uncertainty in the mean ΔPR-AUC.")
+        st.subheader("Statistical rigor (paired)")
+        st.caption("Bootstrap is over paired runs (re-sampling runs with replacement). This quantifies uncertainty in the mean ΔPR-AUC.")
 
-            rng_seed = st.number_input("Bootstrap seed", min_value=0, max_value=10_000_000, value=42, step=1)
-            n_boot = st.number_input("Bootstrap samples", min_value=200, max_value=20_000, value=2000, step=200)
+        rng_seed = st.number_input("Bootstrap seed", min_value=0, max_value=10_000_000, value=42, step=1)
+        n_boot = st.number_input("Bootstrap samples", min_value=200, max_value=20_000, value=2000, step=200)
 
-            deltas = paired["delta_pr_auc"].dropna().values.astype(float)
-            win_rate = float(np.mean(deltas > 0.0)) if len(deltas) else float("nan")
-            median_delta = float(np.median(deltas)) if len(deltas) else float("nan")
+        deltas = paired["delta_pr_auc"].dropna().values.astype(float)
+        win_rate = float(np.mean(deltas > 0.0)) if len(deltas) else float("nan")
+        median_delta = float(np.median(deltas)) if len(deltas) else float("nan")
 
-            # Cohen's d (paired, using delta std)
-            d_std = float(np.std(deltas, ddof=1)) if len(deltas) > 1 else float("nan")
-            cohens_d = float(np.mean(deltas) / d_std) if d_std and not np.isnan(d_std) and d_std > 0 else float("nan")
+        # Cohen's d (paired, using delta std)
+        d_std = float(np.std(deltas, ddof=1)) if len(deltas) > 1 else float("nan")
+        cohens_d = float(np.mean(deltas) / d_std) if d_std and not np.isnan(d_std) and d_std > 0 else float("nan")
 
-            # Bootstrap CI for mean delta
-            ci_low = ci_high = p_mean_gt0 = float("nan")
-            try:
-                rng = np.random.default_rng(int(rng_seed))
-                idx = rng.integers(0, len(deltas), size=(int(n_boot), len(deltas)))
-                boot_means = np.mean(deltas[idx], axis=1)
-                ci_low, ci_high = np.quantile(boot_means, [0.025, 0.975]).tolist()
-                p_mean_gt0 = float(np.mean(boot_means > 0.0))
-            except Exception:
-                pass
+        # Bootstrap CI for mean delta
+        ci_low = ci_high = p_mean_gt0 = float("nan")
+        try:
+            rng = np.random.default_rng(int(rng_seed))
+            idx = rng.integers(0, len(deltas), size=(int(n_boot), len(deltas)))
+            boot_means = np.mean(deltas[idx], axis=1)
+            ci_low, ci_high = np.quantile(boot_means, [0.025, 0.975]).tolist()
+            p_mean_gt0 = float(np.mean(boot_means > 0.0))
+        except Exception:
+            pass
 
-            s1, s2, s3, s4 = st.columns(4)
-            with s1:
-                st.metric("Win-rate (Δ>0)", f"{win_rate:.2%}" if not np.isnan(win_rate) else "N/A")
-            with s2:
-                st.metric("Median ΔPR-AUC", f"{median_delta:.4f}" if not np.isnan(median_delta) else "N/A")
-            with s3:
-                st.metric("Mean ΔPR-AUC 95% CI", f"[{ci_low:.4f}, {ci_high:.4f}]" if not np.isnan(ci_low) else "N/A")
-            with s4:
-                st.metric("P(mean Δ>0) (bootstrap)", f"{p_mean_gt0:.2%}" if not np.isnan(p_mean_gt0) else "N/A")
+        s1, s2, s3, s4 = st.columns(4)
+        with s1:
+            st.metric("Win-rate (Δ>0)", f"{win_rate:.2%}" if not np.isnan(win_rate) else "N/A")
+        with s2:
+            st.metric("Median ΔPR-AUC", f"{median_delta:.4f}" if not np.isnan(median_delta) else "N/A")
+        with s3:
+            st.metric("Mean ΔPR-AUC 95% CI", f"[{ci_low:.4f}, {ci_high:.4f}]" if not np.isnan(ci_low) else "N/A")
+        with s4:
+            st.metric("P(mean Δ>0) (bootstrap)", f"{p_mean_gt0:.2%}" if not np.isnan(p_mean_gt0) else "N/A")
 
-            if not np.isnan(cohens_d):
-                st.caption(f"Effect size (Cohen’s d on paired deltas): **{cohens_d:.3f}** (roughly: 0.2 small, 0.5 medium, 0.8 large).")
+        if not np.isnan(cohens_d):
+            st.caption(f"Effect size (Cohen’s d on paired deltas): **{cohens_d:.3f}** (roughly: 0.2 small, 0.5 medium, 0.8 large).")
 
-            st.subheader("Distribution: PR-AUC")
-            fig, ax = plt.subplots(figsize=(10, 3))
-            ax.hist(paired["classical_pr_auc"].values, bins=12, alpha=0.6, label="Classical", color="blue")
-            ax.hist(paired["quantum_pr_auc"].values, bins=12, alpha=0.6, label="Quantum", color="purple")
-            ax.set_xlabel("PR-AUC")
-            ax.set_ylabel("Count")
-            ax.grid(True)
-            ax.legend()
-            st.pyplot(fig)
+        st.subheader("Distribution: PR-AUC")
+        fig, ax = plt.subplots(figsize=(10, 3))
+        ax.hist(paired["classical_pr_auc"].values, bins=12, alpha=0.6, label="Classical", color="blue")
+        ax.hist(pd.to_numeric(paired[bcol], errors="coerce").values, bins=12, alpha=0.6, label=baseline_choice, color="purple")
+        ax.set_xlabel("PR-AUC")
+        ax.set_ylabel("Count")
+        ax.grid(True)
+        ax.legend()
+        st.pyplot(fig)
 
-            st.subheader("Distribution: Δ PR-AUC (Quantum - Classical)")
-            fig2, ax2 = plt.subplots(figsize=(10, 3))
-            ax2.hist(paired["delta_pr_auc"].values, bins=16, color="gray")
-            ax2.axvline(0, color="black", linewidth=1)
-            ax2.set_xlabel("Δ PR-AUC")
-            ax2.set_ylabel("Count")
-            ax2.grid(True)
-            st.pyplot(fig2)
+        st.subheader(f"Distribution: Δ PR-AUC ({baseline_choice} - Classical)")
+        fig2, ax2 = plt.subplots(figsize=(10, 3))
+        ax2.hist(paired["delta_pr_auc"].values, bins=16, color="gray")
+        ax2.axvline(0, color="black", linewidth=1)
+        ax2.set_xlabel("Δ PR-AUC")
+        ax2.set_ylabel("Count")
+        ax2.grid(True)
+        st.pyplot(fig2)
 
+        if baseline_choice == "Quantum":
             st.subheader("By quantum kernel variant (full vs Nyström)")
             grp = (
                 paired.groupby(["quantum_variant"], dropna=False)
@@ -1168,19 +1565,19 @@ elif page == "Comparison (classical vs quantum)":
                 )
                 axc.axhline(0, color="black", linewidth=1)
                 axc.set_xlabel("Kernel eval seconds (total)")
-                axc.set_ylabel("Δ PR-AUC (Q - C)")
+                axc.set_ylabel("Δ PR-AUC (Quantum - Classical)")
                 axc.set_title("Benefit vs cost")
                 axc.grid(True)
                 st.pyplot(figc)
 
-            st.subheader("Drilldown table (paired runs)")
-            show_cols = [c for c in [
-                "run_timestamp_utc", "execution_mode", "backend_label", "noise_model",
-                "execution_shots", "obs_kernel_eval_seconds_total",
-                "obs_kernel_source", "obs_nystrom_m",
-                "classical_pr_auc", "quantum_pr_auc", "delta_pr_auc",
-            ] if c in paired.columns]
-            st.dataframe(paired[show_cols].tail(200), width="stretch")
+        st.subheader("Drilldown table (paired runs)")
+        show_cols = [c for c in [
+            "run_timestamp_utc", "execution_mode", "backend_label", "noise_model",
+            "classical_pr_auc", bcol, "delta_pr_auc",
+            "obs_kernel_source", "obs_nystrom_m",
+            "execution_shots", "obs_kernel_eval_seconds_total",
+        ] if c in paired.columns]
+        st.dataframe(paired[show_cols].tail(200), width="stretch")
 
 # ==============================
 # PAGE: KG SUMMARY
@@ -1195,6 +1592,118 @@ elif page == "Knowledge graph (inventory)":
         return load_hetionet_edges()
 
     df_edges = _load_edges()
+
+    @st.cache_data(show_spinner=False)
+    def _load_node_metadata():
+        try:
+            from kg_layer.node_metadata import load_node_metadata_csv
+            return load_node_metadata_csv(NODE_METADATA_CSV)
+        except Exception:
+            return {}
+
+    node_meta = _load_node_metadata()
+    st.subheader("Node metadata (optional)")
+    if node_meta:
+        st.success(f"Loaded node metadata for {len(node_meta)} nodes from `{NODE_METADATA_CSV}`.")
+    else:
+        st.info(
+            "No node metadata file found. To generate a stub (IDs + resolver links), run:\n"
+            "`python3 scripts/build_node_metadata_stub.py --max_nodes 200000`.\n"
+            "Then optionally fill the `name` column for the nodes you care about."
+        )
+
+    st.subheader("Entity identifiers (how to read node IDs)")
+    st.markdown("""
+Hetionet nodes are stored as **typed identifiers** of the form:
+
+- `NodeType::Identifier`
+
+These identifiers reference standard biomedical vocabularies. This dashboard does not ship full node-name metadata, so for compounds/diseases you typically resolve the identifier in its source registry (e.g., DrugBank, Disease Ontology).
+""")
+
+    id_guide = pd.DataFrame(
+        [
+            {
+                "node_type": "Compound",
+                "id_format": "Compound::DB####",
+                "namespace": "DrugBank ID",
+                "notes": "Drug/compound records; `DB...` identifiers are DrugBank.",
+            },
+            {
+                "node_type": "Disease",
+                "id_format": "Disease::DOID:####",
+                "namespace": "Disease Ontology (DOID)",
+                "notes": "Disease concepts; DOID is open and resolvable.",
+            },
+            {
+                "node_type": "Gene",
+                "id_format": "Gene::####",
+                "namespace": "Entrez Gene ID",
+                "notes": "Genes referenced by numeric Entrez Gene identifiers.",
+            },
+            {
+                "node_type": "Anatomy",
+                "id_format": "Anatomy::UBERON:#######",
+                "namespace": "UBERON",
+                "notes": "Anatomical structures.",
+            },
+            {
+                "node_type": "Biological Process",
+                "id_format": "Biological Process::GO:#######",
+                "namespace": "Gene Ontology (GO)",
+                "notes": "GO biological process terms.",
+            },
+            {
+                "node_type": "Molecular Function",
+                "id_format": "Molecular Function::GO:#######",
+                "namespace": "Gene Ontology (GO)",
+                "notes": "GO molecular function terms.",
+            },
+            {
+                "node_type": "Cellular Component",
+                "id_format": "Cellular Component::GO:#######",
+                "namespace": "Gene Ontology (GO)",
+                "notes": "GO cellular component terms.",
+            },
+            {
+                "node_type": "Pathway",
+                "id_format": "Pathway::PC7_#### or Pathway::WP###_r#####",
+                "namespace": "Pathway Commons / WikiPathways identifiers (as used by Hetionet)",
+                "notes": "Pathway concepts; prefixes reflect the source used by Hetionet.",
+            },
+            {
+                "node_type": "Side Effect",
+                "id_format": "Side Effect::C#######",
+                "namespace": "UMLS CUI",
+                "notes": "Side effects are UMLS CUIs (`C...`).",
+            },
+            {
+                "node_type": "Symptom",
+                "id_format": "Symptom::D######",
+                "namespace": "MeSH Descriptor ID",
+                "notes": "Symptoms are MeSH descriptor IDs (`D...`).",
+            },
+            {
+                "node_type": "Pharmacologic Class",
+                "id_format": "Pharmacologic Class::N##########",
+                "namespace": "NDF-RT (NUI-style identifiers, as used by Hetionet)",
+                "notes": "Pharmacologic classes using NDF-RT-style identifiers (`N...`).",
+            },
+        ]
+    )
+    st.dataframe(id_guide, width="stretch")
+
+    st.subheader("Relations (metaedges)")
+    st.markdown("Hetionet edges are `source  metaedge  target`, where `metaedge` is a short code (e.g., `CtD`).")
+    try:
+        from kg_layer.kg_loader import METAEDGES
+        rel_guide = pd.DataFrame(
+            [{"metaedge": k, "meaning": v} for k, v in sorted(METAEDGES.items(), key=lambda kv: kv[0])]
+        )
+        st.dataframe(rel_guide, width="stretch")
+    except Exception:
+        st.info("Metaedge dictionary unavailable.")
+
     st.metric("Total edges", int(len(df_edges)))
     st.metric("Relation types (metaedge)", int(df_edges["metaedge"].nunique()))
     st.metric("Unique nodes (string IDs)", int(pd.concat([df_edges["source"], df_edges["target"]]).nunique()))
@@ -1234,7 +1743,16 @@ elif page == "Knowledge graph (inventory)":
     )
 
     st.subheader("Sample edges")
-    st.dataframe(df_edges.sample(n=min(50, len(df_edges)), random_state=42), width="stretch")
+    sample_edges = df_edges.sample(n=min(50, len(df_edges)), random_state=42).copy()
+    if node_meta:
+        def _name_for(nid: str):
+            m = node_meta.get(str(nid))
+            return m.name if m and m.name else None
+        sample_edges["source_name"] = sample_edges["source"].map(_name_for)
+        sample_edges["target_name"] = sample_edges["target"].map(_name_for)
+        sample_edges["source_url"] = sample_edges["source"].map(lambda nid: getattr(node_meta.get(str(nid)), "external_url", None))
+        sample_edges["target_url"] = sample_edges["target"].map(lambda nid: getattr(node_meta.get(str(nid)), "external_url", None))
+    st.dataframe(sample_edges, width="stretch")
 
 # ==============================
 # PAGE: FINDINGS
@@ -1257,6 +1775,23 @@ elif page == "Findings (ranked hypotheses)":
 
             test = preds[preds["split"] == "test"].dropna(subset=["y_score"]).copy()
 
+            # Optional node name resolution
+            @st.cache_data(show_spinner=False)
+            def _load_node_metadata_for_findings():
+                try:
+                    from kg_layer.node_metadata import load_node_metadata_csv
+                    return load_node_metadata_csv(NODE_METADATA_CSV)
+                except Exception:
+                    return {}
+
+            node_meta = _load_node_metadata_for_findings()
+            if node_meta:
+                def _name_for(nid: str):
+                    m = node_meta.get(str(nid))
+                    return m.name if m and m.name else None
+                test["source_name"] = test["source"].map(_name_for) if "source" in test.columns else None
+                test["target_name"] = test["target"].map(_name_for) if "target" in test.columns else None
+
             # Novelty check vs full Hetionet CtD edges
             @st.cache_data(show_spinner=False)
             def _load_ctd_pairs():
@@ -1275,7 +1810,9 @@ elif page == "Findings (ranked hypotheses)":
             st.subheader("Top predicted novel links (test negatives ranked high)")
             k = st.slider("Top-K", min_value=5, max_value=100, value=25, step=5)
             novel = test[(test["y_true"] == 0) & (~test["exists_in_hetionet_ctd"])].sort_values("y_score", ascending=False).head(int(k))
-            st.dataframe(novel[["source", "target", "y_score", "exists_in_hetionet_ctd"]], width="stretch")
+            cols = ["source", "source_name", "target", "target_name", "y_score", "exists_in_hetionet_ctd"]
+            cols = [c for c in cols if c in novel.columns]
+            st.dataframe(novel[cols], width="stretch")
 
             st.subheader("Generate evidence bundle (neighbors + KG context)")
             st.caption("Creates an exportable CSV with lightweight evidence: nearest neighbors in embedding space and top metaedges involving each node.")
@@ -1371,7 +1908,7 @@ elif page == "Findings (ranked hypotheses)":
 
             st.download_button(
                 "Download top novel links (CSV)",
-                data=novel[["source", "target", "y_score", "exists_in_hetionet_ctd"]].to_csv(index=False).encode("utf-8"),
+                data=novel[cols].to_csv(index=False).encode("utf-8"),
                 file_name="findings_top_novel_links.csv",
                 mime="text/csv",
             )
@@ -1385,32 +1922,400 @@ elif page == "Findings (ranked hypotheses)":
 # ==============================
 elif page == "Run benchmarks":
     st.header("Run benchmarks")
-    st.markdown("Run multiple tests and store results in `results/`.")
-    with st.form("benchmark_form"):
-        relation = st.text_input("Relation", value="CtD")
-        fast_mode = st.checkbox("Fast mode", value=True)
-        quantum_only = st.checkbox("Quantum only", value=True)
-        full_graph = st.checkbox("Full-graph embeddings", value=False)
-        runs = st.number_input("Number of repeats", min_value=1, max_value=10, value=1, step=1)
-        submitted = st.form_submit_button("Run Ideal + Noisy")
+    st.markdown("Run preset experiments and store results in `results/`.")
+    node_meta = load_node_metadata()
 
-    if submitted:
+    st.subheader("Recommended runs (toward PR-AUC 0.8–0.9)")
+    st.markdown("""
+- **First, measure the classical ceiling** with more data + CV (this tells you whether the task formulation can reach 0.8–0.9 at all).
+- **Then, compare quantum vs classical** on the same data with repeated seeds (this tells you whether quantum helps beyond variance).
+- If you want higher scores: increase the number of positive CtD edges and use more realistic/harder negatives.
+""")
+
+    preset_defs = {
+        "Cheapest sanity (quantum-only, fast, noisy sim)": {
+            "desc": "Fast end-to-end QSVC run to validate the quantum path; not a final metric.",
+            "base_args": ["--fast_mode", "--quantum_only", "--cheap_mode"],
+            "supports_cv": False,
+            "recommended": True,
+            "configs": ["config/quantum_config_noisy.yaml"],
+            "defaults": {
+                "relation": "CtD",
+                "max_entities": 200,
+                "qubits": [6],
+                "seeds_csv": "42",
+                "run_both": False,
+            },
+            "mode": "quantum_only",
+        },
+        "Recommended sweep (qubits 6/8/12 × seeds, ideal+noisy)": {
+            "desc": "Primary sweep: qubits matrix + seed sweep across ideal+noisy configs (variance-aware comparison).",
+            "base_args": ["--full_graph_embeddings", "--use_cached_embeddings"],
+            "supports_cv": False,
+            "recommended": True,
+            "configs": ["config/quantum_config_ideal.yaml", "config/quantum_config_noisy.yaml"],
+            "defaults": {
+                "relation": "CtD",
+                "max_entities": 0,
+                "qubits": [6, 8, 12],
+                "seeds_csv": "42,123,456",
+                "run_both": True,
+            },
+            "mode": "quantum_and_classical",
+        },
+        "Learning curve (sample positives × seeds, classical-only)": {
+            "desc": "Quickly estimate classical ceiling as positives increase (efficient sampling sweeps).",
+            "base_args": ["--classical_only", "--full_graph_embeddings", "--use_cached_embeddings"],
+            "supports_cv": False,
+            "recommended": True,
+            "configs": ["config/quantum_config_ideal.yaml"],
+            "pos_edge_samples": [100, 200, 400, 700],
+            "defaults": {
+                "relation": "CtD",
+                "max_entities": 0,
+                "qubits": [12],
+                "seeds_csv": "42,123,456",
+                "run_both": False,
+            },
+            "mode": "classical_only",
+        },
+        "Classical ceiling (CV, bigger data, full-graph)": {
+            "desc": "Best estimate of achievable PR-AUC before tuning quantum. Uses CV for stability.",
+            "base_args": ["--classical_only", "--full_graph_embeddings", "--use_cached_embeddings", "--use_cv_evaluation", "--cv_folds", "5", "--negative_sampling", "hard", "--neg_ratio", "2.0", "--use_evidence_weighting", "--min_shared_genes", "1"],
+            "supports_cv": True,
+            "recommended": True,
+            "configs": ["config/quantum_config_ideal.yaml"],
+            "defaults": {
+                "relation": "CtD",
+                "max_entities": 0,
+                "qubits": [12],
+                "seeds_csv": "42,123,456",
+                "run_both": False,
+            },
+            "mode": "classical_only",
+        },
+        "Quantum vs classical (same data, repeated seeds)": {
+            "desc": "Compare QSVC vs classical on the same dataset. Run multiple seeds to quantify variance.",
+            "base_args": ["--full_graph_embeddings", "--use_cached_embeddings", "--negative_sampling", "hard", "--neg_ratio", "2.0"],
+            "supports_cv": False,
+            "recommended": True,
+            "configs": ["config/quantum_config_ideal.yaml", "config/quantum_config_noisy.yaml"],
+            "defaults": {
+                "relation": "CtD",
+                "max_entities": 0,
+                "qubits": [12],
+                "seeds_csv": "42,123,456",
+                "run_both": True,
+            },
+            "mode": "quantum_and_classical",
+        },
+        "Ablation: Nyström vs full kernel (small m vs none)": {
+            "desc": "Compare faster Nyström kernel approximation vs full kernel on the same seed.",
+            "base_args": ["--full_graph_embeddings"],
+            "supports_cv": False,
+            "recommended": False,
+            "configs": ["config/quantum_config_noisy.yaml"],
+            "defaults": {
+                "relation": "CtD",
+                "max_entities": 0,
+                "qubits": [6],
+                "seeds_csv": "42,123",
+                "run_both": False,
+            },
+            "mode": "quantum_and_classical",
+        },
+    }
+
+    # ---- preset selection (auto-fills defaults) ----
+    preset_keys = list(preset_defs.keys())
+    if "bench_selected_preset" not in st.session_state:
+        st.session_state["bench_selected_preset"] = preset_keys[0]
+
+    top_left, top_right = st.columns([2, 1])
+    with top_left:
+        preset_name = st.selectbox("Preset", preset_keys, index=preset_keys.index(st.session_state["bench_selected_preset"]), key="bench_preset_select")
+        st.session_state["bench_selected_preset"] = preset_name
+    base = preset_defs[preset_name]
+    defaults = base.get("defaults", {}) or {}
+    mode = str(base.get("mode", "quantum_and_classical"))
+
+    # Ensure all expected session_state keys exist (important on first-load or after code updates).
+    # This must happen BEFORE widgets access st.session_state[...] values.
+    def _ensure(k: str, v):
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+    _ensure("bench_last_preset", None)
+    _ensure("bench_relation", defaults.get("relation", "CtD"))
+    _ensure("bench_max_entities", int(defaults.get("max_entities", 0)))
+    _ensure("bench_qubits", defaults.get("qubits", [12]))
+    _ensure("bench_seeds_csv", defaults.get("seeds_csv", "42,123,456"))
+    _ensure("bench_run_both", bool(defaults.get("run_both", True)))
+    _ensure("bench_opt_nystrom", "(preset default)")
+    _ensure("bench_opt_pos_sample", "(no sampling)")
+    _ensure("bench_opt_neg_sampling", "(preset default)")
+    _ensure("bench_opt_neg_ratio", "(preset default)")
+    _ensure("bench_opt_calibrate", False)
+    _ensure("bench_extra_flags", "")
+
+    # Apply defaults BEFORE widgets are created (only when preset changes)
+    if st.session_state.get("bench_last_preset") != preset_name:
+        st.session_state["bench_last_preset"] = preset_name
+        st.session_state["bench_relation"] = defaults.get("relation", "CtD")
+        st.session_state["bench_max_entities"] = int(defaults.get("max_entities", 0))
+        st.session_state["bench_qubits"] = defaults.get("qubits", [12])
+        st.session_state["bench_seeds_csv"] = defaults.get("seeds_csv", "42,123,456")
+        st.session_state["bench_run_both"] = bool(defaults.get("run_both", True))
+        # sensible dropdown defaults
+        st.session_state["bench_opt_nystrom"] = "(preset default)"
+        st.session_state["bench_opt_pos_sample"] = "(no sampling)"
+        st.session_state["bench_opt_neg_sampling"] = "(preset default)"
+        st.session_state["bench_opt_neg_ratio"] = "(preset default)"
+        st.session_state["bench_opt_calibrate"] = False
+        st.session_state["bench_extra_flags"] = ""
+
+    with top_right:
+        st.caption("Preset summary")
+        st.write(base.get("desc", ""))
+        st.caption("Included flags (fixed by preset)")
+        st.code(" ".join(base.get("base_args", [])) or "(none)")
+
+    st.divider()
+
+    # ---- layout: tabs ----
+    tab_data, tab_models, tab_exec, tab_adv = st.tabs(["Dataset", "Models", "Execution", "Advanced"])
+
+    with tab_data:
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            relation = st.text_input("Relation", value=st.session_state["bench_relation"], key="bench_relation")
+        with c2:
+            max_entities = st.number_input("Max entities (0 = all)", min_value=0, max_value=20000, value=int(st.session_state["bench_max_entities"]), step=500, key="bench_max_entities")
+            st.caption("For CtD, 0 uses all CtD edges/entities; higher caps are mainly for other relations.")
+        with c3:
+            # Only enable manual sampling if preset isn't already sweeping samples
+            has_internal_sweep = isinstance(base.get("pos_edge_samples"), list) and len(base.get("pos_edge_samples")) > 0
+            opt_pos_sample = st.selectbox(
+                "Quick run: sample positive edges",
+                options=["(no sampling)", "200", "400", "700"],
+                index=["(no sampling)", "200", "400", "700"].index(st.session_state["bench_opt_pos_sample"]),
+                disabled=has_internal_sweep,
+                key="bench_opt_pos_sample",
+            )
+            if has_internal_sweep:
+                st.info("This preset already runs an internal sampling sweep; the manual sampling control is disabled.")
+
+    with tab_models:
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            qubits = st.multiselect(
+                "Qubits to run",
+                options=[6, 8, 12],
+                default=st.session_state["bench_qubits"],
+                disabled=(mode == "classical_only"),
+                key="bench_qubits",
+            )
+            if mode == "classical_only":
+                st.caption("Classical-only preset: qubits are ignored.")
+        with c2:
+            opt_nystrom = st.selectbox(
+                "QSVC Nyström landmarks (m)",
+                options=["(preset default)", "off (full kernel)", "m=24", "m=32", "m=64"],
+                index=["(preset default)", "off (full kernel)", "m=24", "m=32", "m=64"].index(st.session_state["bench_opt_nystrom"]),
+                disabled=("Nyström vs full kernel" in preset_name),
+                key="bench_opt_nystrom",
+            )
+            if "Nyström vs full kernel" in preset_name:
+                st.caption("This preset toggles Nyström vs full internally; the dropdown is disabled.")
+        with c3:
+            opt_neg_sampling = st.selectbox(
+                "Negative sampling",
+                options=["(preset default)", "random", "hard", "diverse"],
+                index=["(preset default)", "random", "hard", "diverse"].index(st.session_state["bench_opt_neg_sampling"]),
+                key="bench_opt_neg_sampling",
+            )
+            opt_neg_ratio = st.selectbox(
+                "Negatives per positive (neg_ratio)",
+                options=["(preset default)", "1.0", "2.0", "5.0"],
+                index=["(preset default)", "1.0", "2.0", "5.0"].index(st.session_state["bench_opt_neg_ratio"]),
+                key="bench_opt_neg_ratio",
+            )
+            opt_calibrate = st.checkbox("Calibrate probabilities (classical)", value=bool(st.session_state["bench_opt_calibrate"]), key="bench_opt_calibrate")
+
+    with tab_exec:
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            seeds_csv = st.text_input("Seeds (comma-separated)", value=st.session_state["bench_seeds_csv"], key="bench_seeds_csv")
+        with c2:
+            run_both_ideal_noisy = st.checkbox(
+                "Run both ideal + noisy (if supported)",
+                value=bool(st.session_state["bench_run_both"]),
+                disabled=(mode == "classical_only"),
+                key="bench_run_both",
+            )
+            if mode == "classical_only":
+                st.caption("Classical-only preset: ideal/noisy toggle is ignored.")
+
+    with tab_adv:
+        with st.expander("Advanced (custom CLI flags)"):
+            extra_flags = st.text_input("Custom CLI flags", value=st.session_state["bench_extra_flags"], key="bench_extra_flags")
+            st.caption("Example: `--enable_pykeen_direct --pykeen_model RotatE --enable_gnn_baseline --gnn_arch graphsage`")
+
+    # ---- build run plan + preview ----
+    errors = []
+    try:
+        seeds = [int(s.strip()) for s in str(seeds_csv).split(",") if s.strip()]
+        if not seeds:
+            raise ValueError("No seeds provided")
+    except Exception:
+        seeds = []
+        errors.append("Seeds must be a comma-separated list of integers (e.g., 42,123,456).")
+
+    cfgs = list(base.get("configs", []))
+    if mode != "classical_only" and not run_both_ideal_noisy:
+        cfgs = cfgs[:1]
+    if mode == "classical_only":
+        cfgs = cfgs[:1]
+
+    # Optional: learning-curve sampling sweep (positive edge samples)
+    pos_edge_samples = base.get("pos_edge_samples")
+    pos_list = [0]
+    if isinstance(pos_edge_samples, list) and len(pos_edge_samples) > 0:
+        try:
+            pos_list = [int(x) for x in pos_edge_samples if int(x) > 0]
+        except Exception:
+            pos_list = [0]
+    else:
+        # manual sampling
+        if opt_pos_sample != "(no sampling)":
+            try:
+                pos_list = [int(opt_pos_sample)]
+            except Exception:
+                errors.append("Sample positives must be numeric (200/400/700).")
+
+    # Nyström variants for ablation preset
+    nystrom_variants = [{"label": "default", "args": []}]
+    if "Nyström vs full kernel" in preset_name:
+        nystrom_variants = [
+            {"label": "full", "args": ["--qsvc_nystrom_m", "0"]},
+            {"label": "nystrom", "args": ["--qsvc_nystrom_m", "32"]},
+        ]
+
+    # dropdown → flags
+    dropdown_flags: list[str] = []
+    if mode != "classical_only":
+        if opt_nystrom == "off (full kernel)":
+            dropdown_flags += ["--qsvc_nystrom_m", "0"]
+        elif opt_nystrom == "m=24":
+            dropdown_flags += ["--qsvc_nystrom_m", "24"]
+        elif opt_nystrom == "m=32":
+            dropdown_flags += ["--qsvc_nystrom_m", "32"]
+        elif opt_nystrom == "m=64":
+            dropdown_flags += ["--qsvc_nystrom_m", "64"]
+
+    if opt_neg_sampling != "(preset default)":
+        dropdown_flags += ["--negative_sampling", str(opt_neg_sampling)]
+    if opt_neg_ratio != "(preset default)":
+        dropdown_flags += ["--neg_ratio", str(opt_neg_ratio)]
+    if opt_calibrate:
+        dropdown_flags += ["--calibrate_probabilities"]
+
+    extra = [t for t in (extra_flags or "").strip().split() if t.strip()]
+
+    q_list = list(qubits) if (mode != "classical_only") else [12]
+    if not q_list:
+        errors.append("Select at least one qubit setting.")
+
+    total_runs = len(q_list) * len(seeds) * len(cfgs) * len(pos_list) * len(nystrom_variants)
+    st.subheader("Run plan")
+    if errors:
+        st.error(" / ".join(errors))
+        st.stop()
+    st.caption(f"Planned runs: {total_runs}")
+
+    # show a compact preview table
+    preview_rows = []
+    for q in q_list[:3]:
+        for seed in seeds[:3]:
+            for cfg in cfgs[:2]:
+                for pos_n in pos_list[:2]:
+                    for v in nystrom_variants[:2]:
+                        preview_rows.append(
+                            {"qubits": q, "seed": seed, "config": cfg, "pos_edges": pos_n if pos_n else "", "variant": v["label"]}
+                        )
+    st.dataframe(pd.DataFrame(preview_rows), width="stretch")
+
+    # command preview (first few)
+    def _cmds_preview(limit: int = 5) -> list[list[str]]:
+        out = []
+        for q in q_list:
+            for seed in seeds:
+                for cfg in cfgs:
+                    for pos_n in pos_list:
+                        for v in nystrom_variants:
+                            cmd = [
+                                sys.executable,
+                                "scripts/run_optimized_pipeline.py",
+                                "--relation", str(relation),
+                                "--qml_dim", str(int(q)),
+                                "--random_state", str(int(seed)),
+                                "--quantum_config_path", str(cfg),
+                            ]
+                            if int(max_entities) > 0:
+                                cmd += ["--max_entities", str(int(max_entities))]
+                            if pos_n and int(pos_n) > 0:
+                                cmd += ["--pos_edge_sample", str(int(pos_n)), "--pos_edge_sample_strategy", "uniform"]
+                            cmd += base.get("base_args", [])
+                            cmd += dropdown_flags
+                            cmd += v["args"]
+                            cmd += extra
+                            out.append(cmd)
+                            if len(out) >= limit:
+                                return out
+        return out
+
+    with st.expander("Command preview (first 5)"):
+        lines = []
+        for cmd in _cmds_preview(5):
+            try:
+                lines.append(shlex.join(cmd))
+            except Exception:
+                lines.append(" ".join(cmd))
+        st.code("\n".join(lines) if lines else "(no commands)")
+
+    # ---- run ----
+    if st.button("Run planned benchmarks", type="primary"):
         log_container = st.empty()
-        base_args = []
-        if fast_mode:
-            base_args.append("--fast_mode")
-        if quantum_only:
-            base_args.append("--quantum_only")
-        if full_graph:
-            base_args.append("--full_graph_embeddings")
+        run_idx = 0
+        for q in q_list:
+            for seed in seeds:
+                for cfg in cfgs:
+                    for pos_n in pos_list:
+                        for v in nystrom_variants:
+                            run_idx += 1
+                            suffix = f", pos_edges={pos_n}" if pos_n and int(pos_n) > 0 else ""
+                            st.write(f"Run {run_idx}/{total_runs} — qubits={q}, seed={seed}, config={cfg}{suffix}")
+                            cmd = [
+                                sys.executable,
+                                "scripts/run_optimized_pipeline.py",
+                                "--relation", str(relation),
+                                "--qml_dim", str(int(q)),
+                                "--random_state", str(int(seed)),
+                                "--quantum_config_path", str(cfg),
+                            ]
+                            if int(max_entities) > 0:
+                                cmd += ["--max_entities", str(int(max_entities))]
+                            if pos_n and int(pos_n) > 0:
+                                cmd += ["--pos_edge_sample", str(int(pos_n)), "--pos_edge_sample_strategy", "uniform"]
+                            cmd += base.get("base_args", [])
+                            cmd += dropdown_flags
+                            cmd += v["args"]
+                            cmd += extra
+                            run_command(cmd, log_container)
 
-        for i in range(int(runs)):
-            st.write(f"Run {i + 1}/{runs}")
-            cmd = ["bash", "scripts/benchmark_ideal_noisy.sh", relation, "results"] + base_args
-            run_command(cmd, log_container)
         st.cache_data.clear()
         st.cache_resource.clear()
-        st.success("Finished running benchmarks. Refresh the overview or history tabs.")
+        st.success("Finished running benchmarks. Check Results / Experiments / Comparison tabs.")
 
 # ==============================
 # PAGE 5: BACKEND STATUS

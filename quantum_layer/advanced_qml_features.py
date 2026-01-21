@@ -13,7 +13,8 @@ import logging
 from typing import Optional, Literal, Tuple, List, Any
 import numpy as np
 from sklearn.decomposition import PCA, KernelPCA
-from sklearn.feature_selection import mutual_info_classif, SelectKBest
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.feature_selection import mutual_info_classif, SelectKBest, f_classif, VarianceThreshold
 from sklearn.preprocessing import normalize, MinMaxScaler
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,10 @@ class QuantumFeatureEngineer:
         num_qubits: int = 5,
         encoding_strategy: EncodingStrategy = 'hybrid',
         feature_selection_method: Optional[str] = 'mutual_info',
+        feature_select_k: Optional[int] = None,
+        feature_select_k_mult: float = 4.0,
+        pre_pca_dim: Optional[int] = None,
+        reduction_method: str = "pca",
         use_kernel_pca: bool = False,
         random_state: int = 42
     ):
@@ -43,23 +48,35 @@ class QuantumFeatureEngineer:
         Args:
             num_qubits: Number of qubits (determines feature dimensionality)
             encoding_strategy: Quantum encoding strategy
-            feature_selection_method: Method for feature selection ('mutual_info', 'variance', None)
-            use_kernel_pca: Use kernel PCA for non-linear reduction
+            feature_selection_method: Method for feature selection ('mutual_info', 'f_classif', 'variance', None)
+            feature_select_k: Explicit number of features to select (overrides multiplier)
+            feature_select_k_mult: Multiplier for default k (num_qubits * mult)
+            pre_pca_dim: Optional intermediate PCA dimension before final reduction
+            reduction_method: Dimensionality reduction ('pca', 'kpca', 'lda')
+            use_kernel_pca: Use kernel PCA for non-linear reduction (deprecated by reduction_method)
             random_state: Random seed
         """
         self.num_qubits = num_qubits
         self.encoding_strategy = encoding_strategy
         self.feature_selection_method = feature_selection_method
+        self.feature_select_k = feature_select_k
+        self.feature_select_k_mult = feature_select_k_mult
+        self.pre_pca_dim = pre_pca_dim
+        self.reduction_method = reduction_method
         self.use_kernel_pca = use_kernel_pca
         self.random_state = random_state
 
         # Fitted components
         self.pca: Optional[PCA] = None
+        self.pre_pca: Optional[PCA] = None
         self.kpca: Optional[KernelPCA] = None
+        self.lda: Optional[LinearDiscriminantAnalysis] = None
         self.feature_selector: Optional[SelectKBest] = None
+        self.variance_selector: Optional[VarianceThreshold] = None
         self.feature_scaler: Optional[Any] = None  # StandardScaler for feature hygiene
         self.scaler: Optional[MinMaxScaler] = None
         self.actual_encoding_strategy: Optional[str] = None  # Store the actual strategy used (may differ from requested)
+        self._reduced_dim: Optional[int] = None
 
     def fit_reduction(
         self,
@@ -109,16 +126,32 @@ class QuantumFeatureEngineer:
         embeddings = self.feature_scaler.fit_transform(embeddings)
         logger.info(f"Standardized features: {embeddings.shape}")
 
-        # Step 1: Feature selection (if supervised)
-        if self.feature_selection_method == 'mutual_info' and labels is not None:
-            # Select top features by mutual information
-            k = min(embeddings.shape[1], self.num_qubits * 4)  # Select 4x target features
-            self.feature_selector = SelectKBest(score_func=mutual_info_classif, k=k)
-            embeddings = self.feature_selector.fit_transform(embeddings, labels)
-            logger.info(f"Feature selection: {embeddings.shape[1]} features selected")
+        # Step 1: Optional pre-PCA (keeps more components before final reduction)
+        if self.pre_pca_dim is not None and int(self.pre_pca_dim) > 0 and embeddings.shape[1] > int(self.pre_pca_dim):
+            n_pre = min(int(self.pre_pca_dim), embeddings.shape[0], embeddings.shape[1])
+            self.pre_pca = PCA(n_components=n_pre, random_state=self.random_state)
+            embeddings = self.pre_pca.fit_transform(embeddings)
+            logger.info(f"Pre-PCA fitted: {embeddings.shape[1]} -> {n_pre}D")
 
-        # Step 2: Dimensionality reduction
-        if self.use_kernel_pca:
+        # Step 2: Feature selection (if supervised)
+        if self.feature_selection_method == 'variance':
+            self.variance_selector = VarianceThreshold(threshold=1e-6)
+            embeddings = self.variance_selector.fit_transform(embeddings)
+            logger.info(f"Variance selection: {embeddings.shape[1]} features retained")
+        elif self.feature_selection_method in ('mutual_info', 'f_classif') and labels is not None:
+            # Select top features by supervised score
+            if self.feature_select_k is not None and int(self.feature_select_k) > 0:
+                k = int(self.feature_select_k)
+            else:
+                k = int(min(embeddings.shape[1], max(1, int(self.num_qubits * float(self.feature_select_k_mult)))))
+            score_fn = mutual_info_classif if self.feature_selection_method == 'mutual_info' else f_classif
+            self.feature_selector = SelectKBest(score_func=score_fn, k=k)
+            embeddings = self.feature_selector.fit_transform(embeddings, labels)
+            logger.info(f"Feature selection ({self.feature_selection_method}): {embeddings.shape[1]} features selected")
+
+        # Step 3: Dimensionality reduction
+        reduction = (self.reduction_method or "pca").lower().strip()
+        if reduction == "kpca" or self.use_kernel_pca:
             # Non-linear reduction with RBF kernel
             self.kpca = KernelPCA(
                 n_components=self.num_qubits,
@@ -129,18 +162,29 @@ class QuantumFeatureEngineer:
             )
             self.kpca.fit(embeddings)
             reduced = self.kpca.transform(embeddings)
-            logger.info(f"Kernel PCA fitted: {embeddings.shape[1]} -> {self.num_qubits}D")
+            self._reduced_dim = int(reduced.shape[1])
+            logger.info(f"Kernel PCA fitted: {embeddings.shape[1]} -> {self._reduced_dim}D")
+        elif reduction == "lda" and labels is not None:
+            # Supervised reduction (max class separation)
+            n_classes = len(np.unique(labels))
+            n_components = min(self.num_qubits, max(1, n_classes - 1))
+            self.lda = LinearDiscriminantAnalysis(n_components=n_components)
+            self.lda.fit(embeddings, labels)
+            reduced = self.lda.transform(embeddings)
+            self._reduced_dim = int(reduced.shape[1])
+            logger.info(f"LDA fitted: {embeddings.shape[1]} -> {self._reduced_dim}D (classes={n_classes})")
         else:
             # Linear PCA (faster)
             n_components = min(self.num_qubits, embeddings.shape[0], embeddings.shape[1])
             self.pca = PCA(n_components=n_components, random_state=self.random_state)
             self.pca.fit(embeddings)
             reduced = self.pca.transform(embeddings)
+            self._reduced_dim = int(reduced.shape[1])
             explained_var = np.sum(self.pca.explained_variance_ratio_)
-            logger.info(f"PCA fitted: {embeddings.shape[1]} -> {n_components}D "
+            logger.info(f"PCA fitted: {embeddings.shape[1]} -> {self._reduced_dim}D "
                        f"(explained variance: {explained_var:.2%})")
 
-        # Step 3: Fit scaler for quantum range [-1, 1] or [0, 1]
+        # Step 4: Fit scaler for quantum range [-1, 1] or [0, 1]
         self.scaler = MinMaxScaler(feature_range=(-1, 1))
         self.scaler.fit(reduced)
 
@@ -158,13 +202,21 @@ class QuantumFeatureEngineer:
         if self.feature_scaler is not None:
             embeddings = self.feature_scaler.transform(embeddings)
 
+        # Apply optional pre-PCA
+        if self.pre_pca is not None:
+            embeddings = self.pre_pca.transform(embeddings)
+
         # Apply feature selection
+        if self.variance_selector is not None:
+            embeddings = self.variance_selector.transform(embeddings)
         if self.feature_selector is not None:
             embeddings = self.feature_selector.transform(embeddings)
 
         # Apply dimensionality reduction
         if self.kpca is not None:
             reduced = self.kpca.transform(embeddings)
+        elif self.lda is not None:
+            reduced = self.lda.transform(embeddings)
         elif self.pca is not None:
             reduced = self.pca.transform(embeddings)
         else:
@@ -182,6 +234,9 @@ class QuantumFeatureEngineer:
         else:
             # Fallback: normalize to [-1, 1]
             reduced = 2 * (reduced - reduced.min(axis=0)) / (reduced.max(axis=0) - reduced.min(axis=0) + 1e-9) - 1
+        # If reduction produced fewer dims than num_qubits (e.g., LDA), pad to target size
+        if reduced.shape[1] < self.num_qubits:
+            reduced = np.pad(reduced, ((0, 0), (0, self.num_qubits - reduced.shape[1])), mode="constant")
 
         return reduced.astype(np.float32)
 

@@ -1386,6 +1386,10 @@ elif page == "Findings (ranked hypotheses)":
 elif page == "Run benchmarks":
     st.header("Run benchmarks")
     st.markdown("Run multiple tests and store results in `results/`.")
+    st.caption(
+        "On Hugging Face Spaces, runs may hit time or memory limits. "
+        "You can run benchmarks locally and upload results below."
+    )
     with st.form("benchmark_form"):
         relation = st.text_input("Relation", value="CtD")
         fast_mode = st.checkbox("Fast mode", value=True)
@@ -1396,21 +1400,40 @@ elif page == "Run benchmarks":
 
     if submitted:
         log_container = st.empty()
-        base_args = []
+        base_args = ["--relation", relation, "--results_dir", "results"]
         if fast_mode:
             base_args.append("--fast_mode")
         if quantum_only:
             base_args.append("--quantum_only")
         if full_graph:
             base_args.append("--full_graph_embeddings")
+        python_exe = sys.executable
+        script = PROJECT_ROOT / "scripts" / "run_optimized_pipeline.py"
 
-        for i in range(int(runs)):
-            st.write(f"Run {i + 1}/{runs}")
-            cmd = ["bash", "scripts/benchmark_ideal_noisy.sh", relation, "results"] + base_args
-            run_command(cmd, log_container)
+        for run_idx in range(int(runs)):
+            st.write(f"Run {run_idx + 1}/{runs}")
+            # Ideal
+            cmd_ideal = [python_exe, str(script), "--quantum_config_path", "config/quantum_config_ideal.yaml"] + base_args
+            log_container.code("Running IDEAL simulator...")
+            run_command(cmd_ideal, log_container)
+            # Noisy
+            cmd_noisy = [python_exe, str(script), "--quantum_config_path", "config/quantum_config_noisy.yaml"] + base_args
+            log_container.code("Running NOISY simulator...")
+            run_command(cmd_noisy, log_container)
         st.cache_data.clear()
         st.cache_resource.clear()
         st.success("Finished running benchmarks. Refresh the overview or history tabs.")
+
+    st.subheader("Upload results from a local run")
+    st.markdown("If you ran benchmarks locally, upload `latest_run.csv` or `experiment_history.csv` to view them here.")
+    uploaded = st.file_uploader("CSV file", type=["csv"], key="benchmark_upload")
+    if uploaded is not None:
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        out_path = RESULTS_DIR / uploaded.name
+        out_path.write_bytes(uploaded.getvalue())
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.success(f"Saved to `{out_path}`. Refresh the Overview or Results tab.")
 
 # ==============================
 # PAGE 5: BACKEND STATUS

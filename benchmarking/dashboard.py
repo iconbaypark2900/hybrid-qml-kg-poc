@@ -222,23 +222,24 @@ def scan_hetionet_context(entity: str, max_matches: int = 30) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 def run_command(cmd: list, log_container):
+    """Run a command; return (returncode, output_text)."""
     try:
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            cwd=PROJECT_ROOT
+            cwd=str(PROJECT_ROOT),
         )
         output = []
         for line in proc.stdout:
             output.append(line)
             log_container.code("".join(output[-200:]))
         proc.wait()
-        return proc.returncode
+        return proc.returncode, "".join(output)
     except Exception as e:
         log_container.error(f"Failed to run command: {e}")
-        return 1
+        return 1, str(e)
 
 # Sidebar: Navigation
 st.sidebar.title("Navigation")
@@ -1409,20 +1410,67 @@ elif page == "Run benchmarks":
             base_args.append("--full_graph_embeddings")
         python_exe = sys.executable
         script = PROJECT_ROOT / "scripts" / "run_optimized_pipeline.py"
+        any_failed = False
+        last_output = ""
 
         for run_idx in range(int(runs)):
             st.write(f"Run {run_idx + 1}/{runs}")
             # Ideal
             cmd_ideal = [python_exe, str(script), "--quantum_config_path", "config/quantum_config_ideal.yaml"] + base_args
             log_container.code("Running IDEAL simulator...")
-            run_command(cmd_ideal, log_container)
+            rc_ideal, out_ideal = run_command(cmd_ideal, log_container)
+            if rc_ideal != 0:
+                any_failed = True
+                last_output = out_ideal
             # Noisy
             cmd_noisy = [python_exe, str(script), "--quantum_config_path", "config/quantum_config_noisy.yaml"] + base_args
             log_container.code("Running NOISY simulator...")
-            run_command(cmd_noisy, log_container)
+            rc_noisy, out_noisy = run_command(cmd_noisy, log_container)
+            if rc_noisy != 0:
+                any_failed = True
+                last_output = out_noisy
+
         st.cache_data.clear()
         st.cache_resource.clear()
-        st.success("Finished running benchmarks. Refresh the overview or history tabs.")
+        if any_failed:
+            st.error("Benchmark run failed (e.g. missing dependencies like pykeen in this environment). Run benchmarks locally and upload results below, or use **Generate demo results**.")
+            if last_output:
+                with st.expander("Last run output"):
+                    st.code(last_output[-3000:])
+        else:
+            st.success("Finished running benchmarks. Refresh the overview or history tabs.")
+
+    st.subheader("Generate demo results")
+    st.markdown("Create minimal result files so Overview and Results tabs show sample data (no pipeline run).")
+    if st.button("Generate demo results", key="gen_demo_results"):
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        # latest_run.csv – one row, required columns for dashboard
+        latest = pd.DataFrame([{
+            "classical_pr_auc": 0.58,
+            "quantum_pr_auc": 0.62,
+            "classical_accuracy": 0.72,
+            "quantum_accuracy": 0.74,
+            "classical_num_parameters": 49,
+            "quantum_num_parameters": 24,
+            "execution_mode": "simulator",
+            "noise_model": "ideal",
+            "backend_label": "ideal_sim",
+            "qml_model_type": "QSVC",
+            "qml_num_qubits": 12,
+            "qml_feature_map_type": "ZZFeatureMap",
+            "qml_relation": "CtD",
+        }])
+        latest.to_csv(LATEST_RUN, index=False)
+        # experiment_history.csv – a few rows for history/compare
+        history = pd.DataFrame([
+            {"execution_mode": "simulator", "noise_model": "ideal", "backend_label": "ideal_sim", "classical_pr_auc": 0.58, "quantum_pr_auc": 0.62, "classical_accuracy": 0.72, "quantum_accuracy": 0.74, "classical_num_parameters": 49, "quantum_num_parameters": 24},
+            {"execution_mode": "simulator", "noise_model": "noise", "backend_label": "noisy_sim", "classical_pr_auc": 0.58, "quantum_pr_auc": 0.55, "classical_accuracy": 0.72, "quantum_accuracy": 0.68, "classical_num_parameters": 49, "quantum_num_parameters": 24},
+        ])
+        history.to_csv(HISTORY_FILE, index=False)
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.success("Demo results written to results/. Refreshing...")
+        st.rerun()
 
     st.subheader("Upload results from a local run")
     st.markdown("If you ran benchmarks locally, upload `latest_run.csv` or `experiment_history.csv` to view them here.")

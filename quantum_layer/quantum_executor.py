@@ -13,10 +13,16 @@ except ImportError:
     BaseSampler = None  # type: ignore[misc, assignment]
 from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
-from qiskit_ibm_runtime import (
-    QiskitRuntimeService, Sampler as RuntimeSampler, 
-    Session, Options
-)
+try:
+    from qiskit_ibm_runtime import (
+        QiskitRuntimeService, Sampler as RuntimeSampler,
+        Session, Options
+    )
+except ImportError:
+    QiskitRuntimeService = None  # type: ignore[misc, assignment]
+    RuntimeSampler = None  # type: ignore[misc, assignment]
+    Session = None  # type: ignore[misc, assignment]
+    Options = None  # type: ignore[misc, assignment]
 from qiskit.transpiler import PassManager
 from qiskit.transpiler.passes import DynamicalDecoupling
 from qiskit.circuit.library import XGate
@@ -67,6 +73,12 @@ class QuantumExecutor:
     def _initialize_service(self):
         """Initialize IBM Quantum Runtime service if needed."""
         if self.execution_mode == "heron" or self.execution_mode == "auto":
+            if QiskitRuntimeService is None:
+                logger.warning("⚠️  qiskit_ibm_runtime not installed. Heron mode unavailable.")
+                if self.execution_mode == "heron":
+                    logger.info("🔄 Falling back to simulator mode")
+                    self.execution_mode = "simulator"
+                return
             try:
                 token = self.config['quantum']['ibm_quantum']['token']
                 instance = self.config['quantum']['ibm_quantum'].get('instance')
@@ -192,8 +204,13 @@ class QuantumExecutor:
             from qiskit_aer.primitives import Sampler
             return Sampler(), "simulator"
 
-    def _get_heron_sampler(self) -> Tuple[RuntimeSampler, str]:
+    def _get_heron_sampler(self) -> Tuple[Any, str]:
         """Get IBM Heron/Torino sampler with error mitigation."""
+        if RuntimeSampler is None or Session is None or Options is None:
+            raise RuntimeError(
+                "qiskit_ibm_runtime is required for Heron mode. "
+                "Install with: pip install qiskit_ibm_runtime"
+            )
         if not self.service:
             raise RuntimeError("IBM Quantum service not available")
         

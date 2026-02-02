@@ -1391,6 +1391,32 @@ elif page == "Run benchmarks":
         "On Hugging Face Spaces, runs may hit time or memory limits. "
         "You can run benchmarks locally and upload results below."
     )
+
+    # Environment check: show whether pipeline deps are available
+    st.subheader("Environment check")
+    def _check(name: str, fn) -> bool:
+        try:
+            fn()
+            return True
+        except Exception:
+            return False
+    has_torch = _check("torch", lambda: __import__("torch"))
+    has_pykeen = _check("pykeen", lambda: __import__("pykeen"))
+    has_qiskit_alg = _check("qiskit_algorithms", lambda: __import__("qiskit_algorithms"))
+    pipeline_ready = has_torch and has_pykeen and has_qiskit_alg
+    st.caption(
+        f"torch: {'✓' if has_torch else '✗'}  |  "
+        f"pykeen: {'✓' if has_pykeen else '✗'}  |  "
+        f"qiskit_algorithms: {'✓' if has_qiskit_alg else '✗'}"
+    )
+    if not pipeline_ready:
+        st.warning(
+            "Some pipeline dependencies are missing. Use **Generate demo results** or upload results from a local run. "
+            "If you expected the full pipeline here, check that the Space finished rebuilding with the full requirements (can take 15–25 min)."
+        )
+    else:
+        st.success("Pipeline dependencies are available. You can run benchmarks below.")
+
     with st.form("benchmark_form"):
         relation = st.text_input("Relation", value="CtD")
         fast_mode = st.checkbox("Fast mode", value=True)
@@ -1433,10 +1459,13 @@ elif page == "Run benchmarks":
         st.cache_data.clear()
         st.cache_resource.clear()
         if any_failed:
-            st.error("Benchmark run failed (e.g. missing dependencies like pykeen in this environment). Run benchmarks locally and upload results below, or use **Generate demo results**.")
+            st.error(
+                "Benchmark run failed. Expand **Last run output** below to see the exact error. "
+                "If dependencies are missing, use **Generate demo results** or upload results from a local run."
+            )
             if last_output:
-                with st.expander("Last run output"):
-                    st.code(last_output[-3000:])
+                with st.expander("Last run output", expanded=True):
+                    st.code(last_output[-4000:])
         else:
             st.success("Finished running benchmarks. Refresh the overview or history tabs.")
 

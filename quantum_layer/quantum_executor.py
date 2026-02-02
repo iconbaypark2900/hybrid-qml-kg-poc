@@ -7,7 +7,10 @@ import time
 from typing import Optional, Tuple, Dict, Any
 from pathlib import Path
 from qiskit import QuantumCircuit
-from qiskit.primitives import BaseSampler
+try:
+    from qiskit.primitives import BaseSampler
+except ImportError:
+    BaseSampler = None  # type: ignore[misc, assignment]
 from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
 from qiskit_ibm_runtime import (
@@ -176,14 +179,18 @@ class QuantumExecutor:
             from qiskit.primitives import StatevectorSampler
             return StatevectorSampler(), "simulator_statevector"
         except Exception:
-            # Fallback to Aer SamplerV2 (ideal, shot-based) if statevector isn't available.
-            try:
-                from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
-                return AerSamplerV2(default_shots=shots), "simulator"
-            except Exception:
-                # Last resort: keep the old primitive (may not work with qiskit-machine-learning)
-                from qiskit.primitives import Sampler
-                return Sampler(), "simulator"
+            pass
+        try:
+            from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
+            return AerSamplerV2(default_shots=shots), "simulator"
+        except Exception:
+            pass
+        try:
+            from qiskit.primitives import Sampler
+            return Sampler(), "simulator"
+        except Exception:
+            from qiskit_aer.primitives import Sampler
+            return Sampler(), "simulator"
 
     def _get_heron_sampler(self) -> Tuple[RuntimeSampler, str]:
         """Get IBM Heron/Torino sampler with error mitigation."""

@@ -23,7 +23,10 @@ import numpy as np
 
 # Core Qiskit imports (tested with qiskit~=1.2, qiskit-ml~=0.8.4, qiskit-algorithms~=0.3)
 from qiskit.circuit.library import RealAmplitudes, EfficientSU2, ZZFeatureMap, ZFeatureMap
-from qiskit.primitives import Sampler
+try:
+    from qiskit.primitives import Sampler
+except ImportError:
+    from qiskit_aer.primitives import Sampler  # Aer Sampler when qiskit.primitives.Sampler removed
 from qiskit_algorithms.optimizers import COBYLA, SPSA
 from qiskit_machine_learning.algorithms import VQC, QSVC
 from qiskit_machine_learning.kernels import FidelityQuantumKernel, FidelityStatevectorKernel

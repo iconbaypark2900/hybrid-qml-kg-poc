@@ -24,7 +24,10 @@ except ImportError:
     Session = None  # type: ignore[misc, assignment]
     Options = None  # type: ignore[misc, assignment]
 from qiskit.transpiler import PassManager
-from qiskit.transpiler.passes import DynamicalDecoupling
+try:
+    from qiskit.transpiler.passes import DynamicalDecoupling
+except ImportError:
+    DynamicalDecoupling = None  # type: ignore[misc, assignment]
 from qiskit.circuit.library import XGate
 import yaml
 from dotenv import load_dotenv
@@ -305,12 +308,12 @@ class QuantumExecutor:
         
         optimized = circuit.copy()
         
-        # Add dynamical decoupling for Heron
-        if (self.execution_mode == "heron" and 
+        # Add dynamical decoupling for Heron (when pass is available)
+        if (DynamicalDecoupling is not None and self.execution_mode == "heron" and
             self.config['quantum']['heron']['use_dynamical_decoupling']):
             try:
                 backend = self.service.backend(self.config['quantum']['heron']['backend']) if self.service else None
-                if backend:
+                if backend and getattr(backend, "target", None) is not None and getattr(backend.target, "dt", None) is not None:
                     dd_pass = DynamicalDecoupling(backend.target.dt, [XGate()])
                     pm = PassManager([dd_pass])
                     optimized = pm.run(optimized)

@@ -1663,7 +1663,7 @@ elif page == "5. Experiments (history)":
                 ]
                 if diag_cols:
                     st.caption("Latest mitigation diagnostics: readout_mitigation_* = calibration settings; obs_zne_* = zero-noise extrapolation (scales, fit error, base noise).")
-                    st.dataframe(filtered[diag_cols].tail(1).T, width="stretch")
+                    st.dataframe(filtered[diag_cols].tail(1).T, use_container_width=True)
         
         # Parameter count over experiments
         st.subheader("Model complexity over time (parameter count)")
@@ -1904,7 +1904,7 @@ elif page == "6. Comparison (classical vs quantum)":
                 grp["mean_kernel_seconds"] = float("nan")
             if "mean_shots" not in grp.columns:
                 grp["mean_shots"] = float("nan")
-            st.dataframe(grp, width="stretch")
+            st.dataframe(grp, use_container_width=True)
 
             st.subheader("Cost-aware recommendation")
             st.caption("Uses a simple score: mean ΔPR-AUC minus a cost penalty (runtime + shots). Tune the penalty to match your budget. When kernel/shots columns are missing (e.g. demo data), cost is based on mean Δ only.")
@@ -1920,7 +1920,7 @@ elif page == "6. Comparison (classical vs quantum)":
             g2 = g2.sort_values("cost_score", ascending=False)
 
             disp_cols = [c for c in ["quantum_variant", "n", "mean_delta", "mean_kernel_seconds", "mean_shots", "cost_score"] if c in g2.columns]
-            st.dataframe(g2[disp_cols], width="stretch")
+            st.dataframe(g2[disp_cols], use_container_width=True)
             best = g2.iloc[0]
             sec_val = best.get("mean_kernel_seconds", float("nan"))
             shots_val = best.get("mean_shots", float("nan"))
@@ -1956,7 +1956,7 @@ elif page == "6. Comparison (classical vs quantum)":
                 "obs_kernel_source", "obs_nystrom_m",
                 "classical_pr_auc", "quantum_pr_auc", "delta_pr_auc",
             ] if c in paired.columns]
-            st.dataframe(paired[show_cols].tail(200), width="stretch")
+            st.dataframe(paired[show_cols].tail(200), use_container_width=True)
 
 # ==============================
 # PAGE: KG SUMMARY
@@ -2005,13 +2005,13 @@ elif page == "8. Knowledge graph (inventory)":
         node_types.columns = ["node_type", "count"]
         st.subheader("Node types")
         st.caption("Entity type (prefix before ::), e.g. Compound, Disease, Gene. Count = how many times that type appears as source or target.")
-        st.dataframe(node_types, width="stretch")
+        st.dataframe(node_types, use_container_width=True)
 
         rel_counts = df_edges["metaedge"].value_counts().reset_index()
         rel_counts.columns = ["metaedge", "count"]
         st.subheader("Top relations")
         st.caption("Most frequent relation types (metaedges). CtD = Compound–treats–Disease; others (e.g. DaG, GiG) describe different link types.")
-        st.dataframe(rel_counts.head(20), width="stretch")
+        st.dataframe(rel_counts.head(20), use_container_width=True)
 
         fig, ax = plt.subplots(figsize=(10, 3))
         topk = rel_counts.head(20).iloc[::-1]
@@ -2033,7 +2033,7 @@ elif page == "8. Knowledge graph (inventory)":
 
         st.subheader("Sample edges")
         st.caption("Random sample of (source, target, metaedge) triples. Source/target are entity IDs (e.g. Compound::DB00123, Disease::DOID_1234).")
-        st.dataframe(df_edges.sample(n=min(50, len(df_edges)), random_state=42), width="stretch")
+        st.dataframe(df_edges.sample(n=min(50, len(df_edges)), random_state=42), use_container_width=True)
 
 # ==============================
 # PAGE: FINDINGS
@@ -2093,7 +2093,7 @@ elif page == "7. Findings (ranked hypotheses)":
             )
             k = st.slider("Top-K", min_value=5, max_value=100, value=25, step=5, help="Number of top novel (high-scoring, not-in-Hetionet) links to show in the table.")
             novel = test[(test["y_true"] == 0) & (~test["exists_in_hetionet_ctd"])].sort_values("y_score", ascending=False).head(int(k))
-            st.dataframe(novel[["source", "target", "y_score", "exists_in_hetionet_ctd"]], width="stretch")
+            st.dataframe(novel[["source", "target", "y_score", "exists_in_hetionet_ctd"]], use_container_width=True)
 
             st.subheader("Generate evidence bundle (neighbors + KG context)")
             st.caption(
@@ -2184,7 +2184,7 @@ elif page == "7. Findings (ranked hypotheses)":
             if st.button("Build evidence bundle (CSV)"):
                 try:
                     bundle = _evidence_bundle(novel)
-                    st.dataframe(bundle, width="stretch")
+                    st.dataframe(bundle, use_container_width=True)
                     st.download_button(
                         "Download evidence bundle (CSV)",
                         data=bundle.to_csv(index=False).encode("utf-8"),
@@ -2204,7 +2204,7 @@ elif page == "7. Findings (ranked hypotheses)":
             st.subheader("Sanity check: top-scoring true positives (test)")
             st.caption("Known CtD links (y_true=1) that the model also scored high. Confirms the model ranks real treatments well before trusting novel predictions.")
             top_tp = test[test["y_true"] == 1].sort_values("y_score", ascending=False).head(int(k))
-            st.dataframe(top_tp[["source", "target", "y_score", "exists_in_hetionet_ctd"]], width="stretch")
+            st.dataframe(top_tp[["source", "target", "y_score", "exists_in_hetionet_ctd"]], use_container_width=True)
 
 # ==============================
 # PAGE 4: RUN BENCHMARKS
@@ -2598,12 +2598,12 @@ elif page == "9. Hardware readiness (backend status)":
                     dfb_display = dfb[dfb["backend"].astype(str) == backend_hint]
                     if not dfb_display.empty:
                         st.success(f"`{backend_hint}` is accessible.")
-                        st.dataframe(dfb_display, width="stretch")
+                        st.dataframe(dfb_display, use_container_width=True)
                     else:
                         st.warning(f"`{backend_hint}` not found in your accessible backends list.")
-                        st.dataframe(dfb, width="stretch")
+                        st.dataframe(dfb, use_container_width=True)
                 else:
-                    st.dataframe(dfb, width="stretch")
+                    st.dataframe(dfb, use_container_width=True)
         except Exception as e:
             safe_msg = _redact_token_from_message(str(e), token)
             st.error(f"Backend status check failed: {safe_msg}")

@@ -581,20 +581,21 @@ st.sidebar.title("Navigation")
 with st.sidebar.expander("How this dashboard works"):
     st.markdown("**Recommended workflow**")
     st.markdown("""
-1. **1. Overview** — Read what the project does (link prediction on Hetionet). No buttons.
-2. **2. Run benchmarks** — Get data: run the pipeline, **Generate demo results**, or **Upload** CSV. Toggle **Classical only** / **Quantum only** if you want a subset. Then click **Run** (or **Run ideal then noisy**).
-3. **3. Results** — View the latest run: full model ranking table and **Metrics by model** for every model. Use **Refresh full model ranking** to reload; use **Refresh data** (below) so charts and numbers update after a new run.
-4. **4. Live prediction** — Pick **Classical** or **Quantum kernel similarity**; enter compound and disease; optionally check **Use config from latest run**. Click **Score this pair** or **Rank candidates**.
-5. **5. Experiments** — Browse history: set **Max rows**, **Hide quantum=0** if needed; use **Download filtered history (CSV)** to export.
-6. **6. Comparison** — Classical vs quantum across runs: adjust **Bootstrap seed** / **Bootstrap samples** and sliders under **Cost-aware recommendation**.
-7. **7. Findings** — Inspect top predicted links and **Generate evidence bundle**.
-8. **8–10** — Knowledge graph inventory, Hardware status, Run your code (advanced).
+- **Overview** — Read what the project does (link prediction on Hetionet). No buttons.
+- **Run benchmarks** — Get data: **Generate demo results**, **Upload** CSV, or run the pipeline. Toggle **Classical only** / **Quantum only** if you want a subset; then click **Run** (or **Run ideal then noisy**).  
+  → After you click **Generate demo results**, the page will refresh automatically—then go to **Results** to see the full model ranking and metrics.
+- **Results** — View the latest run: full model ranking table and **Metrics by model** for every model. Use **Refresh full model ranking** to reload the table; use **Refresh data** (below) so charts and numbers update after a new run.
+- **Live prediction** — Pick **Classical** or **Quantum kernel similarity**; enter compound and disease; optionally check **Use config from latest run**. Click **Score this pair** or **Rank candidates**.
+- **Experiments** — Browse history: set **Max rows**, **Hide quantum=0** if needed; use **Download filtered history (CSV)** to export.
+- **Comparison** — Classical vs quantum across runs: adjust **Bootstrap seed** / **Bootstrap samples** and sliders under **Cost-aware recommendation**.
+- **Findings** — Inspect top predicted links and **Generate evidence bundle**.
+- **Knowledge graph, Hardware, Run your code** — Inventory, backend status, and advanced run.
 """)
     st.markdown("**Buttons and toggles**")
     st.markdown("""
 - **Refresh data** (sidebar, below): Clears cache and reloads all results/charts. Use after running a benchmark or uploading so Overview and Results show the latest numbers.
 - **Refresh full model ranking** (Results tab): Reloads the all-models table from `optimized_results_*.json`.
-- **Run benchmarks**: **Generate demo results** = instant sample data; **Upload** = use your own `latest_run.csv` / `experiment_history.csv`. **Run** = start pipeline (needs torch, pykeen, qiskit).
+- **Run benchmarks**: **Generate demo results** = instant sample data (then go to **Results**); **Upload** = use your own CSV; **Run** = start pipeline (needs torch, pykeen, qiskit).
 - **Live prediction**: **Use config from latest run** = use qubits/reps/feature map from last benchmark; uncheck to set **Qubits**, **Feature map reps**, **Feature map**, **Entanglement** yourself.
 """)
     st.markdown("**Data**")

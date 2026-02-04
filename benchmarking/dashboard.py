@@ -8,14 +8,28 @@ import os
 import sys
 import logging
 from pathlib import Path
+from typing import Optional
 import json
 import time
 import subprocess
+import tempfile
 import joblib
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _redact_token_from_message(message: str, token: Optional[str] = None) -> str:
+    """Remove API tokens from a string so they are never shown in errors or logs."""
+    import re
+    out = message
+    if token and len(token) > 8:
+        out = out.replace(token, "[REDACTED]")
+    # Redact any long alphanumeric token-like substring (e.g. 40+ chars)
+    out = re.sub(r"[A-Za-z0-9_-]{40,}", "[REDACTED]", out)
+    return out
+
 
 # Page config
 st.set_page_config(
@@ -27,10 +41,80 @@ st.set_page_config(
 # Title and description
 st.title("Hybrid QML-KG Biomedical Link Prediction")
 st.markdown("""
-This dashboard summarizes a hybrid quantum-classical knowledge graph pipeline for
-drug-disease link prediction on **Hetionet**. It highlights what was built,
+This dashboard summarizes a hybrid quantum–classical knowledge graph pipeline for
+drug–disease link prediction on **Hetionet**. It highlights what was built,
 what was tested, and how quantum models compare to classical baselines.
 """)
+
+# ---------- Glossary: layman + technical definitions for explainability ----------
+GLOSSARY = {
+    "link_prediction": (
+        "**In plain terms:** Predicting whether a connection *should* exist between two things (e.g., “Does this drug treat this disease?”). "
+        "**Technical:** A supervised or ranking task over graph edges: given (head, relation, tail), predict link existence or score.",
+    ),
+    "hetionet": (
+        "**In plain terms:** A public “map” of biomedical facts—drugs, diseases, genes, and how they relate (e.g., “treats”, “associates with”). "
+        "**Technical:** Heterogeneous knowledge graph (Hetionet) integrating multiple bio databases; we use the CtD (Compound–treats–Disease) relation.",
+    ),
+    "ctd": (
+        "**Compound–treats–Disease (CtD):** A relation type meaning “this compound is known or predicted to treat this disease.” "
+        "Used here as the target for link prediction and drug-repurposing style ranking.",
+    ),
+    "embedding": (
+        "**In plain terms:** A list of numbers that represents an entity (e.g., a drug or disease) so a computer can compare and learn from it. "
+        "**Technical:** Dense vector representation (e.g., from ComplEx/RotatE) in a continuous space; used as input to classical and quantum models.",
+    ),
+    "pr_auc": (
+        "**In plain terms:** How good the model is at ranking positive links above negative ones, especially when positives are rare. Higher is better (max 1.0). "
+        "**Technical:** Area under the Precision–Recall curve; preferred over ROC-AUC for imbalanced binary classification.",
+    ),
+    "accuracy": (
+        "**In plain terms:** Fraction of predictions that are correct (right label). "
+        "**Technical:** (TP + TN) / (TP + TN + FP + FN); can be misleading when classes are imbalanced.",
+    ),
+    "qubit": (
+        "**In plain terms:** The basic unit of quantum information (like a “quantum bit”). More qubits = larger quantum state space. "
+        "**Technical:** Two-level quantum system; our feature vectors are reduced to `num_qubits` dimensions for the quantum circuit.",
+    ),
+    "qsvc": (
+        "**In plain terms:** A classifier that uses a “quantum similarity” between pairs of inputs instead of a classical kernel. "
+        "**Technical:** Quantum Support Vector Classifier: SVM with a kernel computed by a quantum circuit (e.g., fidelity between feature-map states).",
+    ),
+    "vqc": (
+        "**In plain terms:** A small quantum circuit whose “knobs” are tuned so its output predicts the label. "
+        "**Technical:** Variational Quantum Classifier: parameterized circuit + classical optimizer (e.g., SPSA) for binary classification.",
+    ),
+    "ideal_vs_noisy": (
+        "**In plain terms:** “Ideal” = perfect simulation; “noisy” = simulation that mimics real hardware errors. Comparing them shows how robust the model is. "
+        "**Technical:** Ideal backend (statevector or noiseless); noisy backend uses a noise model (e.g., from real device calibration).",
+    ),
+    "feature_map": (
+        "**In plain terms:** The recipe that turns your numbers into a quantum state so the quantum computer can “see” the input. "
+        "**Technical:** Unitary that encodes classical features into qubits (e.g., ZZFeatureMap with a given number of repetitions).",
+    ),
+    "backend": (
+        "**In plain terms:** Where the quantum (or classical) computation runs—e.g., “ideal simulator” vs “noisy simulator” vs real hardware. "
+        "**Technical:** Execution target: statevector simulator, Aer with noise model, or IBM Runtime backend.",
+    ),
+    "parameters": (
+        "**In plain terms:** Number of tunable numbers in the model. Fewer parameters can mean simpler, more scalable models. "
+        "**Technical:** Trainable parameter count (e.g., classical logistic regression weights vs quantum circuit parameters).",
+    ),
+    "kernel_similarity": (
+        "**In plain terms:** A single number saying how “similar” two inputs are in the model’s internal representation. Not a probability. "
+        "**Technical:** Kernel evaluation k(x,y); e.g., statevector fidelity between two feature-map states.",
+    ),
+    "metaedge": (
+        "**In plain terms:** A type of relationship in the graph (e.g., “treats”, “associates with”). "
+        "**Technical:** Edge type in a heterogeneous graph; Hetionet uses abbreviations like CtD, DaG.",
+    ),
+}
+def _expander_for_term(key: str, title: str = None):
+    """Render an expander explaining a glossary term."""
+    if key not in GLOSSARY:
+        return
+    with st.expander(title or f"📖 What is “{key.replace('_', ' ').title()}”?"):
+        st.markdown(GLOSSARY[key])
 
 # Paths
 RESULTS_DIR = Path("results")
@@ -167,19 +251,150 @@ def build_pair_features(reduced_h: np.ndarray, reduced_t: np.ndarray) -> np.ndar
     return np.concatenate([reduced_h, reduced_t, diff, had], axis=0).reshape(1, -1)
 
 @st.cache_resource
-def load_quantum_kernel(qml_dim: int, reps: int = 2):
+def load_quantum_kernel(
+    qml_dim: int,
+    reps: int = 2,
+    feature_map_type: str = "ZZ",
+    entanglement: str = "linear",
+):
     """
     Return a statevector fidelity kernel for fast local 'quantum similarity' scoring.
-    Note: this returns a kernel similarity, not a calibrated probability.
+    feature_map_type: "ZZ" or "Z". entanglement: "linear", "full", or "circular".
     """
     try:
-        from qiskit.circuit.library import ZZFeatureMap
+        from qiskit.circuit.library import ZZFeatureMap, ZFeatureMap
         from qiskit_machine_learning.kernels import FidelityStatevectorKernel
     except Exception as e:
         return None, str(e)
 
-    fm = ZZFeatureMap(feature_dimension=qml_dim, reps=reps, entanglement="linear")
+    fm_type = (feature_map_type or "ZZ").strip().upper()
+    ent = (entanglement or "linear").strip().lower()
+    if fm_type == "Z":
+        fm = ZFeatureMap(feature_dimension=qml_dim, reps=reps)
+    else:
+        fm = ZZFeatureMap(feature_dimension=qml_dim, reps=reps, entanglement=ent)
     return FidelityStatevectorKernel(feature_map=fm), None
+
+
+def _build_feature_map(qml_dim: int, reps: int, feature_map_type: str, entanglement: str):
+    """Build Qiskit feature map circuit (for use with statevector or shot-based kernel)."""
+    from qiskit.circuit.library import ZZFeatureMap, ZFeatureMap
+    fm_type = (feature_map_type or "ZZ").strip().upper()
+    ent = (entanglement or "linear").strip().lower()
+    if fm_type == "Z":
+        return ZFeatureMap(feature_dimension=qml_dim, reps=reps)
+    return ZZFeatureMap(feature_dimension=qml_dim, reps=reps, entanglement=ent)
+
+
+def load_shot_based_kernel(
+    qml_dim: int,
+    reps: int,
+    feature_map_type: str,
+    entanglement: str,
+    config_path: str,
+    shots_override: Optional[int] = None,
+):
+    """
+    Build a shot-based FidelityQuantumKernel using QuantumExecutor and the given config.
+    config_path: path to quantum_config_ideal.yaml or quantum_config_noisy.yaml.
+    shots_override: if set, write a temp config with this shots value and use it.
+    Returns (kernel, error_msg).
+    """
+    try:
+        from qiskit_machine_learning.kernels import FidelityQuantumKernel
+        from qiskit_machine_learning.state_fidelities import ComputeUncompute
+    except Exception as e:
+        return None, str(e)
+    config_file = Path(config_path)
+    if not config_file.is_absolute():
+        config_file = PROJECT_ROOT / config_path
+    if not config_file.exists():
+        return None, f"Config not found: {config_file}"
+    use_path = str(config_file)
+    if shots_override is not None and shots_override > 0:
+        try:
+            import yaml
+            with open(config_file, "r") as f:
+                cfg = yaml.safe_load(f) or {}
+            sim = cfg.get("quantum", {}).get("simulator", {})
+            if isinstance(sim, dict):
+                sim["shots"] = int(shots_override)
+                out_dir = PROJECT_ROOT / "results"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                temp_config = out_dir / ".live_quantum_config_temp.yaml"
+                with open(temp_config, "w") as f:
+                    yaml.dump(cfg, f, default_flow_style=False)
+                use_path = str(temp_config)
+        except Exception as e:
+            logger.warning("Could not override shots in temp config: %s", e)
+    try:
+        from quantum_layer.quantum_executor import QuantumExecutor
+        qe = QuantumExecutor(use_path)
+        sampler, exec_mode = qe.get_sampler()
+        fm = _build_feature_map(qml_dim, reps, feature_map_type, entanglement)
+        fm_exec = fm.decompose(reps=10)
+        qk = FidelityQuantumKernel(feature_map=fm_exec, fidelity=ComputeUncompute(sampler=sampler))
+        return qk, None
+    except Exception as e:
+        return None, str(e)
+
+
+def evaluate_kernel_zne(
+    x1: np.ndarray,
+    x2: np.ndarray,
+    qml_dim: int,
+    reps: int,
+    feature_map_type: str,
+    entanglement: str,
+    base_noise_p: float,
+    shots: int,
+    scales: list = None,
+) -> tuple:
+    """
+    Evaluate k(x1,x2) at multiple noise scales and extrapolate to zero noise (linear ZNE).
+    Returns (raw_value_at_scale_1, mitigated_value, dict with scales and values).
+    """
+    if scales is None:
+        scales = [1.0, 1.5, 2.0]
+    try:
+        from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
+        from qiskit_aer.noise import NoiseModel, depolarizing_error
+        from qiskit_machine_learning.kernels import FidelityQuantumKernel
+        from qiskit_machine_learning.state_fidelities import ComputeUncompute
+    except Exception as e:
+        return float("nan"), float("nan"), {"error": str(e)}
+
+    def _noise_model(p: float):
+        nm = NoiseModel()
+        one_qubit = ["x", "y", "z", "h", "s", "t", "sx", "rz", "rx", "ry"]
+        two_qubit = ["cx", "cz", "swap", "ecr"]
+        nm.add_all_qubit_quantum_error(depolarizing_error(p, 1), one_qubit)
+        nm.add_all_qubit_quantum_error(depolarizing_error(p, 2), two_qubit)
+        return nm
+
+    fm = _build_feature_map(qml_dim, reps, feature_map_type, entanglement)
+    fm_exec = fm.decompose(reps=10)
+    x1 = np.asarray(x1, dtype=np.float64).reshape(1, -1)
+    x2 = np.asarray(x2, dtype=np.float64).reshape(1, -1)
+    values = []
+    for s in scales:
+        p = min(1.0, base_noise_p * s)
+        nm = _noise_model(p)
+        sampler = AerSamplerV2(
+            default_shots=shots,
+            options={"backend_options": {"noise_model": nm}},
+        )
+        qk = FidelityQuantumKernel(feature_map=fm_exec, fidelity=ComputeUncompute(sampler=sampler))
+        val = float(qk.evaluate(x1, x2)[0, 0])
+        values.append(val)
+    S = np.asarray(scales, dtype=float)
+    V = np.asarray(values, dtype=float)
+    A = np.stack([np.ones_like(S), S], axis=1)
+    coef, *_ = np.linalg.lstsq(A, V, rcond=None)
+    mitigated = float(np.clip(coef[0], 0.0, 1.0))
+    raw_at_1 = float(values[0]) if values else float("nan")
+    return raw_at_1, mitigated, {"scales": scales, "values": values, "mitigated": mitigated}
+
 
 def to_quantum_input(x: np.ndarray) -> np.ndarray:
     """Map arbitrary real vectors into a safe bounded range for feature maps."""
@@ -241,8 +456,45 @@ def run_command(cmd: list, log_container):
         log_container.error(f"Failed to run command: {e}")
         return 1, str(e)
 
+
+def run_user_script(script_content: str, timeout_sec: int):
+    """
+    Run user-provided Python code in a subprocess with the project as cwd.
+    Returns (returncode, stdout, stderr). Raises on timeout or spawn failure.
+    """
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".py",
+        prefix="user_script_",
+        delete=False,
+        dir=str(PROJECT_ROOT),
+    ) as f:
+        f.write(script_content)
+        tmp_path = f.name
+    try:
+        result = subprocess.run(
+            [sys.executable, tmp_path],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=max(1, int(timeout_sec)),
+        )
+        return result.returncode, result.stdout, result.stderr
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+
 # Sidebar: Navigation
 st.sidebar.title("Navigation")
+with st.sidebar.expander("📖 Glossary (key terms)"):
+    for term_key in sorted(GLOSSARY.keys()):
+        text = GLOSSARY[term_key]
+        st.markdown(f"**{term_key.replace('_', ' ').title()}**")
+        st.caption(text[:140] + "…" if len(text) > 140 else text)
+        st.markdown("---")
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()
     st.cache_resource.clear()
@@ -260,6 +512,7 @@ page = st.sidebar.radio(
         "Findings (ranked hypotheses)",
         "Run benchmarks",
         "Hardware readiness (backend status)",
+        "Run your code",
     ]
 )
 
@@ -270,13 +523,17 @@ if page == "Overview (scientific summary)":
     st.header("Overview: hybrid link prediction over the Hetionet biomedical knowledge graph")
 
     st.markdown("""
-This project is a **hybrid quantum–classical link prediction pipeline** over the **Hetionet** biomedical knowledge graph.
-It predicts whether a given **Compound** is likely to **treat** a given **Disease** (e.g., the CtD relation).
+This project is a **hybrid quantum–classical link prediction** pipeline over the **Hetionet** biomedical knowledge graph.
+It predicts whether a given **Compound** is likely to **treat** a given **Disease** (the **CtD** relation).
 
 This is a research/prototyping system: it produces **ranking signals** and **benchmarks**, not clinical guidance.
 """)
+    _expander_for_term("link_prediction", "📖 What is link prediction?")
+    _expander_for_term("hetionet", "📖 What is Hetionet?")
+    _expander_for_term("ctd", "📖 What is CtD (Compound–treats–Disease)?")
 
     st.subheader("Problem statement and task definition")
+    st.caption("This defines *what* the pipeline optimizes for: predicting whether a given (compound, disease) pair is a known or plausible CtD link.")
     st.markdown("""
 - **Input**: Hetionet triples (edges) and a target relation (e.g., CtD)
 - **Task**: binary link prediction (edge exists vs not)
@@ -285,11 +542,16 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 
     st.subheader("Representations and model inputs")
     st.markdown("""
-- **Classical**: embeddings + derived pairwise features
-- **Quantum**: reduced quantum-ready vectors sized to number of qubits, used by QSVC/VQC
+- **Classical**: **Embeddings** plus derived pairwise features (concatenation, difference, element-wise product).
+- **Quantum**: Reduced, quantum-ready vectors (size = number of **qubits**), used by **QSVC** / **VQC**.
 """)
+    _expander_for_term("embedding", "📖 What is an embedding?")
+    _expander_for_term("qubit", "📖 What is a qubit?")
+    _expander_for_term("qsvc", "📖 What is QSVC?")
+    _expander_for_term("vqc", "📖 What is VQC?")
 
     st.subheader("Implemented components (end-to-end)")
+    st.caption("Artifacts and scripts that make up the pipeline; all are used by the **Run benchmarks** and **Live prediction** tabs.")
     st.markdown("""
 - Embedding training artifacts in `data/` (multiple embedding families supported)
 - Classical baseline training artifacts in `models/` (model + scaler)
@@ -298,6 +560,15 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 """)
 
     st.subheader("Benchmarking context and current status")
+    with st.expander("📖 What do these fields mean?"):
+        st.markdown("""
+        - **classical_pr_auc / quantum_pr_auc**: Link-prediction quality (higher = better ranking). PR-AUC is preferred for imbalanced data.
+        - **execution_mode**: How the quantum circuit was run (e.g. simulator vs hardware).
+        - **noise_model**: Whether the run used an ideal (noiseless) or noisy simulation.
+        - **backend_label**: The actual backend name (e.g. ideal_sim, noisy_sim, or a device name).
+        - **qml_model_type**: Quantum model used (e.g. QSVC, VQC).
+        - **qml_num_qubits**: Number of qubits used for the feature map; affects capacity and runtime.
+        """)
     if df_latest is None:
         st.warning("No `results/latest_run.csv` found yet. Run a benchmark from “Run Benchmarks”.")
     else:
@@ -313,6 +584,10 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 
     if df_history is not None and len(df_history) > 0:
         st.subheader("Ideal vs noisy snapshot (latest per mode)")
+        st.caption(
+            "One row per (execution_mode, noise_model, backend_label): run_index = experiment row; "
+            "quantum_pr_auc / classical_pr_auc = latest scores for that mode. Use this to compare noiseless vs noisy performance."
+        )
         exec_summary = latest_execution_summary(df_history)
         if not exec_summary.empty:
             st.dataframe(exec_summary)
@@ -325,8 +600,11 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 - **Ideal vs noisy**: shows sensitivity to noise model / backend.
 - **A single score is not evidence**: use the “Evidence” section in Live Prediction.
 """)
+    _expander_for_term("pr_auc", "📖 What is PR-AUC?")
+    _expander_for_term("ideal_vs_noisy", "📖 What does ideal vs noisy mean?")
 
     st.subheader("Limitations and next steps")
+    st.caption("Planned improvements for future work (not current bugs).")
     st.markdown("""
 - Add candidate ranking workflows (“top compounds for a disease”)
 - Add evidence/interpretability (neighbors + KG context)
@@ -338,6 +616,7 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 # ==============================
 elif page == "Results (latest run)":
     st.header("Results: latest run summary")
+    st.caption("This tab summarizes the **most recent** benchmark run and compares classical vs quantum metrics. If you see no data, run a benchmark from the **Run benchmarks** tab (or upload results).")
 
     st.markdown("""
 **What was built**
@@ -354,6 +633,10 @@ elif page == "Results (latest run)":
 """)
 
     st.subheader("Latest run snapshot")
+    st.caption(
+        "**QML Model**: quantum algorithm (QSVC or VQC). **Qubits**: feature-map width. "
+        "**Feature Map**: encoding circuit (e.g. ZZFeatureMap). **Execution**: how the circuit was run (simulator/hardware)."
+    )
     run_cols = st.columns(4)
     qml_model_type = safe_get(df_latest, "qml_model_type", "N/A")
     qml_num_qubits = safe_get(df_latest, "qml_num_qubits", "N/A")
@@ -367,9 +650,16 @@ elif page == "Results (latest run)":
     run_cols[2].metric("Feature Map", qml_feature_map)
     run_cols[3].metric("Execution", exec_mode)
 
-    st.caption(f"Backend: {backend_label} | Noise: {noise_model}")
+    st.caption(f"**Backend:** {backend_label} · **Noise:** {noise_model}. "
+               "Backend = where the quantum circuit runs; noise = whether we simulate real-device errors.")
 
     st.header("Model Performance Comparison")
+    with st.expander("📖 Understanding these metrics"):
+        st.markdown(GLOSSARY["pr_auc"])
+        st.markdown("---")
+        st.markdown(GLOSSARY["accuracy"])
+        st.markdown("---")
+        st.markdown(GLOSSARY["parameters"])
     
     if df_latest is not None:
         # Extract metrics
@@ -423,6 +713,11 @@ elif page == "Results (latest run)":
         
         # Outcome highlights
         st.subheader("Outcome Highlights")
+        st.caption(
+            "**PR-AUC Delta (Q − C)**: how much better (positive) or worse (negative) the quantum model is vs classical. "
+            "**Param Ratio (Q/C)**: quantum vs classical parameter count; under 1 means a more parameter-efficient quantum model. "
+            "**History Runs**: total experiments logged for comparison."
+        )
         if not pd.isna(quantum_pr_auc) and not pd.isna(classical_pr_auc):
             delta_pr = quantum_pr_auc - classical_pr_auc
         else:
@@ -440,6 +735,7 @@ elif page == "Results (latest run)":
             st.caption(f"Quantum runs with PR-AUC > 0: {quantum_nonzero}/{len(df_history)}")
 
         st.subheader("Latest Run Details")
+        st.caption("Exact configuration of the last benchmark: execution environment, quantum model type, qubits, feature map, and target relation (e.g. CtD).")
         st.json({
             "execution_mode": safe_get(df_latest, "execution_mode", "N/A"),
             "noise_model": safe_get(df_latest, "noise_model", "N/A"),
@@ -460,12 +756,14 @@ elif page == "Results (latest run)":
         # Scaling projection
         st.subheader("Algorithmic Scaling Advantage")
         if SCALING_PLOT.exists():
+            st.caption("Theoretical or simulated scaling: how runtime or cost grows as the knowledge graph (or embedding size) increases. Relevant for planning larger deployments.")
             st.image(str(SCALING_PLOT), caption="Projected runtime as KG size increases", use_column_width=True)
         else:
             st.warning("Scaling projection plot not found. Run benchmarking/scalability_sim.py to generate it.")
         
         # Ideal vs noisy summary (if available)
         st.subheader("Ideal vs Noisy Summary")
+        st.caption("Latest score per (execution_mode, noise_model, backend). Compare rows to see how noise affects quantum PR-AUC.")
         exec_summary = latest_execution_summary(df_history)
         if not exec_summary.empty:
             st.dataframe(exec_summary)
@@ -474,6 +772,7 @@ elif page == "Results (latest run)":
 
         # Model configuration
         st.subheader("Quantum Model Configuration")
+        st.caption("All `qml_*` keys from the latest run: model type, qubits, feature map, relation, and any other logged quantum settings. These values are used by **Live prediction** when \"Use config from latest benchmark run\" is checked.")
         qml_config = {}
         for col in df_latest.columns:
             if col.startswith('qml_'):
@@ -483,9 +782,9 @@ elif page == "Results (latest run)":
                 st.text(f"{key}: {value}")
     
     else:
-        st.error("No results found. Please run the training pipeline first.")
+        st.error("No results found. Use the **Run benchmarks** tab to run the pipeline, or **Generate demo results** / **Upload** a CSV from a local run.")
         st.markdown("""
-        To generate results:
+        To generate results from the terminal:
         1. `bash scripts/benchmark_ideal_noisy.sh CtD results --fast_mode --quantum_only`
         2. `python benchmarking/ideal_vs_noisy_compare.py --results_dir results`
         """)
@@ -496,16 +795,22 @@ elif page == "Results (latest run)":
 elif page == "Live prediction (interactive)":
     st.header("Live prediction: interactive scoring and candidate ranking")
     st.markdown("""
-    Enter a compound and disease to see a **link prediction score** from the trained classical model,
-    plus candidate rankings and evidence context.
+    Enter a **compound** (drug) and **disease** to get a **link prediction score**: how likely this pair is to be a “treats” link.
+    You can use the **classical model** (trained logistic regression) or **quantum kernel similarity** (quantum circuit–based similarity, not a probability).
+    Results include **candidate rankings** and **evidence** (nearest neighbors, KG context).
 
     This is a research demo and does **not** provide clinical or synthesis guidance.
     """)
+    _expander_for_term("kernel_similarity", "📖 What is quantum kernel similarity?")
     
     model, scaler, model_path, scaler_path = load_classical_artifacts()
     embeddings, entity_ids, emb_name = load_entity_embeddings()
 
-    st.caption(f"Classical model: `{model_path}` | Scaler: `{scaler_path}` | Embeddings: `{emb_name}`")
+    st.caption(
+        f"Classical model: `{model_path}` | Scaler: `{scaler_path}` | Embeddings: `{emb_name}`. "
+        "**Classical** uses the model from the last benchmark (run with **Run classical**). "
+        "**Quantum** uses the same qubit count and feature map as the last run (run with **Run quantum**)."
+    )
 
     # Initialize/update state from query params BEFORE widgets are instantiated.
     qp_drug = st.query_params.get("drug", "DB00688")
@@ -559,8 +864,93 @@ elif page == "Live prediction (interactive)":
             else:
                 disease_input = st.text_input("Disease", key="disease_input", help="e.g., DOID_0060048 (COVID-19)")
         
-        method = st.selectbox("Scoring Method", ["classical_model", "quantum_kernel_similarity"], index=0)
-        top_k = st.slider("Top-K candidates", min_value=5, max_value=50, value=15, step=5)
+        method = st.selectbox(
+            "Scoring Method",
+            ["classical_model", "quantum_kernel_similarity"],
+            index=0,
+            help="Classical = trained classifier from last benchmark. Quantum = kernel similarity; you can override qubits, feature map, and entanglement below.",
+        )
+        top_k = st.slider("Top-K candidates", min_value=5, max_value=50, value=15, step=5, help="How many top compounds (for this disease) and top diseases (for this compound) to show in the ranking tables after you predict.")
+
+        with st.expander("📋 What do the prediction flags do?"):
+            st.markdown("""
+            | Flag | Effect | When it applies |
+            |------|--------|-----------------|
+            | **Use config from latest run** | Use qubits, reps, and feature map from `results/latest_run.csv` so Live prediction matches the last benchmark. | Always; uncheck to use custom values below. |
+            | **Qubits (feature dimension)** | PCA reduces embeddings to this many dimensions; same dim is used for pair features (and quantum feature map). Classical model expects the dimension it was trained with. | Quantum path uses your override when \"Use latest run\" is unchecked; classical always uses latest-run dim. |
+            | **Feature map reps** | Number of repetition layers in the quantum feature map (more = deeper circuit). | Quantum only. |
+            | **Feature map type** | **ZZ** = two-qubit rotations (entangling); **Z** = single-qubit only. | Quantum only. |
+            | **Entanglement** | Qubit connectivity for ZZ map: **linear**, **full**, or **circular**. | Quantum only (ZZ feature map). |
+            """)
+        st.markdown("**Prediction flags (quantum and feature dimension)**")
+        use_latest_config = st.checkbox(
+            "Use config from latest benchmark run",
+            value=True,
+            help="When checked, qubits and feature map settings come from results/latest_run.csv. When unchecked, use the custom values below.",
+        )
+        # Defaults from latest run for display/fallback
+        _latest_qubits = int(safe_get(df_latest, "qml_num_qubits", 12) or 12) if df_latest is not None else 12
+        _latest_reps = int(safe_get(df_latest, "qml_feature_map_reps", 2) or 2) if df_latest is not None else 2
+        override_qubits = st.number_input(
+            "Qubits (feature dimension)",
+            min_value=2,
+            max_value=20,
+            value=_latest_qubits,
+            step=1,
+            help="Number of qubits = PCA dimension for pair features. Classical model expects the dimension it was trained with (from latest run); override applies to quantum path and to PCA when using quantum.",
+        )
+        override_reps = st.number_input(
+            "Feature map reps",
+            min_value=1,
+            max_value=6,
+            value=_latest_reps,
+            step=1,
+            help="Feature map repetition layers (quantum only). More reps = deeper circuit, richer encoding.",
+        )
+        override_fm_type = st.selectbox(
+            "Feature map type",
+            ["ZZ", "Z"],
+            index=0,
+            help="ZZ = two-qubit rotations (entangling); Z = single-qubit only (quantum only).",
+        )
+        override_entanglement = st.selectbox(
+            "Entanglement",
+            ["linear", "full", "circular"],
+            index=0,
+            help="Qubit connectivity for ZZ feature map: linear, full, or circular (quantum only).",
+        )
+        if use_latest_config:
+            st.caption("Using qubits and reps from latest run. Overrides above apply when you uncheck \"Use config from latest benchmark run\".")
+
+        st.markdown("**Error mitigation (quantum only)**")
+        with st.expander("📋 What is error mitigation?", expanded=False):
+            st.markdown("""
+            - **Statevector**: Noiseless simulation (no shots, no mitigation). Fast; use for quick checks.
+            - **Shot-based (ideal)**: Finite measurement shots, no noise model. Simulates sampling without device errors.
+            - **Shot-based (noisy)**: Simulator with a noise model (e.g. depolarizing). Use **ZNE** to extrapolate to zero noise from several noise levels (slower, more accurate under noise).
+            """)
+        kernel_execution = st.radio(
+            "Kernel execution",
+            ["Statevector (noiseless, fast)", "Shot-based (ideal config)", "Shot-based (noisy config)"],
+            index=0,
+            help="Statevector = exact; Shot-based uses config/quantum_config_ideal.yaml or quantum_config_noisy.yaml and enables mitigation options.",
+        )
+        shots_override = st.number_input(
+            "Shots (shot-based only)",
+            min_value=256,
+            max_value=8192,
+            value=1024,
+            step=256,
+            help="Measurement shots per kernel evaluation when using shot-based execution.",
+        )
+        apply_zne = st.checkbox(
+            "Apply ZNE to main prediction (noisy only)",
+            value=False,
+            help="Evaluate kernel at 3 noise scales and extrapolate to zero noise for the single drug–disease score. Slower; only when Shot-based (noisy) is selected.",
+        )
+        if apply_zne and not kernel_execution.startswith("Shot-based (noisy"):
+            st.caption("ZNE applies only when **Shot-based (noisy config)** is selected.")
+
         submitted = st.form_submit_button("Predict")
 
     # If an example button was clicked, auto-run once without requiring an extra click.
@@ -594,7 +984,25 @@ elif page == "Live prediction (interactive)":
                     st.code("\n".join(suggestions))
                     st.stop()
                 else:
-                    qml_dim = int(safe_get(df_latest, "qml_num_qubits", 12) or 12)
+                    # Resolve flags: classical always uses latest-run dim (model expects it); quantum uses latest or overrides
+                    latest_qubits = int(safe_get(df_latest, "qml_num_qubits", 12) or 12) if df_latest is not None else 12
+                    latest_reps = int(safe_get(df_latest, "qml_feature_map_reps", 2) or 2) if df_latest is not None else 2
+                    if method == "classical_model":
+                        qml_dim = latest_qubits  # model was trained with this dimension
+                        qml_reps = latest_reps
+                        qml_fm_type = "ZZ"
+                        qml_entanglement = "linear"
+                    else:
+                        qml_dim = latest_qubits if use_latest_config else int(override_qubits)
+                        qml_reps = latest_reps if use_latest_config else int(override_reps)
+                        if use_latest_config and df_latest is not None:
+                            _fm = str(safe_get(df_latest, "qml_feature_map_type", "ZZ") or "ZZ").upper()
+                            qml_fm_type = "Z" if _fm == "Z" else "ZZ"
+                            _ent = str(safe_get(df_latest, "qml_entanglement", "linear") or "linear").lower()
+                            qml_entanglement = _ent if _ent in ("linear", "full", "circular") else "linear"
+                        else:
+                            qml_fm_type = override_fm_type
+                            qml_entanglement = override_entanglement
                     pca = fit_pca_reducer(embeddings, qml_dim)
                     reduced_all = pca.transform(embeddings).astype(np.float32)
 
@@ -607,6 +1015,7 @@ elif page == "Live prediction (interactive)":
                         "qml_dim_used_for_features": qml_dim,
                     }
 
+                    qk_for_ranking = None  # set below for quantum path; used in candidate ranking
                     if method == "classical_model":
                         if model is None or scaler is None:
                             st.error("Missing trained classical model/scaler. Run the pipeline to generate `models/*.joblib`.")
@@ -623,23 +1032,101 @@ elif page == "Live prediction (interactive)":
                         })
                         st.json(payload)
                     else:
-                        qk, err = load_quantum_kernel(qml_dim=qml_dim, reps=2)
-                        if qk is None:
-                            st.error(f"Quantum kernel unavailable: {err}")
-                            st.stop()
-                        x1 = to_quantum_input(c_red)
-                        x2 = to_quantum_input(d_red)
-                        sim = float(qk.evaluate(x1.reshape(1, -1), x2.reshape(1, -1))[0, 0])
-                        st.success("Quantum similarity computed (kernel value)")
-                        payload.update({
-                            "score_type": "kernel_similarity",
-                            "quantum_kernel_similarity": round(sim, 6),
-                            "feature_map": "ZZFeatureMap(reps=2, entanglement=linear)",
-                            "note": "Kernel similarity is not a calibrated probability.",
-                        })
-                        st.json(payload)
+                        # Quantum path: statevector vs shot-based, optional ZNE
+                        use_statevector = kernel_execution.startswith("Statevector")
+                        use_shot_noisy = kernel_execution.startswith("Shot-based (noisy")
+                        use_shot_ideal = kernel_execution.startswith("Shot-based (ideal")
+                        x1_q = to_quantum_input(c_red).reshape(1, -1)
+                        x2_q = to_quantum_input(d_red).reshape(1, -1)
+
+                        if use_shot_noisy and apply_zne:
+                            # ZNE for main prediction only: evaluate at 3 scales, extrapolate
+                            base_noise_p = 0.01  # from config depolarizing:0.01
+                            raw_at_1, mitigated, zne_info = evaluate_kernel_zne(
+                                x1_q, x2_q, qml_dim, qml_reps, qml_fm_type, qml_entanglement,
+                                base_noise_p, int(shots_override), scales=[1.0, 1.5, 2.0],
+                            )
+                            sim = mitigated if not np.isnan(mitigated) else raw_at_1
+                            st.success("Quantum similarity computed (ZNE mitigated)")
+                            fm_desc = f"{qml_fm_type}FeatureMap(reps={qml_reps}, entanglement={qml_entanglement})"
+                            payload.update({
+                                "score_type": "kernel_similarity",
+                                "quantum_kernel_similarity": round(sim, 6),
+                                "quantum_kernel_raw": round(raw_at_1, 6),
+                                "zne_mitigated": round(mitigated, 6),
+                                "zne_scales": zne_info.get("scales", []),
+                                "zne_values": zne_info.get("values", []),
+                                "feature_map": fm_desc,
+                                "qml_dim_used": qml_dim,
+                                "qml_reps_used": qml_reps,
+                                "feature_map_type": qml_fm_type,
+                                "entanglement": qml_entanglement,
+                                "execution": "shot_noisy_zne",
+                                "shots": int(shots_override),
+                                "note": "Kernel similarity (ZNE extrapolated to zero noise). Not a calibrated probability.",
+                            })
+                            st.json(payload)
+                            if "values" in zne_info:
+                                st.caption(f"ZNE: raw at scale 1.0 = {raw_at_1:.4f}; at scales {zne_info['scales']} = {[round(v, 4) for v in zne_info['values']]}; mitigated (λ→0) = {mitigated:.4f}.")
+                        else:
+                            # Statevector or shot-based without ZNE for this single eval
+                            if use_statevector:
+                                qk, err = load_quantum_kernel(
+                                    qml_dim=qml_dim, reps=qml_reps,
+                                    feature_map_type=qml_fm_type, entanglement=qml_entanglement,
+                                )
+                            else:
+                                config_path = "config/quantum_config_ideal.yaml" if use_shot_ideal else "config/quantum_config_noisy.yaml"
+                                qk, err = load_shot_based_kernel(
+                                    qml_dim, qml_reps, qml_fm_type, qml_entanglement,
+                                    config_path, shots_override=int(shots_override),
+                                )
+                            if qk is None:
+                                st.error(f"Quantum kernel unavailable: {err}")
+                                st.stop()
+                            sim = float(qk.evaluate(x1_q, x2_q)[0, 0])
+                            st.success("Quantum similarity computed (kernel value)")
+                            fm_desc = f"{qml_fm_type}FeatureMap(reps={qml_reps}, entanglement={qml_entanglement})"
+                            exec_label = "statevector" if use_statevector else ("shot_ideal" if use_shot_ideal else "shot_noisy")
+                            payload.update({
+                                "score_type": "kernel_similarity",
+                                "quantum_kernel_similarity": round(sim, 6),
+                                "feature_map": fm_desc,
+                                "qml_dim_used": qml_dim,
+                                "qml_reps_used": qml_reps,
+                                "feature_map_type": qml_fm_type,
+                                "entanglement": qml_entanglement,
+                                "execution": exec_label,
+                                "shots": int(shots_override) if not use_statevector else None,
+                                "note": "Kernel similarity is not a calibrated probability.",
+                            })
+                            st.json(payload)
+
+                        # Kernel for candidate ranking (same execution as main prediction; no ZNE for ranking)
+                        if method == "quantum_kernel_similarity":
+                            if use_shot_noisy and apply_zne:
+                                qk_for_ranking, _ = load_shot_based_kernel(
+                                    qml_dim, qml_reps, qml_fm_type, qml_entanglement,
+                                    "config/quantum_config_noisy.yaml", shots_override=int(shots_override),
+                                )
+                            elif use_statevector:
+                                qk_for_ranking, _ = load_quantum_kernel(
+                                    qml_dim=qml_dim, reps=qml_reps,
+                                    feature_map_type=qml_fm_type, entanglement=qml_entanglement,
+                                )
+                            else:
+                                cfg = "config/quantum_config_ideal.yaml" if use_shot_ideal else "config/quantum_config_noisy.yaml"
+                                qk_for_ranking, _ = load_shot_based_kernel(
+                                    qml_dim, qml_reps, qml_fm_type, qml_entanglement, cfg, shots_override=int(shots_override),
+                                )
+                        else:
+                            qk_for_ranking = None
 
                     st.subheader("Candidate ranking")
+                    st.caption(
+                        "**Top compounds for this disease**: ranked by the chosen scoring method (probability or kernel similarity). "
+                        "**Top diseases for this compound**: same, in the other direction. Use these for drug-repurposing or prioritization ideas."
+                    )
                     compounds = [(eid, entity_to_idx[eid]) for eid in entity_to_idx.keys() if eid.startswith("Compound::")]
                     diseases = [(eid, entity_to_idx[eid]) for eid in entity_to_idx.keys() if eid.startswith("Disease::")]
 
@@ -661,9 +1148,9 @@ elif page == "Live prediction (interactive)":
                             })
                             st.dataframe(out)
                         else:
-                            qk, err = load_quantum_kernel(qml_dim=qml_dim, reps=2)
+                            qk = qk_for_ranking
                             if qk is None:
-                                st.error(f"Quantum kernel unavailable: {err}")
+                                st.error("Quantum kernel unavailable for ranking.")
                                 st.stop()
                             # prefilter with cosine for speed
                             cand_idx = cosine_topk_indices(hv, d_red, k=min(200, hv.shape[0]))
@@ -697,9 +1184,9 @@ elif page == "Live prediction (interactive)":
                             })
                             st.dataframe(out)
                         else:
-                            qk, err = load_quantum_kernel(qml_dim=qml_dim, reps=2)
+                            qk = qk_for_ranking
                             if qk is None:
-                                st.error(f"Quantum kernel unavailable: {err}")
+                                st.error("Quantum kernel unavailable for ranking.")
                                 st.stop()
                             cand_idx = cosine_topk_indices(tv, c_red, k=min(200, tv.shape[0]))
                             tv_small = tv[cand_idx]
@@ -716,20 +1203,32 @@ elif page == "Live prediction (interactive)":
                             st.dataframe(out)
 
                     st.subheader("Representation: classical embedding vs quantum-ready reduced vector")
+                    st.caption(
+                        "Left: full embedding (first 20 dims shown)—used by classical models. "
+                        "Right: PCA-reduced vector (same dims as qubits)—fed into the quantum feature map and classical pair features."
+                    )
                     col1, col2 = st.columns(2)
                     with col1:
                         st.caption(f"Classical embedding ({emb_name}) – first 20 dims")
                         vec = embeddings[c_idx]
                         fig, ax = plt.subplots(figsize=(6, 3))
                         ax.bar(range(min(20, vec.shape[0])), vec[:min(20, vec.shape[0])])
+                        ax.set_xlabel("Dimension index")
+                        ax.set_ylabel("Embedding value")
                         st.pyplot(fig)
                     with col2:
                         st.caption(f"Reduced (PCA) vector – {qml_dim} dims (used by QML + classical features)")
                         fig2, ax2 = plt.subplots(figsize=(6, 3))
                         ax2.bar(range(qml_dim), c_red[:qml_dim])
+                        ax2.set_xlabel("Dimension index")
+                        ax2.set_ylabel("Reduced (PCA) value")
                         st.pyplot(fig2)
 
                     st.subheader("Evidence")
+                    st.caption(
+                        "**Nearest neighbors**: entities most similar in embedding space (cosine similarity)—helps interpret why the model might link this pair. "
+                        "**KG neighborhood**: real Hetionet edges involving this compound or disease—gives biological context."
+                    )
                     st.markdown("**Embedding nearest neighbors** (same type, cosine similarity)")
                     def top_neighbors(target_idx: int, prefix: str, k: int = 10):
                         vec = embeddings[target_idx]
@@ -767,7 +1266,7 @@ elif page == "Live prediction (interactive)":
     
     # Example predictions
     st.subheader("Example Predictions")
-    # These are examples; availability depends on the sampled embedding set
+    st.caption("Click a button to run a prediction for that drug–disease pair. Buttons only appear when both the compound and disease exist in the loaded embedding set.")
     examples = [
         ("DB00688", "DOID_0060048", "Dexamethasone for COVID-19"),
         ("DB00945", "DOID_9352", "Aspirin for Type 2 Diabetes"),
@@ -807,9 +1306,18 @@ elif page == "Live prediction (interactive)":
 # ==============================
 elif page == "Experiments (history)":
     st.header("Experiments: history of benchmarked runs")
-    
+    st.markdown("""
+    This tab shows **all recorded benchmark runs**: PR-AUC over time, quantum vs classical deltas, kernel observables, and ideal vs noisy comparison.
+    Use **Filters** to narrow by model type, execution mode, or noise; **Performance Trends** and **Δ PR-AUC** show how metrics evolve across runs.
+    """)
+    if df_history is None or len(df_history) == 0:
+        st.info("No experiment history yet. Run benchmarks from the **Run benchmarks** tab (or upload `experiment_history.csv`) to populate this view.")
     if df_history is not None and len(df_history) > 0:
         st.subheader("Filters")
+        st.caption(
+            "**Model Type**: quantum model (e.g. QSVC). **Execution Mode** / **Noise Model**: how and where the circuit ran. "
+            "**Max rows**: limit table/chart length. **Hide quantum=0**: drop runs where quantum PR-AUC was 0."
+        )
         cols = st.columns(5)
         with cols[0]:
             model_options = df_history.get("quantum_model_type", pd.Series(dtype=object)).dropna().unique().tolist()
@@ -837,6 +1345,7 @@ elif page == "Experiments (history)":
         filtered = filtered.tail(int(max_rows))
 
         st.subheader("Artifacts")
+        st.caption("Download the filtered experiment log as CSV for analysis or reporting.")
         st.download_button(
             "Download filtered history (CSV)",
             data=filtered.to_csv(index=False).encode("utf-8"),
@@ -846,7 +1355,7 @@ elif page == "Experiments (history)":
 
         # Metrics over time
         st.subheader("Performance Trends")
-        
+        st.caption("PR-AUC for classical (blue) and quantum (purple) across experiment index. Use this to spot trends or regressions.")
         # PR-AUC over experiments
         fig, ax = plt.subplots(figsize=(10, 4))
         ax.plot(filtered.index, filtered['classical_pr_auc'], 'o-', label='Classical PR-AUC', color='blue')
@@ -859,10 +1368,12 @@ elif page == "Experiments (history)":
         st.pyplot(fig)
 
         st.subheader("Quantum vs Classical PR-AUC Delta")
+        st.caption("Bar chart: positive = quantum beat classical on that run; negative = classical won. Green/red by sign.")
         delta = filtered["quantum_pr_auc"] - filtered["classical_pr_auc"]
         fig3, ax3 = plt.subplots(figsize=(10, 3))
         ax3.bar(filtered.index, delta, color=["green" if v >= 0 else "red" for v in delta])
         ax3.axhline(0, color="black", linewidth=1)
+        ax3.set_xlabel("Experiment #")
         ax3.set_ylabel("Δ PR-AUC (Q - C)")
         st.pyplot(fig3)
 
@@ -870,6 +1381,10 @@ elif page == "Experiments (history)":
         obs_cols = [c for c in filtered.columns if c.startswith("obs_")]
         if obs_cols:
             st.subheader("Quantum kernel observables (fidelity-style)")
+            st.caption(
+                "Diagnostic metrics from the quantum kernel (e.g. kernel gap, posneg mean). "
+                "Useful to see how kernel quality varies across runs or with mitigation."
+            )
             selectable = [c for c in obs_cols if c in filtered.columns]
             metric = st.selectbox("Observable", selectable, index=selectable.index("obs_kernel_gap") if "obs_kernel_gap" in selectable else 0)
             fig_obs, ax_obs = plt.subplots(figsize=(10, 3))
@@ -883,6 +1398,10 @@ elif page == "Experiments (history)":
             # If ZNE is present, show a quick raw vs mitigated comparison for the primary observable.
             if "obs_kernel_posneg_mean" in filtered.columns and "obs_zne_kernel_posneg_mean_C0" in filtered.columns:
                 st.subheader("Mitigation comparison (kernel_posneg_mean)")
+                st.caption(
+                    "Raw vs ZNE (zero-noise extrapolation) and readout-mitigated kernel values. "
+                    "Shows whether error mitigation improves the training kernel signal."
+                )
                 fig_zne, ax_zne = plt.subplots(figsize=(10, 3))
                 ax_zne.plot(filtered.index, filtered["obs_kernel_posneg_mean"], "o-", label="raw kernel (training K)", color="gray")
                 # Optional explicit compute-uncompute estimate at λ=1.0
@@ -918,10 +1437,12 @@ elif page == "Experiments (history)":
                     if c in filtered.columns
                 ]
                 if diag_cols:
-                    st.caption("Latest mitigation diagnostics")
+                    st.caption("Latest mitigation diagnostics: readout_mitigation_* = calibration settings; obs_zne_* = zero-noise extrapolation (scales, fit error, base noise).")
                     st.dataframe(filtered[diag_cols].tail(1).T, width="stretch")
         
         # Parameter count over experiments
+        st.subheader("Model complexity over time (parameter count)")
+        st.caption("Classical vs quantum parameter count per run. Fewer quantum parameters can mean better scalability for larger graphs.")
         fig2, ax2 = plt.subplots(figsize=(10, 4))
         ax2.bar(filtered.index - 0.2, filtered['classical_num_parameters'], 
                 width=0.4, label='Classical Params', color='lightblue')
@@ -938,6 +1459,7 @@ elif page == "Experiments (history)":
         comparison_cols = {"execution_mode", "noise_model", "backend_label"}
         if comparison_cols.issubset(df_history.columns):
             st.subheader("Ideal vs Noisy Comparison")
+            st.caption("Latest run per (execution_mode, noise_model, backend_label) with PR-AUC. Compare ideal vs noisy rows.")
             df_comp = filtered.copy()
             df_comp["run_index"] = df_comp.index
             group_cols = ["execution_mode", "noise_model", "backend_label"]
@@ -956,10 +1478,11 @@ elif page == "Experiments (history)":
 
         # Full history table
         st.subheader("Full Experiment Log")
+        st.caption("Full filtered table: all columns for each run. Scroll to see execution details, metrics, and observables.")
         st.dataframe(filtered)
 
         st.subheader("Export report bundle")
-        st.caption("Saves plots + a CSV snapshot to `reports/` for slides/docs.")
+        st.caption("Saves PR-AUC, kernel gap, and mitigation plots plus the filtered CSV to a timestamped folder under `reports/` for slides or documentation.")
 
         if st.button("Generate report plots"):
             import pathlib
@@ -1022,15 +1545,22 @@ elif page == "Experiments (history)":
             st.success(f"Report bundle generated: `{out_dir}`")
     
     else:
-        st.warning("No experiment history found. Run multiple training experiments to populate this.")
+        st.warning("No experiment history found. Use the **Run benchmarks** tab to run the pipeline one or more times, or upload `experiment_history.csv` from a local run.")
 
 # ==============================
 # PAGE: MODEL COMPARISON
 # ==============================
 elif page == "Comparison (classical vs quantum)":
     st.header("Model comparison: classical versus quantum (evidence from recorded runs)")
+    st.markdown("""
+    **In plain terms:** This page compares classical and quantum model performance across runs.
+    Only runs where **both** classical and quantum were evaluated (paired) are used, so the comparison is fair.
+    **Δ PR-AUC (Q − C)** = how much better (or worse) the quantum model did than the classical one.
+    **Bootstrap** = resampling runs to estimate uncertainty (e.g. 95% CI for the average difference).
+    **Win rate** = fraction of runs where quantum beat classical.
+    """)
     if df_history is None or len(df_history) == 0:
-        st.warning("No experiment history found.")
+        st.warning("No experiment history found. Run benchmarks (with both classical and quantum) from the **Run benchmarks** tab, or upload `experiment_history.csv`.")
     else:
         dfc = df_history.copy()
         for col in ["classical_pr_auc", "quantum_pr_auc", "obs_kernel_eval_seconds_total", "execution_shots"]:
@@ -1051,6 +1581,7 @@ elif page == "Comparison (classical vs quantum)":
             )
 
             st.subheader("Summary")
+            st.caption("**Paired runs**: experiments with both classical and quantum PR-AUC. **Mean Δ (Q − C)**: average advantage (or disadvantage) of quantum.")
             cols = st.columns(4)
             with cols[0]:
                 st.metric("Paired runs", int(len(paired)))
@@ -1064,8 +1595,8 @@ elif page == "Comparison (classical vs quantum)":
             st.subheader("Statistical rigor (paired)")
             st.caption("Bootstrap is over paired runs (re-sampling runs with replacement). This quantifies uncertainty in the mean ΔPR-AUC.")
 
-            rng_seed = st.number_input("Bootstrap seed", min_value=0, max_value=10_000_000, value=42, step=1)
-            n_boot = st.number_input("Bootstrap samples", min_value=200, max_value=20_000, value=2000, step=200)
+            rng_seed = st.number_input("Bootstrap seed", min_value=0, max_value=10_000_000, value=42, step=1, help="Random seed for reproducible bootstrap.")
+            n_boot = st.number_input("Bootstrap samples", min_value=200, max_value=20_000, value=2000, step=200, help="Number of bootstrap samples; more = more stable 95% CI and P(mean Δ>0).")
 
             deltas = paired["delta_pr_auc"].dropna().values.astype(float)
             win_rate = float(np.mean(deltas > 0.0)) if len(deltas) else float("nan")
@@ -1100,6 +1631,7 @@ elif page == "Comparison (classical vs quantum)":
                 st.caption(f"Effect size (Cohen’s d on paired deltas): **{cohens_d:.3f}** (roughly: 0.2 small, 0.5 medium, 0.8 large).")
 
             st.subheader("Distribution: PR-AUC")
+            st.caption("Histogram of classical vs quantum PR-AUC across paired runs. Overlap or separation shows how consistent the advantage is.")
             fig, ax = plt.subplots(figsize=(10, 3))
             ax.hist(paired["classical_pr_auc"].values, bins=12, alpha=0.6, label="Classical", color="blue")
             ax.hist(paired["quantum_pr_auc"].values, bins=12, alpha=0.6, label="Quantum", color="purple")
@@ -1110,6 +1642,7 @@ elif page == "Comparison (classical vs quantum)":
             st.pyplot(fig)
 
             st.subheader("Distribution: Δ PR-AUC (Quantum - Classical)")
+            st.caption("Spread of the per-run difference. Centered above 0 = quantum tends to win; below 0 = classical tends to win.")
             fig2, ax2 = plt.subplots(figsize=(10, 3))
             ax2.hist(paired["delta_pr_auc"].values, bins=16, color="gray")
             ax2.axvline(0, color="black", linewidth=1)
@@ -1119,6 +1652,7 @@ elif page == "Comparison (classical vs quantum)":
             st.pyplot(fig2)
 
             st.subheader("By quantum kernel variant (full vs Nyström)")
+            st.caption("Aggregates by kernel source: full kernel vs Nyström approximation. Compare mean_delta and mean_kernel_seconds to choose a variant.")
             grp = (
                 paired.groupby(["quantum_variant"], dropna=False)
                 .agg(
@@ -1159,6 +1693,7 @@ elif page == "Comparison (classical vs quantum)":
             )
 
             st.subheader("Cost vs benefit scatter (paired runs)")
+            st.caption("Each point = one run. X = kernel evaluation time (cost); Y = Δ PR-AUC (benefit). Green = quantum won; red = classical won.")
             if "obs_kernel_eval_seconds_total" in paired.columns:
                 figc, axc = plt.subplots(figsize=(10, 3))
                 axc.scatter(
@@ -1175,6 +1710,7 @@ elif page == "Comparison (classical vs quantum)":
                 st.pyplot(figc)
 
             st.subheader("Drilldown table (paired runs)")
+            st.caption("Per-run details: timestamp, backend, shots, kernel time, model variant, and PR-AUC values for inspection or export.")
             show_cols = [c for c in [
                 "run_timestamp_utc", "execution_mode", "backend_label", "noise_model",
                 "execution_shots", "obs_kernel_eval_seconds_total",
@@ -1188,7 +1724,13 @@ elif page == "Comparison (classical vs quantum)":
 # ==============================
 elif page == "Knowledge graph (inventory)":
     st.header("Knowledge graph inventory: Hetionet")
-    st.caption("This is what the project is operating on (and what subset was sampled for the PoC).")
+    st.markdown("""
+    **In plain terms:** A knowledge graph is a network of *things* (nodes) and *relationships* (edges).
+    Here, nodes are drugs, diseases, genes, etc.; edges are typed (e.g. “treats”, “associates with”).
+    **Metaedge** = the type of relationship (e.g. CtD = Compound treats Disease).
+    """)
+    _expander_for_term("metaedge", "📖 What is a metaedge?")
+    st.caption("This is the graph the pipeline trains on. Below: total edges, relation types, node types, and a sample of triples. Use this to understand the data scale and relation mix.")
 
     @st.cache_data(show_spinner=False)
     def _load_edges():
@@ -1196,6 +1738,7 @@ elif page == "Knowledge graph (inventory)":
         return load_hetionet_edges()
 
     df_edges = _load_edges()
+    st.caption("**Total edges**: number of (source, target, metaedge) triples. **Relation types**: distinct metaedges. **Unique nodes**: distinct entity IDs.")
     st.metric("Total edges", int(len(df_edges)))
     st.metric("Relation types (metaedge)", int(df_edges["metaedge"].nunique()))
     st.metric("Unique nodes (string IDs)", int(pd.concat([df_edges["source"], df_edges["target"]]).nunique()))
@@ -1211,17 +1754,20 @@ elif page == "Knowledge graph (inventory)":
     node_types = nodes.map(_node_type).value_counts().reset_index()
     node_types.columns = ["node_type", "count"]
     st.subheader("Node types")
+    st.caption("Entity type (prefix before ::), e.g. Compound, Disease, Gene. Count = how many times that type appears as source or target.")
     st.dataframe(node_types, width="stretch")
 
     rel_counts = df_edges["metaedge"].value_counts().reset_index()
     rel_counts.columns = ["metaedge", "count"]
     st.subheader("Top relations")
+    st.caption("Most frequent relation types (metaedges). CtD = Compound–treats–Disease; others (e.g. DaG, GiG) describe different link types.")
     st.dataframe(rel_counts.head(20), width="stretch")
 
     fig, ax = plt.subplots(figsize=(10, 3))
     topk = rel_counts.head(20).iloc[::-1]
     ax.barh(topk["metaedge"], topk["count"], color="steelblue")
     ax.set_xlabel("Edge count")
+    ax.set_ylabel("Relation type (metaedge)")
     ax.set_title("Top 20 metaedges")
     ax.grid(True, axis="x")
     fig.tight_layout()
@@ -1235,6 +1781,7 @@ elif page == "Knowledge graph (inventory)":
     )
 
     st.subheader("Sample edges")
+    st.caption("Random sample of (source, target, metaedge) triples. Source/target are entity IDs (e.g. Compound::DB00123, Disease::DOID_1234).")
     st.dataframe(df_edges.sample(n=min(50, len(df_edges)), random_state=42), width="stretch")
 
 # ==============================
@@ -1242,11 +1789,24 @@ elif page == "Knowledge graph (inventory)":
 # ==============================
 elif page == "Findings (ranked hypotheses)":
     st.header("Findings: ranked hypotheses from the latest model run")
-    st.caption("These are **high-scoring predicted links** from the most recent QSVC run, with endpoint IDs included and a novelty check against full Hetionet CtD edges.")
+    st.markdown("""
+    **In plain terms:** The model scores every drug–disease pair. **Ranked hypotheses** = pairs ordered by that score (highest first).
+    **Novel links** = high-scoring pairs that are *not* already in Hetionet—candidate “treats” links for validation.
+    **y_score** = the model’s output (probability or kernel score) used for ranking.
+    """)
+    with st.expander("📖 Column and term reference", expanded=False):
+        st.markdown("""
+        - **split**: train vs test (we show test-set predictions).
+        - **source / target**: compound ID and disease ID (e.g. Compound::DB00123, Disease::DOID_1234).
+        - **y_true**: 1 = known CtD link in the test set; 0 = non-link (negative).
+        - **y_score**: model score (higher = more likely to be a link). Used to rank hypotheses.
+        - **exists_in_hetionet_ctd**: whether this pair exists in the full Hetionet CtD relation (novel = False here).
+        """)
+    st.caption("These are **high-scoring predicted links** from the most recent QSVC run, with a novelty check against full Hetionet CtD edges.")
 
     pred_path = os.path.join(PROJECT_ROOT, "results", "predictions_latest.csv")
     if not os.path.exists(pred_path):
-        st.warning("No `results/predictions_latest.csv` found yet. Run a QSVC experiment first.")
+        st.warning("No `results/predictions_latest.csv` found yet. Run a benchmark with **Run quantum** (or both classical and quantum) from the **Run benchmarks** tab; the pipeline writes predictions for QSVC runs.")
     else:
         preds = pd.read_csv(pred_path)
         required = {"split", "source", "target", "y_true", "y_score"}
@@ -1274,15 +1834,22 @@ elif page == "Findings (ranked hypotheses)":
                 test["exists_in_hetionet_ctd"] = False
 
             st.subheader("Top predicted novel links (test negatives ranked high)")
-            k = st.slider("Top-K", min_value=5, max_value=100, value=25, step=5)
+            st.caption(
+                "Pairs the model scored high but that are **not** in the test positives and **not** in full Hetionet CtD. "
+                "**source** / **target** = compound / disease IDs; **y_score** = model score; **exists_in_hetionet_ctd** = already in KG (should be False here)."
+            )
+            k = st.slider("Top-K", min_value=5, max_value=100, value=25, step=5, help="Number of top novel (high-scoring, not-in-Hetionet) links to show in the table.")
             novel = test[(test["y_true"] == 0) & (~test["exists_in_hetionet_ctd"])].sort_values("y_score", ascending=False).head(int(k))
             st.dataframe(novel[["source", "target", "y_score", "exists_in_hetionet_ctd"]], width="stretch")
 
             st.subheader("Generate evidence bundle (neighbors + KG context)")
-            st.caption("Creates an exportable CSV with lightweight evidence: nearest neighbors in embedding space and top metaedges involving each node.")
+            st.caption(
+                "Creates an exportable CSV with lightweight evidence: nearest neighbors in embedding space and top metaedges involving each node. "
+                "**Neighbors per entity**: how many similar compounds/diseases to include. **Top metaedges per entity**: how many relation types per node."
+            )
 
-            ev_k = st.slider("Neighbors per entity", min_value=3, max_value=25, value=10, step=1)
-            ctx_k = st.slider("Top metaedges per entity", min_value=3, max_value=25, value=10, step=1)
+            ev_k = st.slider("Neighbors per entity", min_value=3, max_value=25, value=10, step=1, help="Number of nearest neighbors (embedding space) per compound/disease.")
+            ctx_k = st.slider("Top metaedges per entity", min_value=3, max_value=25, value=10, step=1, help="Number of most frequent relation types to include per node.")
 
             @st.cache_resource(show_spinner=False)
             def _load_embeddings_for_evidence():
@@ -1378,6 +1945,7 @@ elif page == "Findings (ranked hypotheses)":
             )
 
             st.subheader("Sanity check: top-scoring true positives (test)")
+            st.caption("Known CtD links (y_true=1) that the model also scored high. Confirms the model ranks real treatments well before trusting novel predictions.")
             top_tp = test[test["y_true"] == 1].sort_values("y_score", ascending=False).head(int(k))
             st.dataframe(top_tp[["source", "target", "y_score", "exists_in_hetionet_ctd"]], width="stretch")
 
@@ -1386,14 +1954,49 @@ elif page == "Findings (ranked hypotheses)":
 # ==============================
 elif page == "Run benchmarks":
     st.header("Run benchmarks")
-    st.markdown("Run multiple tests and store results in `results/`.")
+    st.markdown("""
+    Run the link-prediction pipeline from the dashboard and write results to `results/`. 
+    Choose **what to run** (classical, quantum, or both) and **how** (single run vs Ideal + Noisy). 
+    You can also **generate demo results** or **upload** CSVs if the pipeline cannot run in this environment.
+    """)
     st.caption(
         "On Hugging Face Spaces, runs may hit time or memory limits. "
         "You can run benchmarks locally and upload results below."
     )
 
+    # What is being tested — expandable reference
+    with st.expander("📋 What is being tested?", expanded=True):
+        st.markdown("""
+        | What you run | What the pipeline does | What gets measured |
+        |--------------|------------------------|--------------------|
+        | **Classical only** | Trains/evaluates **classical** models only: logistic regression (and optionally RF, SVM). Uses the same embeddings and pair features as the rest of the pipeline. | Classical PR-AUC, accuracy, parameter count. No quantum metrics. |
+        | **Quantum only** | Trains/evaluates **quantum** models only (QSVC, optionally VQC). Uses PCA-reduced features and a quantum kernel (feature map). | Quantum PR-AUC, accuracy, parameter count, kernel observables. No classical metrics. |
+        | **Both** (default) | Runs **classical and quantum** in one pipeline: same data, same split, so results are directly comparable. | Both classical and quantum PR-AUC, accuracy, parameters; ideal for the **Comparison** tab. |
+        | **Ideal** config | Quantum circuits run on a **noiseless** simulator (statevector or ideal backend). | Best-case quantum performance. |
+        | **Noisy** config | Quantum circuits run with a **noise model** (simulated device errors). | Robustness of quantum models to noise; compare with Ideal in **Results** and **Experiments**. |
+        """)
+        st.markdown("**Relation** (e.g. CtD) is the link type being predicted. **Fast mode** reduces epochs and model search for quicker runs.")
+        st.caption("Results are written to `results/latest_run.csv` and `results/experiment_history.csv`.")
+
+    with st.expander("🖥️ Terminal commands reference (run from project root)"):
+        st.markdown("**Run both classical and quantum (single run):**")
+        st.code("python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results --fast_mode", language="bash")
+        st.markdown("**Classical only:**")
+        st.code("python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results --fast_mode --classical_only", language="bash")
+        st.markdown("**Quantum only:**")
+        st.code("python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results --fast_mode --quantum_only", language="bash")
+        st.markdown("**Ideal then noisy (both classical and quantum):**")
+        st.code("""# Ideal (noiseless)
+python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results --fast_mode \\
+  --quantum_config_path config/quantum_config_ideal.yaml
+# Noisy (simulated device noise)
+python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results --fast_mode \\
+  --quantum_config_path config/quantum_config_noisy.yaml""", language="bash")
+        st.caption("Or use: `bash scripts/benchmark_ideal_noisy.sh CtD results --fast_mode` (append `--classical_only` or `--quantum_only` to run only one).")
+
     # Environment check: show whether pipeline deps are available
     st.subheader("Environment check")
+    st.caption("Checks that torch, pykeen, and qiskit_algorithms are importable. All three are needed to run the full pipeline; if any are missing, use **Generate demo results** or **Upload** instead.")
     def _check(name: str, fn) -> bool:
         try:
             fn()
@@ -1417,44 +2020,120 @@ elif page == "Run benchmarks":
     else:
         st.success("Pipeline dependencies are available. You can run benchmarks below.")
 
+    st.subheader("Configure run")
     with st.form("benchmark_form"):
-        relation = st.text_input("Relation", value="CtD")
-        fast_mode = st.checkbox("Fast mode", value=True)
-        quantum_only = st.checkbox("Quantum only", value=True)
-        full_graph = st.checkbox("Full-graph embeddings", value=False)
-        runs = st.number_input("Number of repeats", min_value=1, max_value=10, value=1, step=1)
-        submitted = st.form_submit_button("Run Ideal + Noisy")
+        st.markdown("**What to run**")
+        run_classical = st.checkbox(
+            "Run classical",
+            value=True,
+            help="Train and evaluate classical models (logistic regression, optional RF/SVM). Measures classical PR-AUC and accuracy.",
+        )
+        run_quantum = st.checkbox(
+            "Run quantum",
+            value=True,
+            help="Train and evaluate quantum model (QSVC). Measures quantum PR-AUC, kernel quality, and sensitivity to noise.",
+        )
+        if not run_classical and not run_quantum:
+            st.caption("Both unchecked → pipeline will run **both** classical and quantum.")
+        st.markdown("**Pipeline options**")
+        relation = st.text_input(
+            "Relation",
+            value="CtD",
+            help="Target relation type: CtD = Compound–treats–Disease; DaG = Disease–associates–Gene; etc.",
+        )
+        fast_mode = st.checkbox(
+            "Fast mode",
+            value=True,
+            help="Fewer embedding epochs and smaller model search; good for quick checks. Turn off for full training.",
+        )
+        full_graph = st.checkbox(
+            "Full-graph embeddings",
+            value=False,
+            help="Train embeddings on the full Hetionet graph (slower, potentially richer). Default: task-specific subset.",
+        )
+        benchmark_mode = st.radio(
+            "Benchmark mode",
+            ["Ideal + Noisy (two runs)", "Single run (ideal config only)"],
+            index=0,
+            help="Ideal + Noisy: run once with noiseless simulator, then once with noisy simulator (for quantum robustness). Single run: one pass with ideal config only.",
+        )
+        runs = st.number_input(
+            "Repeats",
+            min_value=1,
+            max_value=10,
+            value=1,
+            step=1,
+            help="Number of times to repeat the benchmark (each repeat = one run for Single run, or ideal+noisy for Ideal + Noisy).",
+        )
+        submitted = st.form_submit_button("Run benchmark")
 
     if submitted:
         log_container = st.empty()
-        base_args = ["--relation", relation, "--results_dir", "results"]
+        base_args = ["--relation", relation.strip() or "CtD", "--results_dir", "results"]
         if fast_mode:
             base_args.append("--fast_mode")
-        if quantum_only:
+        if run_classical and not run_quantum:
+            base_args.append("--classical_only")
+        elif run_quantum and not run_classical:
             base_args.append("--quantum_only")
         if full_graph:
             base_args.append("--full_graph_embeddings")
         python_exe = sys.executable
         script = PROJECT_ROOT / "scripts" / "run_optimized_pipeline.py"
+        run_ideal_noisy = benchmark_mode.startswith("Ideal + Noisy")
+
+        # Show what will run (summary and equivalent terminal commands)
+        what = []
+        if run_classical and run_quantum:
+            what.append("classical + quantum")
+        elif run_classical:
+            what.append("classical only")
+        else:
+            what.append("quantum only")
+        if run_ideal_noisy:
+            what.append("ideal then noisy config")
+        else:
+            what.append("single run (ideal config)")
+        st.info(f"**This run:** {', '.join(what)} · **Repeats:** {int(runs)}")
+        if run_quantum and run_ideal_noisy:
+            st.caption("Ideal = noiseless simulator; Noisy = simulator with device-like noise. Compare results in Results and Experiments.")
+        if not run_quantum and run_ideal_noisy:
+            st.caption("Classical only: both ideal and noisy runs train the same classical models (quantum config has no effect).")
+
+        # Build command list for display
+        def cmd_str(cmd):
+            return " ".join(cmd) if isinstance(cmd, list) else cmd
+
+        commands_to_run = []
+        for _ in range(int(runs)):
+            commands_to_run.append([python_exe, str(script), "--quantum_config_path", "config/quantum_config_ideal.yaml"] + base_args)
+            if run_ideal_noisy:
+                commands_to_run.append([python_exe, str(script), "--quantum_config_path", "config/quantum_config_noisy.yaml"] + base_args)
+
+        with st.expander("Equivalent terminal commands (copy to run locally)", expanded=False):
+            for i, cmd in enumerate(commands_to_run):
+                label = "ideal" if (i % 2 == 0) else "noisy" if run_ideal_noisy else "run"
+                st.code(cmd_str(cmd), language="bash")
+            st.caption("From project root; use python3 if python is not available.")
+
         any_failed = False
         last_output = ""
 
         for run_idx in range(int(runs)):
-            st.write(f"Run {run_idx + 1}/{runs}")
-            # Ideal
+            st.write(f"Repeat {run_idx + 1}/{runs}")
             cmd_ideal = [python_exe, str(script), "--quantum_config_path", "config/quantum_config_ideal.yaml"] + base_args
-            log_container.code("Running IDEAL simulator...")
+            log_container.code("Running pipeline (ideal config)...")
             rc_ideal, out_ideal = run_command(cmd_ideal, log_container)
             if rc_ideal != 0:
                 any_failed = True
                 last_output = out_ideal
-            # Noisy
-            cmd_noisy = [python_exe, str(script), "--quantum_config_path", "config/quantum_config_noisy.yaml"] + base_args
-            log_container.code("Running NOISY simulator...")
-            rc_noisy, out_noisy = run_command(cmd_noisy, log_container)
-            if rc_noisy != 0:
-                any_failed = True
-                last_output = out_noisy
+            if run_ideal_noisy:
+                cmd_noisy = [python_exe, str(script), "--quantum_config_path", "config/quantum_config_noisy.yaml"] + base_args
+                log_container.code("Running pipeline (noisy config)...")
+                rc_noisy, out_noisy = run_command(cmd_noisy, log_container)
+                if rc_noisy != 0:
+                    any_failed = True
+                    last_output = out_noisy
 
         st.cache_data.clear()
         st.cache_resource.clear()
@@ -1467,10 +2146,13 @@ elif page == "Run benchmarks":
                 with st.expander("Last run output", expanded=True):
                     st.code(last_output[-4000:])
         else:
-            st.success("Finished running benchmarks. Refresh the overview or history tabs.")
+            st.success("Finished running benchmarks. Refresh the Overview or Results tab to see the latest metrics.")
 
     st.subheader("Generate demo results")
-    st.markdown("Create minimal result files so Overview and Results tabs show sample data (no pipeline run).")
+    st.markdown(
+        "Create minimal result files so Overview and Results tabs show sample data (no pipeline run). "
+        "Use this when the full pipeline cannot run (e.g. on Hugging Face Spaces) so you can still explore the dashboard."
+    )
     if st.button("Generate demo results", key="gen_demo_results"):
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         # latest_run.csv – one row, required columns for dashboard
@@ -1502,7 +2184,10 @@ elif page == "Run benchmarks":
         st.rerun()
 
     st.subheader("Upload results from a local run")
-    st.markdown("If you ran benchmarks locally, upload `latest_run.csv` or `experiment_history.csv` to view them here.")
+    st.markdown(
+        "If you ran benchmarks locally, upload `latest_run.csv` or `experiment_history.csv` to view them here. "
+        "Files are saved under `results/` and will appear in Overview, Results, Experiments, and Comparison."
+    )
     uploaded = st.file_uploader("CSV file", type=["csv"], key="benchmark_upload")
     if uploaded is not None:
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -1517,20 +2202,71 @@ elif page == "Run benchmarks":
 # ==============================
 elif page == "Hardware readiness (backend status)":
     st.header("IBM Quantum backend status (access + queue)")
-    st.caption("Quick sanity check for whether `ibm_fez` / `ibm_brisbane` are reachable from your credentials.")
+    st.markdown("""
+    **In plain terms:** A **backend** is the machine (simulator or real quantum chip) that runs your circuits.
+    This page checks whether IBM Quantum backends (e.g. Brisbane) are reachable with your token and shows **operational** status and **pending jobs** in the queue.
+    """)
+    _expander_for_term("backend", "📖 What is a backend?")
+    st.caption("Quick check: are IBM Quantum backends (e.g. ibm_brisbane) reachable with your credentials?")
 
-    backend_hint = st.text_input("Backend name to check (optional)", value="ibm_brisbane")
-    instance_hint = st.text_input("IBM instance", value=os.environ.get("IBM_INSTANCE", "ibm-q/open/main"))
+    st.subheader("Credentials")
+    with st.expander("🔒 Security: how your API key is handled", expanded=True):
+        st.markdown("""
+        - **Never stored:** Your API key is not written to disk, session state, or any database.
+        - **Never logged:** The key is never sent to logs or error messages (we redact it if anything goes wrong).
+        - **Used only for this check:** The token is sent to IBM Quantum only when you click **Check available backends**, solely to list backends and their status. We do not run jobs or change your account.
+        - **You stay in control:** On a shared computer, clear the field or close the tab when done. The dashboard does not retain the key after the request.
+        """)
+    api_key = st.text_input(
+        "IBM Quantum API key (optional)",
+        value="",
+        type="password",
+        placeholder="Paste your token here (not stored)",
+        help="Enter your IBM Quantum API token to test backend access. If left blank, the app uses IBM_Q_TOKEN or QISKIT_IBM_TOKEN from the environment. Your key is only used for this check and is not saved.",
+    )
+    st.caption(
+        "Get a token at [quantum.ibm.com](https://quantum.ibm.com) → Account → API token. "
+        "The key is sent only when you click **Check available backends** and is not stored by the dashboard."
+    )
 
+    # Dropdown: use list from last successful check if available, else known IBM backends
+    if "hardware_backend_list" not in st.session_state or not st.session_state.get("hardware_backend_list"):
+        _known_backends = [
+            "ibm_brisbane", "ibm_kyoto", "ibm_osaka", "ibm_torino",
+            "ibm_sherbrooke", "ibm_guadalupe", "ibm_nazca", "ibm_peekskill",
+            "ibm_algiers", "ibm_cairo", "simulator_statevector", "simulator_extended_stabilizer",
+        ]
+    else:
+        _known_backends = sorted(st.session_state["hardware_backend_list"])
+    backend_options = ["All"] + _known_backends
+    backend_choice = st.selectbox(
+        "Backend to check",
+        options=backend_options,
+        index=0,
+        help="Select a backend to verify or filter the list. 'All' shows every backend from your account after you run the check.",
+    )
+    backend_hint = "" if backend_choice == "All" else backend_choice
+    instance_hint = st.text_input(
+        "IBM instance",
+        value=os.environ.get("IBM_INSTANCE", "ibm-q/open/main"),
+        help="IBM Quantum instance path (channel/group/project). Default: ibm-q/open/main.",
+    )
+
+    st.caption("Click the button below to fetch the list of backends you can access and their operational status (and to refresh the **Backend to check** dropdown).")
     if st.button("Check available backends"):
+        token = None
         try:
             from qiskit_ibm_runtime import QiskitRuntimeService
 
-            token = os.environ.get("IBM_Q_TOKEN") or os.environ.get("QISKIT_IBM_TOKEN")
+            token = (api_key.strip() if api_key else None) or os.environ.get("IBM_Q_TOKEN") or os.environ.get("QISKIT_IBM_TOKEN")
             if not token:
-                st.error("Missing IBM token. Set `IBM_Q_TOKEN` (or `QISKIT_IBM_TOKEN`) in your environment and restart Streamlit.")
+                st.error(
+                    "No IBM Quantum API key provided. Enter your token in **IBM Quantum API key** above, or set "
+                    "`IBM_Q_TOKEN` (or `QISKIT_IBM_TOKEN`) in your environment."
+                )
             else:
-                service = QiskitRuntimeService(channel="ibm_quantum", token=token, instance=instance_hint)
+                token = token.strip()
+                service = QiskitRuntimeService(channel="ibm_quantum", token=token, instance=instance_hint.strip())
                 backends = service.backends()
 
                 rows = []
@@ -1556,15 +2292,104 @@ elif page == "Hardware readiness (backend status)":
                     })
 
                 dfb = pd.DataFrame(rows).sort_values(by=["backend"])
-                st.dataframe(dfb, width="stretch")
+                st.session_state["hardware_backend_list"] = dfb["backend"].astype(str).tolist()
 
+                st.caption("**operational**: whether the backend is accepting jobs. **status_msg**: short status text. **pending_jobs**: number of jobs in the queue. **num_qubits**: backend size.")
                 if backend_hint:
-                    if (dfb["backend"].astype(str) == backend_hint).any():
+                    dfb_display = dfb[dfb["backend"].astype(str) == backend_hint]
+                    if not dfb_display.empty:
                         st.success(f"`{backend_hint}` is accessible.")
+                        st.dataframe(dfb_display, width="stretch")
                     else:
                         st.warning(f"`{backend_hint}` not found in your accessible backends list.")
+                        st.dataframe(dfb, width="stretch")
+                else:
+                    st.dataframe(dfb, width="stretch")
         except Exception as e:
-            st.error(f"Backend status check failed: {e}")
+            safe_msg = _redact_token_from_message(str(e), token)
+            st.error(f"Backend status check failed: {safe_msg}")
+
+# ==============================
+# PAGE: RUN YOUR CODE
+# ==============================
+elif page == "Run your code":
+    st.header("Upload & run your code")
+    st.markdown("""
+    Upload a **Python script** (or paste code) and run it here. Your code runs in a subprocess with the **project root** as the working directory,
+    so you can import project modules (e.g. `kg_layer`, `quantum_layer`, `benchmarking`) and read/write under the project.
+    Use this to try small experiments, run custom analyses, or reproduce results without leaving the dashboard.
+    """)
+    st.caption(
+        "**Security:** Code runs in an isolated subprocess with a **time limit**. Do not upload code you do not trust. "
+        "On shared or hosted environments, avoid secrets and long-running or resource-heavy jobs."
+    )
+
+    with st.expander("📋 What can I do?", expanded=False):
+        st.markdown("""
+        - **Working directory:** Your script runs with `cwd` = project root (same as **Run benchmarks**).
+        - **Imports:** You can `import kg_layer`, `quantum_layer`, and use `data/`, `results/`, `config/` paths.
+        - **Output:** Anything you `print()` goes to **stdout**; exceptions and tracebacks go to **stderr**. Both are shown below.
+        - **Results:** Write CSV or plots to `results/` and open them from **Results** or **Experiments**, or print summaries for quick checks.
+        """)
+
+    source = st.radio(
+        "Code source",
+        ["Upload a .py file", "Paste code"],
+        index=0,
+        help="Upload a Python file or type/paste code in the text area.",
+    )
+
+    script_content = None
+    if source == "Upload a .py file":
+        uploaded = st.file_uploader("Python script", type=["py"], key="run_code_upload")
+        if uploaded is not None:
+            script_content = uploaded.read().decode("utf-8", errors="replace")
+            st.code(script_content, language="python")
+    else:
+        script_content = st.text_area(
+            "Paste your Python code",
+            height=280,
+            placeholder="# Example: load project data and print a summary\nimport pandas as pd\nfrom pathlib import Path\npath = Path('results/latest_run.csv')\nif path.exists():\n    df = pd.read_csv(path)\n    print(df.to_string())\nelse:\n    print('No latest_run.csv yet')",
+            help="Code is written to a temporary .py file and run with the project root as cwd.",
+            key="run_code_paste",
+        )
+
+    timeout_sec = st.number_input(
+        "Timeout (seconds)",
+        min_value=5,
+        max_value=300,
+        value=60,
+        step=5,
+        help="Stop the script after this many seconds if it has not finished.",
+    )
+
+    if st.button("Run code", type="primary", key="run_code_btn"):
+        if not script_content or not script_content.strip():
+            st.warning("Please provide code: upload a .py file or paste code in the text area.")
+        else:
+            with st.spinner("Running your script..."):
+                try:
+                    returncode, stdout, stderr = run_user_script(script_content.strip(), timeout_sec)
+                    st.subheader("Results")
+                    col_ret, col_time = st.columns(2)
+                    with col_ret:
+                        st.metric("Return code", returncode)
+                    with col_time:
+                        st.caption("Stdout and stderr are shown below.")
+                    if stdout:
+                        st.text_area("Stdout", value=stdout, height=200, key="run_stdout", disabled=True)
+                    else:
+                        st.caption("*(no stdout)*")
+                    if stderr:
+                        st.text_area("Stderr", value=stderr, height=120, key="run_stderr", disabled=True)
+                    if returncode == 0 and not stderr:
+                        st.success("Script finished successfully.")
+                    elif returncode != 0:
+                        st.error("Script exited with a non-zero return code.")
+                except subprocess.TimeoutExpired:
+                    st.error(f"Script was stopped after {timeout_sec} seconds (timeout).")
+                except Exception as e:
+                    st.error(f"Failed to run script: {e}")
 
 # Footer
 st.markdown("---")

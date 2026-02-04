@@ -1,0 +1,23 @@
+# Full requirements for Hugging Face Spaces: dashboard + run benchmarks in-Space.
+# Heavier build (~15–25 min); use "CPU basic" or "CPU up to 2" if build OOMs.
+# See DEPLOY_HUGGINGFACE.md.
+
+# Dashboard (same as slim)
+streamlit>=1.32.0
+pandas>=2.0
+numpy>=1.24
+matplotlib>=3.7
+scikit-learn>=1.3
+joblib>=1.3
+PyYAML>=6.0
+networkx>=3.0
+qiskit>=1.0
+qiskit-machine-learning>=0.7
+qiskit-aer>=0.12
+
+# Pipeline: embeddings (PyKEEN) and optimizers
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.0
+pykeen>=1.10
+qiskit-algorithms>=0.3
+python-dotenv>=1.0

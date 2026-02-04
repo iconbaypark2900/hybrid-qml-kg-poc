@@ -1,3 +1,10 @@
+---
+title: Hybrid QML-KG Dashboard
+app_file: app.py
+sdk: streamlit
+sdk_version: "1.32.0"
+---
+
 # Hybrid Quantum–Classical Knowledge Graph Link Prediction
 
 A proof-of-concept system that combines **classical machine learning** and **quantum computing** to predict drug–disease treatment relationships in the **Hetionet** biomedical knowledge graph.

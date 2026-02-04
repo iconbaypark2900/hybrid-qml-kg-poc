@@ -1019,8 +1019,14 @@ elif page == "4. Live prediction (interactive)":
     model, scaler, model_path, scaler_path = load_classical_artifacts()
     embeddings, entity_ids, emb_name = load_entity_embeddings()
 
+    if embeddings is None or model is None:
+        st.warning(
+            "**Live prediction needs local data.** Embeddings (`data/*.npy`, `data/*.json`) or the classical model (`models/*.joblib`) are missing. "
+            "On Hugging Face Spaces these files are not included. Run the dashboard locally after a benchmark to use scoring and candidate ranking."
+        )
+
     st.caption(
-        f"Classical model: `{model_path}` | Scaler: `{scaler_path}` | Embeddings: `{emb_name}`. "
+        f"Classical model: `{model_path}` | Scaler: `{scaler_path}` | Embeddings: `{emb_name or '—'}`. "
         "**Classical** uses the model from the last benchmark (run with **Run classical**). "
         "**Quantum** uses the same qubit count and feature map as the last run (run with **Run quantum**)."
     )
@@ -1793,11 +1799,14 @@ elif page == "6. Comparison (classical vs quantum)":
             st.warning("No paired classical+quantum rows found yet (some runs are quantum-only or classical-only).")
         else:
             paired["delta_pr_auc"] = paired["quantum_pr_auc"] - paired["classical_pr_auc"]
-            paired["quantum_variant"] = paired.get("obs_kernel_source", pd.Series(["unknown"] * len(paired))).fillna("unknown")
+            if "obs_kernel_source" in paired.columns:
+                paired["quantum_variant"] = paired["obs_kernel_source"].fillna("unknown").astype(str)
+            else:
+                paired["quantum_variant"] = "unknown"
             paired["execution_bucket"] = (
-                paired.get("execution_mode", "unknown").fillna("unknown").astype(str)
-                + " | " + paired.get("backend_label", "unknown").fillna("unknown").astype(str)
-                + " | " + paired.get("noise_model", "ideal").fillna("ideal").astype(str)
+                paired.get("execution_mode", pd.Series(["unknown"] * len(paired), index=paired.index)).fillna("unknown").astype(str)
+                + " | " + paired.get("backend_label", pd.Series(["unknown"] * len(paired), index=paired.index)).fillna("unknown").astype(str)
+                + " | " + paired.get("noise_model", pd.Series(["ideal"] * len(paired), index=paired.index)).fillna("ideal").astype(str)
             )
 
             st.subheader("Summary")
@@ -1875,23 +1884,30 @@ elif page == "6. Comparison (classical vs quantum)":
 
             st.subheader("By quantum kernel variant (full vs Nyström)")
             st.caption("Aggregates by kernel source: full kernel vs Nyström approximation. Compare mean_delta and mean_kernel_seconds to choose a variant.")
+            agg_dict = {
+                "n": ("delta_pr_auc", "count"),
+                "mean_delta": ("delta_pr_auc", "mean"),
+                "mean_q": ("quantum_pr_auc", "mean"),
+                "mean_c": ("classical_pr_auc", "mean"),
+            }
+            if "obs_kernel_eval_seconds_total" in paired.columns:
+                agg_dict["mean_kernel_seconds"] = ("obs_kernel_eval_seconds_total", "mean")
+            if "execution_shots" in paired.columns:
+                agg_dict["mean_shots"] = ("execution_shots", "mean")
             grp = (
                 paired.groupby(["quantum_variant"], dropna=False)
-                .agg(
-                    n=("delta_pr_auc", "count"),
-                    mean_delta=("delta_pr_auc", "mean"),
-                    mean_q=("quantum_pr_auc", "mean"),
-                    mean_c=("classical_pr_auc", "mean"),
-                    mean_kernel_seconds=("obs_kernel_eval_seconds_total", "mean"),
-                    mean_shots=("execution_shots", "mean"),
-                )
+                .agg(**agg_dict)
                 .reset_index()
                 .sort_values("mean_delta", ascending=False)
             )
+            if "mean_kernel_seconds" not in grp.columns:
+                grp["mean_kernel_seconds"] = float("nan")
+            if "mean_shots" not in grp.columns:
+                grp["mean_shots"] = float("nan")
             st.dataframe(grp, width="stretch")
 
             st.subheader("Cost-aware recommendation")
-            st.caption("Uses a simple score: mean ΔPR-AUC minus a cost penalty (runtime + shots). Tune the penalty to match your budget.")
+            st.caption("Uses a simple score: mean ΔPR-AUC minus a cost penalty (runtime + shots). Tune the penalty to match your budget. When kernel/shots columns are missing (e.g. demo data), cost is based on mean Δ only.")
 
             cost_weight_seconds = st.slider("Penalty per second of kernel evaluation", min_value=0.0, max_value=0.01, value=0.001, step=0.0005, format="%.4f")
             cost_weight_shots = st.slider("Penalty per 1k shots", min_value=0.0, max_value=0.01, value=0.0005, step=0.0005, format="%.4f")
@@ -1903,15 +1919,15 @@ elif page == "6. Comparison (classical vs quantum)":
             g2["cost_score"] = g2["mean_delta"] - (cost_weight_seconds * g2["mean_kernel_seconds"].fillna(0.0)) - (cost_weight_shots * g2["shots_k"].fillna(0.0))
             g2 = g2.sort_values("cost_score", ascending=False)
 
-            st.dataframe(
-                g2[["quantum_variant", "n", "mean_delta", "mean_kernel_seconds", "mean_shots", "cost_score"]],
-                width="stretch"
-            )
+            disp_cols = [c for c in ["quantum_variant", "n", "mean_delta", "mean_kernel_seconds", "mean_shots", "cost_score"] if c in g2.columns]
+            st.dataframe(g2[disp_cols], width="stretch")
             best = g2.iloc[0]
+            sec_val = best.get("mean_kernel_seconds", float("nan"))
+            shots_val = best.get("mean_shots", float("nan"))
             st.success(
                 f"Recommended default: **{best['quantum_variant']}** "
-                f"(score={float(best['cost_score']):.4f}, mean Δ={float(best['mean_delta']):.4f}, "
-                f"seconds={float(best['mean_kernel_seconds']):.2f}, shots={float(best['mean_shots']):.0f})."
+                f"(score={float(best['cost_score']):.4f}, mean Δ={float(best['mean_delta']):.4f}"
+                + (f", seconds={float(sec_val):.2f}, shots={float(shots_val):.0f})." if not (pd.isna(sec_val) and pd.isna(shots_val)) else ").")
             )
 
             st.subheader("Cost vs benefit scatter (paired runs)")
@@ -1960,53 +1976,64 @@ elif page == "8. Knowledge graph (inventory)":
         from kg_layer.kg_loader import load_hetionet_edges
         return load_hetionet_edges()
 
-    df_edges = _load_edges()
-    st.caption("**Total edges**: number of (source, target, metaedge) triples. **Relation types**: distinct metaedges. **Unique nodes**: distinct entity IDs.")
-    st.metric("Total edges", int(len(df_edges)))
-    st.metric("Relation types (metaedge)", int(df_edges["metaedge"].nunique()))
-    st.metric("Unique nodes (string IDs)", int(pd.concat([df_edges["source"], df_edges["target"]]).nunique()))
+    try:
+        df_edges = _load_edges()
+    except Exception:
+        df_edges = None
+        st.warning(
+            "**Knowledge graph data is not available in this environment.** "
+            "On Hugging Face Spaces the app cannot download or write the edge file. "
+            "Run the dashboard locally (with `data/` writable or pre-populated with `hetionet-v1.0-edges.sif`) to see the full inventory."
+        )
+        st.caption("Hetionet is a biomedical knowledge graph; relation types include CtD (Compound–treats–Disease), DaG (Disease–associates–Gene), and others. See [het.io](https://het.io) for details.")
 
-    # Node type breakdown (prefix before ::)
-    def _node_type(x: str) -> str:
-        try:
-            return str(x).split("::", 1)[0]
-        except Exception:
-            return "Unknown"
+    if df_edges is not None:
+        st.caption("**Total edges**: number of (source, target, metaedge) triples. **Relation types**: distinct metaedges. **Unique nodes**: distinct entity IDs.")
+        st.metric("Total edges", int(len(df_edges)))
+        st.metric("Relation types (metaedge)", int(df_edges["metaedge"].nunique()))
+        st.metric("Unique nodes (string IDs)", int(pd.concat([df_edges["source"], df_edges["target"]]).nunique()))
 
-    nodes = pd.concat([df_edges["source"], df_edges["target"]]).astype(str)
-    node_types = nodes.map(_node_type).value_counts().reset_index()
-    node_types.columns = ["node_type", "count"]
-    st.subheader("Node types")
-    st.caption("Entity type (prefix before ::), e.g. Compound, Disease, Gene. Count = how many times that type appears as source or target.")
-    st.dataframe(node_types, width="stretch")
+        # Node type breakdown (prefix before ::)
+        def _node_type(x: str) -> str:
+            try:
+                return str(x).split("::", 1)[0]
+            except Exception:
+                return "Unknown"
 
-    rel_counts = df_edges["metaedge"].value_counts().reset_index()
-    rel_counts.columns = ["metaedge", "count"]
-    st.subheader("Top relations")
-    st.caption("Most frequent relation types (metaedges). CtD = Compound–treats–Disease; others (e.g. DaG, GiG) describe different link types.")
-    st.dataframe(rel_counts.head(20), width="stretch")
+        nodes = pd.concat([df_edges["source"], df_edges["target"]]).astype(str)
+        node_types = nodes.map(_node_type).value_counts().reset_index()
+        node_types.columns = ["node_type", "count"]
+        st.subheader("Node types")
+        st.caption("Entity type (prefix before ::), e.g. Compound, Disease, Gene. Count = how many times that type appears as source or target.")
+        st.dataframe(node_types, width="stretch")
 
-    fig, ax = plt.subplots(figsize=(10, 3))
-    topk = rel_counts.head(20).iloc[::-1]
-    ax.barh(topk["metaedge"], topk["count"], color="steelblue")
-    ax.set_xlabel("Edge count")
-    ax.set_ylabel("Relation type (metaedge)")
-    ax.set_title("Top 20 metaedges")
-    ax.grid(True, axis="x")
-    fig.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
+        rel_counts = df_edges["metaedge"].value_counts().reset_index()
+        rel_counts.columns = ["metaedge", "count"]
+        st.subheader("Top relations")
+        st.caption("Most frequent relation types (metaedges). CtD = Compound–treats–Disease; others (e.g. DaG, GiG) describe different link types.")
+        st.dataframe(rel_counts.head(20), width="stretch")
 
-    st.download_button(
-        "Download KG relation counts (CSV)",
-        data=rel_counts.to_csv(index=False).encode("utf-8"),
-        file_name="hetionet_relation_counts.csv",
-        mime="text/csv",
-    )
+        fig, ax = plt.subplots(figsize=(10, 3))
+        topk = rel_counts.head(20).iloc[::-1]
+        ax.barh(topk["metaedge"], topk["count"], color="steelblue")
+        ax.set_xlabel("Edge count")
+        ax.set_ylabel("Relation type (metaedge)")
+        ax.set_title("Top 20 metaedges")
+        ax.grid(True, axis="x")
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
 
-    st.subheader("Sample edges")
-    st.caption("Random sample of (source, target, metaedge) triples. Source/target are entity IDs (e.g. Compound::DB00123, Disease::DOID_1234).")
-    st.dataframe(df_edges.sample(n=min(50, len(df_edges)), random_state=42), width="stretch")
+        st.download_button(
+            "Download KG relation counts (CSV)",
+            data=rel_counts.to_csv(index=False).encode("utf-8"),
+            file_name="hetionet_relation_counts.csv",
+            mime="text/csv",
+        )
+
+        st.subheader("Sample edges")
+        st.caption("Random sample of (source, target, metaedge) triples. Source/target are entity IDs (e.g. Compound::DB00123, Disease::DOID_1234).")
+        st.dataframe(df_edges.sample(n=min(50, len(df_edges)), random_state=42), width="stretch")
 
 # ==============================
 # PAGE: FINDINGS
@@ -2028,9 +2055,11 @@ elif page == "7. Findings (ranked hypotheses)":
         """)
     st.caption("These are **high-scoring predicted links** from the most recent QSVC run, with a novelty check against full Hetionet CtD edges.")
 
-    pred_path = os.path.join(PROJECT_ROOT, "results", "predictions_latest.csv")
-    if not os.path.exists(pred_path):
-        st.warning("No `results/predictions_latest.csv` found yet. Run a benchmark with **Run quantum** (or both classical and quantum) from the **Run benchmarks** tab; the pipeline writes predictions for QSVC runs.")
+    pred_path = RESULTS_DIR / "predictions_latest.csv"
+    if not pred_path.exists():
+        pred_path = PROJECT_ROOT / "results" / "predictions_latest.csv"
+    if not pred_path.exists():
+        st.warning("No `predictions_latest.csv` found in results. Run a benchmark with **Run quantum** (or both classical and quantum) from the **Run benchmarks** tab; the pipeline writes predictions for QSVC runs.")
     else:
         preds = pd.read_csv(pred_path)
         required = {"split", "source", "target", "y_true", "y_score"}
@@ -2069,7 +2098,8 @@ elif page == "7. Findings (ranked hypotheses)":
             st.subheader("Generate evidence bundle (neighbors + KG context)")
             st.caption(
                 "Creates an exportable CSV with lightweight evidence: nearest neighbors in embedding space and top metaedges involving each node. "
-                "**Neighbors per entity**: how many similar compounds/diseases to include. **Top metaedges per entity**: how many relation types per node."
+                "**Neighbors per entity**: how many similar compounds/diseases to include. **Top metaedges per entity**: how many relation types per node. "
+                "Requires embeddings and KG data (not available on Hugging Face Spaces)."
             )
 
             ev_k = st.slider("Neighbors per entity", min_value=3, max_value=25, value=10, step=1, help="Number of nearest neighbors (embedding space) per compound/disease.")
@@ -2152,14 +2182,17 @@ elif page == "7. Findings (ranked hypotheses)":
                 return pd.DataFrame(out)
 
             if st.button("Build evidence bundle (CSV)"):
-                bundle = _evidence_bundle(novel)
-                st.dataframe(bundle, width="stretch")
-                st.download_button(
-                    "Download evidence bundle (CSV)",
-                    data=bundle.to_csv(index=False).encode("utf-8"),
-                    file_name="findings_evidence_bundle.csv",
-                    mime="text/csv",
-                )
+                try:
+                    bundle = _evidence_bundle(novel)
+                    st.dataframe(bundle, width="stretch")
+                    st.download_button(
+                        "Download evidence bundle (CSV)",
+                        data=bundle.to_csv(index=False).encode("utf-8"),
+                        file_name="findings_evidence_bundle.csv",
+                        mime="text/csv",
+                    )
+                except Exception as e:
+                    st.error("Evidence bundle needs embeddings and knowledge graph data. On Hugging Face or when `data/` or KG is missing, this step is not available. Run locally after a benchmark.")
 
             st.download_button(
                 "Download top novel links (CSV)",

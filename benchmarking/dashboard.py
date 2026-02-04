@@ -113,7 +113,7 @@ def _expander_for_term(key: str, title: str = None):
     """Render an expander explaining a glossary term."""
     if key not in GLOSSARY:
         return
-    with st.expander(title or f"📖 What is “{key.replace('_', ' ').title()}”?"):
+    with st.expander(title or f"What is “{key.replace('_', ' ').title()}”?"):
         st.markdown(GLOSSARY[key])
 
 # Paths
@@ -489,7 +489,21 @@ def run_user_script(script_content: str, timeout_sec: int):
 
 # Sidebar: Navigation
 st.sidebar.title("Navigation")
-with st.sidebar.expander("📖 Glossary (key terms)"):
+
+with st.sidebar.expander("How this dashboard works"):
+    st.markdown("""
+Tabs are ordered for a **first-time flow**:
+
+**Start** → **1. Overview** explains the project (link prediction on Hetionet).  
+**Get data** → **2. Run benchmarks** runs the pipeline (classical + quantum) or lets you upload/demo results.  
+**See results** → **3. Results** shows the latest run; **4. Live prediction** lets you query compound–disease pairs.  
+**Explore** → **5. Experiments** (all runs), **6. Comparison** (classical vs quantum), **7. Findings** (ranked hypotheses).  
+**Reference** → **8. Knowledge graph** (data inventory), **9. Hardware** (IBM Quantum status), **10. Run your code** (advanced).
+
+Use **Refresh data** below if you ran the pipeline outside the dashboard.
+""")
+
+with st.sidebar.expander("Glossary (key terms)"):
     for term_key in sorted(GLOSSARY.keys()):
         text = GLOSSARY[term_key]
         st.markdown(f"**{term_key.replace('_', ' ').title()}**")
@@ -500,26 +514,27 @@ if st.sidebar.button("Refresh data"):
     st.cache_resource.clear()
     st.rerun()
 
+# Order for new users: 1) What is this? 2) How to run 3) See results 4) Explore
 page = st.sidebar.radio(
     "Go to",
     [
-        "Overview (scientific summary)",
-        "Results (latest run)",
-        "Live prediction (interactive)",
-        "Experiments (history)",
-        "Comparison (classical vs quantum)",
-        "Knowledge graph (inventory)",
-        "Findings (ranked hypotheses)",
-        "Run benchmarks",
-        "Hardware readiness (backend status)",
-        "Run your code",
+        "1. Overview (what is this?)",
+        "2. Run benchmarks (get results)",
+        "3. Results (latest run)",
+        "4. Live prediction (interactive)",
+        "5. Experiments (history)",
+        "6. Comparison (classical vs quantum)",
+        "7. Findings (ranked hypotheses)",
+        "8. Knowledge graph (inventory)",
+        "9. Hardware readiness (backend status)",
+        "10. Run your code (advanced)",
     ]
 )
 
 # ==============================
 # PAGE 0: PROJECT STORY
 # ==============================
-if page == "Overview (scientific summary)":
+if page == "1. Overview (what is this?)":
     st.header("Overview: hybrid link prediction over the Hetionet biomedical knowledge graph")
 
     st.markdown("""
@@ -528,9 +543,9 @@ It predicts whether a given **Compound** is likely to **treat** a given **Diseas
 
 This is a research/prototyping system: it produces **ranking signals** and **benchmarks**, not clinical guidance.
 """)
-    _expander_for_term("link_prediction", "📖 What is link prediction?")
-    _expander_for_term("hetionet", "📖 What is Hetionet?")
-    _expander_for_term("ctd", "📖 What is CtD (Compound–treats–Disease)?")
+    _expander_for_term("link_prediction", "What is link prediction?")
+    _expander_for_term("hetionet", "What is Hetionet?")
+    _expander_for_term("ctd", "What is CtD (Compound–treats–Disease)?")
 
     st.subheader("Problem statement and task definition")
     st.caption("This defines *what* the pipeline optimizes for: predicting whether a given (compound, disease) pair is a known or plausible CtD link.")
@@ -545,10 +560,10 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 - **Classical**: **Embeddings** plus derived pairwise features (concatenation, difference, element-wise product).
 - **Quantum**: Reduced, quantum-ready vectors (size = number of **qubits**), used by **QSVC** / **VQC**.
 """)
-    _expander_for_term("embedding", "📖 What is an embedding?")
-    _expander_for_term("qubit", "📖 What is a qubit?")
-    _expander_for_term("qsvc", "📖 What is QSVC?")
-    _expander_for_term("vqc", "📖 What is VQC?")
+    _expander_for_term("embedding", "What is an embedding?")
+    _expander_for_term("qubit", "What is a qubit?")
+    _expander_for_term("qsvc", "What is QSVC?")
+    _expander_for_term("vqc", "What is VQC?")
 
     st.subheader("Implemented components (end-to-end)")
     st.caption("Artifacts and scripts that make up the pipeline; all are used by the **Run benchmarks** and **Live prediction** tabs.")
@@ -560,7 +575,7 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 """)
 
     st.subheader("Benchmarking context and current status")
-    with st.expander("📖 What do these fields mean?"):
+    with st.expander("What do these fields mean?"):
         st.markdown("""
         - **classical_pr_auc / quantum_pr_auc**: Link-prediction quality (higher = better ranking). PR-AUC is preferred for imbalanced data.
         - **execution_mode**: How the quantum circuit was run (e.g. simulator vs hardware).
@@ -600,8 +615,8 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 - **Ideal vs noisy**: shows sensitivity to noise model / backend.
 - **A single score is not evidence**: use the “Evidence” section in Live Prediction.
 """)
-    _expander_for_term("pr_auc", "📖 What is PR-AUC?")
-    _expander_for_term("ideal_vs_noisy", "📖 What does ideal vs noisy mean?")
+    _expander_for_term("pr_auc", "What is PR-AUC?")
+    _expander_for_term("ideal_vs_noisy", "What does ideal vs noisy mean?")
 
     st.subheader("Limitations and next steps")
     st.caption("Planned improvements for future work (not current bugs).")
@@ -614,7 +629,7 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 # ==============================
 # PAGE 1: RESULTS OVERVIEW
 # ==============================
-elif page == "Results (latest run)":
+elif page == "3. Results (latest run)":
     st.header("Results: latest run summary")
     st.caption("This tab summarizes the **most recent** benchmark run and compares classical vs quantum metrics. If you see no data, run a benchmark from the **Run benchmarks** tab (or upload results).")
 
@@ -654,7 +669,7 @@ elif page == "Results (latest run)":
                "Backend = where the quantum circuit runs; noise = whether we simulate real-device errors.")
 
     st.header("Model Performance Comparison")
-    with st.expander("📖 Understanding these metrics"):
+    with st.expander("Understanding these metrics"):
         st.markdown(GLOSSARY["pr_auc"])
         st.markdown("---")
         st.markdown(GLOSSARY["accuracy"])
@@ -792,7 +807,7 @@ elif page == "Results (latest run)":
 # ==============================
 # PAGE 2: LIVE PREDICTION
 # ==============================
-elif page == "Live prediction (interactive)":
+elif page == "4. Live prediction (interactive)":
     st.header("Live prediction: interactive scoring and candidate ranking")
     st.markdown("""
     Enter a **compound** (drug) and **disease** to get a **link prediction score**: how likely this pair is to be a “treats” link.
@@ -801,7 +816,7 @@ elif page == "Live prediction (interactive)":
 
     This is a research demo and does **not** provide clinical or synthesis guidance.
     """)
-    _expander_for_term("kernel_similarity", "📖 What is quantum kernel similarity?")
+    _expander_for_term("kernel_similarity", "What is quantum kernel similarity?")
     
     model, scaler, model_path, scaler_path = load_classical_artifacts()
     embeddings, entity_ids, emb_name = load_entity_embeddings()
@@ -872,7 +887,7 @@ elif page == "Live prediction (interactive)":
         )
         top_k = st.slider("Top-K candidates", min_value=5, max_value=50, value=15, step=5, help="How many top compounds (for this disease) and top diseases (for this compound) to show in the ranking tables after you predict.")
 
-        with st.expander("📋 What do the prediction flags do?"):
+        with st.expander("What do the prediction flags do?"):
             st.markdown("""
             | Flag | Effect | When it applies |
             |------|--------|-----------------|
@@ -923,7 +938,7 @@ elif page == "Live prediction (interactive)":
             st.caption("Using qubits and reps from latest run. Overrides above apply when you uncheck \"Use config from latest benchmark run\".")
 
         st.markdown("**Error mitigation (quantum only)**")
-        with st.expander("📋 What is error mitigation?", expanded=False):
+        with st.expander("What is error mitigation?", expanded=False):
             st.markdown("""
             - **Statevector**: Noiseless simulation (no shots, no mitigation). Fast; use for quick checks.
             - **Shot-based (ideal)**: Finite measurement shots, no noise model. Simulates sampling without device errors.
@@ -1304,7 +1319,7 @@ elif page == "Live prediction (interactive)":
 # ==============================
 # PAGE 3: EXPERIMENT HISTORY
 # ==============================
-elif page == "Experiments (history)":
+elif page == "5. Experiments (history)":
     st.header("Experiments: history of benchmarked runs")
     st.markdown("""
     This tab shows **all recorded benchmark runs**: PR-AUC over time, quantum vs classical deltas, kernel observables, and ideal vs noisy comparison.
@@ -1550,7 +1565,7 @@ elif page == "Experiments (history)":
 # ==============================
 # PAGE: MODEL COMPARISON
 # ==============================
-elif page == "Comparison (classical vs quantum)":
+elif page == "6. Comparison (classical vs quantum)":
     st.header("Model comparison: classical versus quantum (evidence from recorded runs)")
     st.markdown("""
     **In plain terms:** This page compares classical and quantum model performance across runs.
@@ -1722,14 +1737,14 @@ elif page == "Comparison (classical vs quantum)":
 # ==============================
 # PAGE: KG SUMMARY
 # ==============================
-elif page == "Knowledge graph (inventory)":
+elif page == "8. Knowledge graph (inventory)":
     st.header("Knowledge graph inventory: Hetionet")
     st.markdown("""
     **In plain terms:** A knowledge graph is a network of *things* (nodes) and *relationships* (edges).
     Here, nodes are drugs, diseases, genes, etc.; edges are typed (e.g. “treats”, “associates with”).
     **Metaedge** = the type of relationship (e.g. CtD = Compound treats Disease).
     """)
-    _expander_for_term("metaedge", "📖 What is a metaedge?")
+    _expander_for_term("metaedge", "What is a metaedge?")
     st.caption("This is the graph the pipeline trains on. Below: total edges, relation types, node types, and a sample of triples. Use this to understand the data scale and relation mix.")
 
     @st.cache_data(show_spinner=False)
@@ -1787,14 +1802,14 @@ elif page == "Knowledge graph (inventory)":
 # ==============================
 # PAGE: FINDINGS
 # ==============================
-elif page == "Findings (ranked hypotheses)":
+elif page == "7. Findings (ranked hypotheses)":
     st.header("Findings: ranked hypotheses from the latest model run")
     st.markdown("""
     **In plain terms:** The model scores every drug–disease pair. **Ranked hypotheses** = pairs ordered by that score (highest first).
     **Novel links** = high-scoring pairs that are *not* already in Hetionet—candidate “treats” links for validation.
     **y_score** = the model’s output (probability or kernel score) used for ranking.
     """)
-    with st.expander("📖 Column and term reference", expanded=False):
+    with st.expander("Column and term reference", expanded=False):
         st.markdown("""
         - **split**: train vs test (we show test-set predictions).
         - **source / target**: compound ID and disease ID (e.g. Compound::DB00123, Disease::DOID_1234).
@@ -1952,7 +1967,7 @@ elif page == "Findings (ranked hypotheses)":
 # ==============================
 # PAGE 4: RUN BENCHMARKS
 # ==============================
-elif page == "Run benchmarks":
+elif page == "2. Run benchmarks (get results)":
     st.header("Run benchmarks")
     st.markdown("""
     Run the link-prediction pipeline from the dashboard and write results to `results/`. 
@@ -1965,7 +1980,7 @@ elif page == "Run benchmarks":
     )
 
     # What is being tested — expandable reference
-    with st.expander("📋 What is being tested?", expanded=True):
+    with st.expander("What is being tested?", expanded=True):
         st.markdown("""
         | What you run | What the pipeline does | What gets measured |
         |--------------|------------------------|--------------------|
@@ -1978,7 +1993,7 @@ elif page == "Run benchmarks":
         st.markdown("**Relation** (e.g. CtD) is the link type being predicted. **Fast mode** reduces epochs and model search for quicker runs.")
         st.caption("Results are written to `results/latest_run.csv` and `results/experiment_history.csv`.")
 
-    with st.expander("🖥️ Terminal commands reference (run from project root)"):
+    with st.expander("Terminal commands reference (run from project root)"):
         st.markdown("**Run both classical and quantum (single run):**")
         st.code("python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results --fast_mode", language="bash")
         st.markdown("**Classical only:**")
@@ -2200,17 +2215,17 @@ python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results -
 # ==============================
 # PAGE 5: BACKEND STATUS
 # ==============================
-elif page == "Hardware readiness (backend status)":
+elif page == "9. Hardware readiness (backend status)":
     st.header("IBM Quantum backend status (access + queue)")
     st.markdown("""
     **In plain terms:** A **backend** is the machine (simulator or real quantum chip) that runs your circuits.
     This page checks whether IBM Quantum backends (e.g. Brisbane) are reachable with your token and shows **operational** status and **pending jobs** in the queue.
     """)
-    _expander_for_term("backend", "📖 What is a backend?")
+    _expander_for_term("backend", "What is a backend?")
     st.caption("Quick check: are IBM Quantum backends (e.g. ibm_brisbane) reachable with your credentials?")
 
     st.subheader("Credentials")
-    with st.expander("🔒 Security: how your API key is handled", expanded=True):
+    with st.expander("Security: how your API key is handled", expanded=True):
         st.markdown("""
         - **Never stored:** Your API key is not written to disk, session state, or any database.
         - **Never logged:** The key is never sent to logs or error messages (we redact it if anything goes wrong).
@@ -2312,7 +2327,7 @@ elif page == "Hardware readiness (backend status)":
 # ==============================
 # PAGE: RUN YOUR CODE
 # ==============================
-elif page == "Run your code":
+elif page == "10. Run your code (advanced)":
     st.header("Upload & run your code")
     st.markdown("""
     Upload a **Python script** (or paste code) and run it here. Your code runs in a subprocess with the **project root** as the working directory,
@@ -2324,7 +2339,7 @@ elif page == "Run your code":
         "On shared or hosted environments, avoid secrets and long-running or resource-heavy jobs."
     )
 
-    with st.expander("📋 What can I do?", expanded=False):
+    with st.expander("What can I do?", expanded=False):
         st.markdown("""
         - **Working directory:** Your script runs with `cwd` = project root (same as **Run benchmarks**).
         - **Imports:** You can `import kg_layer`, `quantum_layer`, and use `data/`, `results/`, `config/` paths.

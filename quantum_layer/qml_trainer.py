@@ -95,8 +95,38 @@ class QMLTrainer:
         logger.info(f"Evaluating {model_name} model...")
 
         # Predictions
-        y_pred = model.predict(X_test)
-        y_proba = model.predict_proba(X_test)[:, 1]  # Probability of positive class
+        # NOTE: ClassicalLinkPredictor trains with a StandardScaler. If we pass only its underlying sklearn
+        # estimator (or evaluate on unscaled features), metrics can become inconsistent or meaningless.
+        X_eval = X_test
+        base_model = model
+        scaler = getattr(model, "scaler", None)
+        if hasattr(model, "model") and getattr(model, "model") is not None:
+            base_model = getattr(model, "model")
+            scaler = getattr(model, "scaler", scaler)
+        if scaler is not None:
+            try:
+                X_eval = scaler.transform(X_test)
+            except Exception:
+                X_eval = X_test
+
+        # scores
+        y_proba = None
+        if hasattr(base_model, "predict_proba"):
+            try:
+                y_proba = base_model.predict_proba(X_eval)[:, 1]
+            except Exception:
+                y_proba = None
+        if y_proba is None and hasattr(base_model, "decision_function"):
+            y_proba = base_model.decision_function(X_eval)
+        if y_proba is None:
+            y_proba = base_model.predict(X_eval)
+
+        # predicted labels (use 0.5 when scores look like probabilities, else 0 threshold)
+        y_proba_arr = np.asarray(y_proba)
+        if np.nanmin(y_proba_arr) >= 0.0 and np.nanmax(y_proba_arr) <= 1.0:
+            y_pred = (y_proba_arr >= 0.5).astype(int)
+        else:
+            y_pred = (y_proba_arr >= 0.0).astype(int)
 
         # Core metrics
         acc = accuracy_score(y_test, y_pred)
@@ -106,11 +136,11 @@ class QMLTrainer:
 
         # AUC metrics
         try:
-            roc_auc = roc_auc_score(y_test, y_proba)
+            roc_auc = roc_auc_score(y_test, y_proba_arr)
         except ValueError:
             roc_auc = float('nan')
 
-        pr_auc = average_precision_score(y_test, y_proba)
+        pr_auc = average_precision_score(y_test, y_proba_arr)
 
         # Parameter count
         n_params = self.count_trainable_parameters(model)
@@ -236,13 +266,62 @@ class QMLTrainer:
 
         # Train classical baseline
         logger.info("Training classical baseline...")
+        # Ensure string entity IDs exist for proper embedding lookup
+        # This prevents the bug where negatives with only integer IDs get identical embeddings
+        def _ensure_string_entity_ids(df: pd.DataFrame, embedder) -> pd.DataFrame:
+            """Add string entity ID columns if missing."""
+            if df is None or df.empty:
+                return df
+
+            needs_copy = False
+            result = df
+            id_map = getattr(embedder, "id_to_entity", {}) or {}
+            added_source = 0
+            added_target = 0
+
+            # Check if we need to add 'source' column
+            if "source" not in df.columns and "source_id" in df.columns:
+                if not needs_copy:
+                    result = df.copy()
+                    needs_copy = True
+                result["source"] = result["source_id"].map(
+                    lambda x: id_map.get(int(x), f"Entity::{x}") if pd.notna(x) else None
+                )
+                added_source = int(result["source"].notna().sum())
+
+            # Check if we need to add 'target' column
+            if "target" not in df.columns and "target_id" in df.columns:
+                if not needs_copy:
+                    result = df.copy()
+                    needs_copy = True
+                result["target"] = result["target_id"].map(
+                    lambda x: id_map.get(int(x), f"Entity::{x}") if pd.notna(x) else None
+                )
+                added_target = int(result["target"].notna().sum())
+
+            if added_source or added_target:
+                try:
+                    logger.debug(
+                        "Added string entity IDs via embedder.id_to_entity: source=%s target=%s",
+                        added_source,
+                        added_target,
+                    )
+                except Exception:
+                    pass
+
+            return result
+
+        # Apply fix to prevent all negatives getting identical embeddings
+        train_df_fixed = _ensure_string_entity_ids(train_df, embedder)
+        test_df_fixed = _ensure_string_entity_ids(test_df, embedder) if test_df is not None else None
+
         classical_predictor = ClassicalLinkPredictor(
             model_type=classical_model_type,
             random_state=self.random_state
         )
-        classical_predictor.train(train_df, embedder, test_df)
+        classical_predictor.train(train_df_fixed, embedder, test_df_fixed)
         classical_metrics = self.evaluate_model(
-            classical_predictor.model, X_test_classical, y_test, "Classical"
+            classical_predictor, X_test_classical, y_test, "Classical"
         )
 
         # Train QML model
@@ -263,6 +342,29 @@ class QMLTrainer:
             args = type('Args', (), args_dict)()
             # For logging, use logger - use QML features for quantum model
             svc, K_train, K_test, kernel_obs = qsvc_with_precomputed_kernel(X_train_qml, y_train, X_test_qml, y_test, args, logger)
+            # Attach dataset-size evidence for dashboard interpretation (why PR-AUC can look "low" on tiny runs)
+            try:
+                ytr = np.asarray(y_train).astype(int)
+                yte = np.asarray(y_test).astype(int)
+                data_obs = {
+                    "data_train_n": int(len(ytr)),
+                    "data_train_pos": int(ytr.sum()),
+                    "data_train_pos_rate": float(ytr.mean()) if len(ytr) else float("nan"),
+                    "data_test_n": int(len(yte)),
+                    "data_test_pos": int(yte.sum()),
+                    "data_test_pos_rate": float(yte.mean()) if len(yte) else float("nan"),
+                }
+                # total positive edges after split = number of original positive task edges (since we add negatives separately)
+                try:
+                    data_obs["data_pos_edges_total"] = int(train_df["label"].sum() + test_df["label"].sum())
+                except Exception:
+                    pass
+                if isinstance(kernel_obs, dict):
+                    kernel_obs.update(data_obs)
+                else:
+                    kernel_obs = data_obs
+            except Exception:
+                pass
             # Compute metrics using svc, y_train/y_test, K_train/K_test
             def _metrics_precomputed(K, y, split, svc):
                 y_pred = svc.predict(K)

@@ -16,9 +16,13 @@ logger = logging.getLogger(__name__)
 METAEDGES = {
     'CtD': 'Compound treats Disease',
     'CpD': 'Compound palliates Disease',
+    'PCiC': 'Pharmacologic Class includes Compound',
     'DaG': 'Disease associates Gene',
     'DdG': 'Disease downregulates Gene',
     'DuG': 'Disease upregulates Gene',
+    'DpS': 'Disease presents Symptom',
+    'DrD': 'Disease resembles Disease',
+    'DlA': 'Disease localizes Anatomy',
     'GiG': 'Gene interacts Gene',
     'Gr>G': 'Gene expresses Gene',
     'GcG': 'Gene catalyzes Gene',
@@ -35,9 +39,6 @@ METAEDGES = {
     'CrC': 'Compound resembles Compound',
     'CcSE': 'Compound causes Side Effect',
     'CpC': 'Compound palliates Compound',
-    'DrD': 'Disease resembles Disease',
-    'DlA': 'Disease localizes Anatomy',
-    'N1': 'Node type 1',  # placeholder; full list in Hetionet docs
 }
 
 def load_kg_config(config_path: str = "config/kg_layer_config.yaml") -> Dict:
@@ -252,7 +253,9 @@ def get_negative_samples(
     num_negatives: Optional[int] = None,
     random_state: Optional[int] = None,
     config_path: Optional[str] = None,
-    config: Optional[Dict] = None
+    config: Optional[Dict] = None,
+    strategy: str = "random",
+    diversity_weight: float = 0.5,
 ) -> pd.DataFrame:
     """
     Generate negative samples (non-existing links) for training.
@@ -291,27 +294,60 @@ def get_negative_samples(
     unique_targets = task_edges["target_id"].unique()
 
     import numpy as np
-    np.random.seed(random_state)
+    rng = np.random.default_rng(int(random_state))
+
+    # degree-based sampling for "hard" mode
+    src_deg = task_edges["source_id"].value_counts().to_dict()
+    tgt_deg = task_edges["target_id"].value_counts().to_dict()
+    src_ids = np.array(list(src_deg.keys()), dtype=int)
+    tgt_ids = np.array(list(tgt_deg.keys()), dtype=int)
+    src_p = np.array([src_deg[int(i)] for i in src_ids], dtype=float)
+    tgt_p = np.array([tgt_deg[int(i)] for i in tgt_ids], dtype=float)
+    src_p = src_p / max(1e-9, src_p.sum())
+    tgt_p = tgt_p / max(1e-9, tgt_p.sum())
+
+    pos_pairs = list(existing_pairs)
+    rng.shuffle(pos_pairs)
+
+    def _random_pair() -> tuple[int, int]:
+        s = int(rng.choice(unique_sources))
+        t = int(rng.choice(unique_targets))
+        return s, t
+
+    def _hard_pair() -> tuple[int, int]:
+        s_pos, t_pos = pos_pairs[rng.integers(0, max(1, len(pos_pairs)))]
+        if bool(rng.random() < 0.5):
+            # corrupt tail (keep head)
+            return int(s_pos), int(rng.choice(tgt_ids, p=tgt_p))
+        # corrupt head (keep tail)
+        return int(rng.choice(src_ids, p=src_p)), int(t_pos)
+
+    strat = str(strategy or "random").lower().strip()
+    w = float(diversity_weight)
+    w = min(1.0, max(0.0, w))
 
     neg_sources = []
     neg_targets = []
     attempts = 0
-    max_attempts = num_negatives * 10
+    max_attempts = max(2000, int(num_negatives) * 40)
+    seen = set()
 
-    while len(neg_sources) < num_negatives and attempts < max_attempts:
-        s = np.random.choice(unique_sources)
-        t = np.random.choice(unique_targets)
-        if (s, t) not in existing_pairs and (s, t) not in zip(neg_sources, neg_targets):
+    while len(neg_sources) < int(num_negatives) and attempts < max_attempts:
+        if strat == "hard":
+            s, t = _hard_pair()
+        elif strat == "diverse":
+            s, t = _random_pair() if (rng.random() < w) else _hard_pair()
+        else:
+            s, t = _random_pair()
+
+        if (s, t) not in existing_pairs and (s, t) not in seen:
             neg_sources.append(s)
             neg_targets.append(t)
+            seen.add((s, t))
         attempts += 1
 
-    logger.info(f"Generated {len(neg_sources)} negative samples.")
-    return pd.DataFrame({
-        "source_id": neg_sources,
-        "target_id": neg_targets,
-        "label": 0
-    })
+    logger.info(f"Generated {len(neg_sources)} negative samples (strategy={strat}, target={num_negatives}).")
+    return pd.DataFrame({"source_id": neg_sources, "target_id": neg_targets, "label": 0})
 
 def prepare_link_prediction_dataset(
     task_edges: pd.DataFrame,

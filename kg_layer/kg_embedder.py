@@ -50,9 +50,23 @@ def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
     tail_aliases = ("target", "target_id", "tail", "tail_id", "t", "dst", "dst_id", "v")
     rel_aliases  = ("metaedge", "relation", "rel", "r", "predicate", "edge_type")
 
-    h_col = next((cols[a] for a in head_aliases if a in cols), None)
-    t_col = next((cols[a] for a in tail_aliases if a in cols), None)
-    if h_col and t_col:
+    h_candidates = [(a, cols[a]) for a in head_aliases if a in cols]
+    t_candidates = [(a, cols[a]) for a in tail_aliases if a in cols]
+    if h_candidates and t_candidates:
+        def _prefer_string_col(candidates: list[tuple[str, str]]) -> str:
+            for _, col in candidates:
+                if len(df) == 0:
+                    continue
+                series = df[col].dropna()
+                if series.empty:
+                    continue
+                sample_val = series.iloc[0]
+                if isinstance(sample_val, str) and "::" in str(sample_val):
+                    return col
+            return candidates[0][1]
+
+        h_col = _prefer_string_col(h_candidates)
+        t_col = _prefer_string_col(t_candidates)
         r_col = next((cols[a] for a in rel_aliases if a in cols), None)
         return h_col, r_col, t_col
 
@@ -383,13 +397,46 @@ class HetionetEmbedder:
         """
         h_col, _, t_col = _infer_ht_columns(link_df)
         feats = []
+        missing_heads = 0
+        missing_tails = 0
         for h, t in zip(link_df[h_col].astype(str).values, link_df[t_col].astype(str).values):
+            # Track missing entities
+            if h not in self.entity_to_id:
+                missing_heads += 1
+            if t not in self.entity_to_id:
+                missing_tails += 1
+
             hv = self._get_vec(h, reduced=reduced)
             tv = self._get_vec(t, reduced=reduced)
             diff = np.abs(hv - tv)
             had = hv * tv
             feats.append(np.concatenate([hv, tv, diff, had], axis=0))
         X = np.stack(feats, axis=0)
+
+        # Validation: warn if too many entities are missing
+        n_samples = len(link_df)
+        if n_samples > 0:
+            missing_head_pct = missing_heads / n_samples * 100
+            missing_tail_pct = missing_tails / n_samples * 100
+
+            if missing_head_pct > 10 or missing_tail_pct > 10:
+                logger.warning(
+                    "⚠️  HIGH MISSING ENTITY RATE detected in prepare_link_features:\n"
+                    f"   Missing heads: {missing_heads}/{n_samples} ({missing_head_pct:.1f}%)\n"
+                    f"   Missing tails: {missing_tails}/{n_samples} ({missing_tail_pct:.1f}%)\n"
+                    "   This may indicate a column mismatch (source vs source_id).\n"
+                    "   Check that DataFrame has correct string entity ID columns."
+                )
+
+            # Critical error if ALL are missing (indicates definite bug)
+            if missing_head_pct > 90 or missing_tail_pct > 90:
+                logger.error(
+                    "❌ CRITICAL: Almost all entities missing! "
+                    f"Heads: {missing_head_pct:.1f}%, Tails: {missing_tail_pct:.1f}%. "
+                    "Likely cause: DataFrame has integer IDs but string IDs expected. "
+                    f"Sample head values: {link_df[h_col].head(3).tolist()}"
+                )
+
         return X
 
     def prepare_link_features_qml(self, link_df: pd.DataFrame, mode: str = "diff") -> np.ndarray:

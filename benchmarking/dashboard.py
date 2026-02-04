@@ -116,12 +116,12 @@ def _expander_for_term(key: str, title: str = None):
     with st.expander(title or f"What is “{key.replace('_', ' ').title()}”?"):
         st.markdown(GLOSSARY[key])
 
-# Paths
-RESULTS_DIR = Path("results")
+# Paths (use PROJECT_ROOT so app works when run from HF Spaces or any cwd)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RESULTS_DIR = PROJECT_ROOT / "results"
 LATEST_RUN = RESULTS_DIR / "latest_run.csv"
 HISTORY_FILE = RESULTS_DIR / "experiment_history.csv"
-SCALING_PLOT = Path("docs/scaling_projection.png")
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SCALING_PLOT = PROJECT_ROOT / "docs" / "scaling_projection.png"
 
 # Ensure local project modules (kg_layer/, quantum_layer/, etc.) are importable in Streamlit
 if str(PROJECT_ROOT) not in sys.path:

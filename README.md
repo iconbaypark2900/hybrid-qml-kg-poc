@@ -1,6 +1,6 @@
 ---
 title: Hybrid QML-KG Dashboard
-app_file: app.py
+app_file: benchmarking/dashboard.py
 sdk: streamlit
 sdk_version: "1.32.0"
 ---

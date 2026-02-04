@@ -118,17 +118,33 @@ def _expander_for_term(key: str, title: str = None):
 
 # Paths (use PROJECT_ROOT so app works when run from HF Spaces or any cwd)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RESULTS_DIR = PROJECT_ROOT / "results"
+SCALING_PLOT = PROJECT_ROOT / "docs" / "scaling_projection.png"
+
+
+def _get_results_dir():
+    """Use a writable results dir. On HF Spaces the repo is read-only, so use /tmp."""
+    preferred = PROJECT_ROOT / "results"
+    try:
+        preferred.mkdir(parents=True, exist_ok=True)
+        (preferred / ".write_check").write_text("")
+        (preferred / ".write_check").unlink()
+        return preferred
+    except (OSError, PermissionError):
+        tmp = Path(tempfile.gettempdir()) / "hybrid_qml_kg_results"
+        tmp.mkdir(parents=True, exist_ok=True)
+        return tmp
+
+
+RESULTS_DIR = _get_results_dir()
 LATEST_RUN = RESULTS_DIR / "latest_run.csv"
 HISTORY_FILE = RESULTS_DIR / "experiment_history.csv"
-SCALING_PLOT = PROJECT_ROOT / "docs" / "scaling_projection.png"
 
 # Ensure local project modules (kg_layer/, quantum_layer/, etc.) are importable in Streamlit
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Load latest results
-@st.cache_data
+# Load latest results (ttl=60 so Overview/Results charts update after new runs without requiring Refresh)
+@st.cache_data(ttl=60)
 def load_latest_results():
     """
     Loads the latest results from a CSV file.
@@ -142,7 +158,7 @@ def load_latest_results():
         return pd.read_csv(LATEST_RUN)
     return None
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_history():
     """
     Loads the experiment history from a CSV file.
@@ -155,6 +171,78 @@ def load_history():
     if HISTORY_FILE.exists():
         return pd.read_csv(HISTORY_FILE)
     return None
+
+
+def load_optimized_results():
+    """
+    Loads the latest optimized_results_*.json (full ranking: LogisticRegression, RF, Ensemble, QSVC, Hybrid).
+    Returns dict with keys ranking, classical_results, quantum_results, config, timestamp or None.
+    Not cached so the Results tab always shows the latest run (pipeline may write to RESULTS_DIR or project results/).
+    """
+    def _debug_log(msg, data):
+        for _path in [Path("/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/.cursor/debug.log"), RESULTS_DIR / "debug.log"]:
+            try:
+                _path.parent.mkdir(parents=True, exist_ok=True)
+                open(_path, "a").write(json.dumps({"location": msg.get("location", ""), "message": msg.get("message", ""), "data": data, "timestamp": time.time(), **{k: v for k, v in msg.items() if k in ("hypothesisId", "hypothesisId2")}}) + "\n")
+                break
+            except Exception:
+                continue
+    try:
+        dirs_to_scan = [RESULTS_DIR]
+        if (PROJECT_ROOT / "results").resolve() != RESULTS_DIR.resolve():
+            dirs_to_scan.append(PROJECT_ROOT / "results")
+        # #region agent log
+        _debug_log({"hypothesisId": "H1", "location": "load_optimized_results:entry", "message": "dirs_to_scan"}, {"results_dir": str(RESULTS_DIR), "dirs": [str(d) for d in dirs_to_scan]})
+        # #endregion
+        files = []
+        for d in dirs_to_scan:
+            if d.exists():
+                files.extend(d.glob("optimized_results_*.json"))
+        # #region agent log
+        _debug_log({"hypothesisId": "H1", "hypothesisId2": "H2", "location": "load_optimized_results:files", "message": "files_found"}, {"count": len(files), "paths": [str(p) for p in files[:5]]})
+        # #endregion
+        if not files:
+            return None
+        latest = max(files, key=lambda p: p.stat().st_mtime)
+        with open(latest, "r") as f:
+            out = json.load(f)
+        ranking = out.get("ranking") or []
+        # Fallback: build ranking from classical_results + quantum_results if missing or empty
+        if not ranking and ("classical_results" in out or "quantum_results" in out):
+            ranking = []
+            for name, res in (out.get("classical_results") or {}).items():
+                if isinstance(res, dict) and res.get("status") == "success":
+                    tm = res.get("test_metrics") or {}
+                    ranking.append({
+                        "name": name,
+                        "type": "classical",
+                        "pr_auc": tm.get("pr_auc", 0.0),
+                        "accuracy": tm.get("accuracy", 0.0),
+                        "fit_time": res.get("fit_seconds", 0.0),
+                    })
+            for name, res in (out.get("quantum_results") or {}).items():
+                if isinstance(res, dict) and res.get("status") == "success":
+                    tm = res.get("test_metrics") or {}
+                    ranking.append({
+                        "name": name,
+                        "type": "quantum",
+                        "pr_auc": tm.get("pr_auc", 0.0),
+                        "accuracy": tm.get("accuracy", 0.0),
+                        "fit_time": res.get("fit_seconds", 0.0),
+                    })
+            ranking.sort(key=lambda x: x.get("pr_auc", 0.0), reverse=True)
+            out = dict(out)
+            out["ranking"] = ranking
+        # #region agent log
+        _debug_log({"hypothesisId": "H3", "location": "load_optimized_results:success", "message": "loaded"}, {"file": str(latest), "keys": list(out.keys()), "ranking_len": len(ranking)})
+        # #endregion
+        return out
+    except Exception as e:
+        # #region agent log
+        _debug_log({"hypothesisId": "H5", "location": "load_optimized_results:exception", "message": "exception"}, {"type": type(e).__name__, "msg": str(e)})
+        # #endregion
+        return None
+
 
 df_latest = load_latest_results()
 df_history = load_history()
@@ -491,17 +579,26 @@ def run_user_script(script_content: str, timeout_sec: int):
 st.sidebar.title("Navigation")
 
 with st.sidebar.expander("How this dashboard works"):
+    st.markdown("**Recommended workflow**")
     st.markdown("""
-Tabs are ordered for a **first-time flow**:
-
-**Start** → **1. Overview** explains the project (link prediction on Hetionet).  
-**Get data** → **2. Run benchmarks** runs the pipeline (classical + quantum) or lets you upload/demo results.  
-**See results** → **3. Results** shows the latest run; **4. Live prediction** lets you query compound–disease pairs.  
-**Explore** → **5. Experiments** (all runs), **6. Comparison** (classical vs quantum), **7. Findings** (ranked hypotheses).  
-**Reference** → **8. Knowledge graph** (data inventory), **9. Hardware** (IBM Quantum status), **10. Run your code** (advanced).
-
-Use **Refresh data** below if you ran the pipeline outside the dashboard.
+1. **1. Overview** — Read what the project does (link prediction on Hetionet). No buttons.
+2. **2. Run benchmarks** — Get data: run the pipeline, **Generate demo results**, or **Upload** CSV. Toggle **Classical only** / **Quantum only** if you want a subset. Then click **Run** (or **Run ideal then noisy**).
+3. **3. Results** — View the latest run: full model ranking table and **Metrics by model** for every model. Use **Refresh full model ranking** to reload; use **Refresh data** (below) so charts and numbers update after a new run.
+4. **4. Live prediction** — Pick **Classical** or **Quantum kernel similarity**; enter compound and disease; optionally check **Use config from latest run**. Click **Score this pair** or **Rank candidates**.
+5. **5. Experiments** — Browse history: set **Max rows**, **Hide quantum=0** if needed; use **Download filtered history (CSV)** to export.
+6. **6. Comparison** — Classical vs quantum across runs: adjust **Bootstrap seed** / **Bootstrap samples** and sliders under **Cost-aware recommendation**.
+7. **7. Findings** — Inspect top predicted links and **Generate evidence bundle**.
+8. **8–10** — Knowledge graph inventory, Hardware status, Run your code (advanced).
 """)
+    st.markdown("**Buttons and toggles**")
+    st.markdown("""
+- **Refresh data** (sidebar, below): Clears cache and reloads all results/charts. Use after running a benchmark or uploading so Overview and Results show the latest numbers.
+- **Refresh full model ranking** (Results tab): Reloads the all-models table from `optimized_results_*.json`.
+- **Run benchmarks**: **Generate demo results** = instant sample data; **Upload** = use your own `latest_run.csv` / `experiment_history.csv`. **Run** = start pipeline (needs torch, pykeen, qiskit).
+- **Live prediction**: **Use config from latest run** = use qubits/reps/feature map from last benchmark; uncheck to set **Qubits**, **Feature map reps**, **Feature map**, **Entanglement** yourself.
+""")
+    st.markdown("**Data**")
+    st.caption("Results and charts are cached (refreshed every 60s). Click **Refresh data** to see new runs immediately.")
 
 with st.sidebar.expander("Glossary (key terms)"):
     for term_key in sorted(GLOSSARY.keys()):
@@ -536,6 +633,8 @@ page = st.sidebar.radio(
 # ==============================
 if page == "1. Overview (what is this?)":
     st.header("Overview: hybrid link prediction over the Hetionet biomedical knowledge graph")
+
+    st.info("**New here?** Open **How this dashboard works** in the sidebar (above the tab list) for a step-by-step workflow, which buttons to use, and when to refresh results.")
 
     st.markdown("""
 This project is a **hybrid quantum–classical link prediction** pipeline over the **Hetionet** biomedical knowledge graph.
@@ -575,6 +674,7 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 """)
 
     st.subheader("Benchmarking context and current status")
+    st.caption("Data is cached 60s. After running a benchmark, click **Refresh data** in the sidebar to update Overview and Results.")
     with st.expander("What do these fields mean?"):
         st.markdown("""
         - **classical_pr_auc / quantum_pr_auc**: Link-prediction quality (higher = better ranking). PR-AUC is preferred for imbalanced data.
@@ -631,7 +731,7 @@ This is a research/prototyping system: it produces **ranking signals** and **ben
 # ==============================
 elif page == "3. Results (latest run)":
     st.header("Results: latest run summary")
-    st.caption("This tab summarizes the **most recent** benchmark run and compares classical vs quantum metrics. If you see no data, run a benchmark from the **Run benchmarks** tab (or upload results).")
+    st.caption("This tab summarizes the **most recent** benchmark run and compares classical vs quantum metrics. If you see no data, run a benchmark from the **Run benchmarks** tab (or upload results). Data is cached for 60s—use **Refresh data** in the sidebar to see new runs immediately.")
 
     st.markdown("""
 **What was built**
@@ -647,6 +747,9 @@ elif page == "3. Results (latest run)":
 - Ideal vs noisy simulator runs with side-by-side comparisons
 """)
 
+    # Load full run once for snapshot and later for ranking table
+    opt = load_optimized_results()
+
     st.subheader("Latest run snapshot")
     st.caption(
         "**QML Model**: quantum algorithm (QSVC or VQC). **Qubits**: feature-map width. "
@@ -659,6 +762,10 @@ elif page == "3. Results (latest run)":
     exec_mode = safe_get(df_latest, "execution_mode", "N/A")
     noise_model = safe_get(df_latest, "noise_model", "N/A")
     backend_label = safe_get(df_latest, "backend_label", "N/A")
+    if pd.isna(noise_model) or noise_model == "" or str(noise_model).lower() == "nan":
+        noise_model = "N/A"
+    if pd.isna(backend_label) or backend_label == "" or str(backend_label).lower() == "nan":
+        backend_label = "N/A"
 
     run_cols[0].metric("QML Model", qml_model_type)
     run_cols[1].metric("Qubits", qml_num_qubits)
@@ -668,6 +775,23 @@ elif page == "3. Results (latest run)":
     st.caption(f"**Backend:** {backend_label} · **Noise:** {noise_model}. "
                "Backend = where the quantum circuit runs; noise = whether we simulate real-device errors.")
 
+    # Show full run: all classical, hybrid, and quantum models when we have full ranking
+    if opt and opt.get("ranking"):
+        ranking_list = opt["ranking"]
+        classical_names = [r.get("name") for r in ranking_list if r.get("type") == "classical"]
+        # Pipeline labels Hybrid as type "quantum"; treat name containing "Hybrid" as hybrid for display
+        hybrid_names = [r.get("name") for r in ranking_list if "Hybrid" in (r.get("name") or "")]
+        quantum_names = [r.get("name") for r in ranking_list if r.get("type") == "quantum" and r.get("name") not in hybrid_names]
+        parts = []
+        if classical_names:
+            parts.append(f"**Classical:** {', '.join(classical_names)}")
+        if quantum_names:
+            parts.append(f"**Quantum:** {', '.join(quantum_names)}")
+        if hybrid_names:
+            parts.append(f"**Hybrid:** {', '.join(hybrid_names)}")
+        if parts:
+            st.markdown("**Models in this run:** " + "  |  ".join(parts))
+
     st.header("Model Performance Comparison")
     with st.expander("Understanding these metrics"):
         st.markdown(GLOSSARY["pr_auc"])
@@ -675,9 +799,79 @@ elif page == "3. Results (latest run)":
         st.markdown(GLOSSARY["accuracy"])
         st.markdown("---")
         st.markdown(GLOSSARY["parameters"])
-    
+
+    # Full model ranking (from optimized_results_*.json when pipeline ran classical + quantum; opt already loaded above)
+    if st.button("Refresh full model ranking", key="refresh_optimized_results"):
+        st.rerun()
+    # #region agent log
+    try:
+        _lp = Path("/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/.cursor/debug.log")
+        open(_lp, "a").write(json.dumps({"hypothesisId": "H3", "hypothesisId2": "H4", "location": "Results_tab:after_load", "message": "opt_state", "data": {"opt_is_none": opt is None, "ranking_len": len(opt.get("ranking", [])) if opt else 0}, "timestamp": time.time()}) + "\n")
+    except Exception:
+        pass
+    # #endregion
+    if opt and opt.get("ranking"):
+        st.subheader("Full model ranking (latest run)")
+        st.caption("All models from the last benchmark run. Same order as the pipeline terminal output.")
+        rank_df = pd.DataFrame(opt["ranking"])
+        # Prefer fit_time; fallback to fit_seconds (some payloads use either)
+        if "fit_time" not in rank_df.columns and "fit_seconds" in rank_df.columns:
+            rank_df = rank_df.copy()
+            rank_df["fit_time"] = rank_df["fit_seconds"]
+        cols = [c for c in ["name", "type", "pr_auc", "accuracy", "fit_time"] if c in rank_df.columns]
+        if cols:
+            display_df = rank_df[cols].copy()
+            display_df = display_df.rename(columns={"name": "Model", "type": "Type", "pr_auc": "PR-AUC", "accuracy": "Accuracy", "fit_time": "Time (s)"})
+            # Highlight numbers for audience: format decimals and color PR-AUC/Accuracy (higher = better)
+            format_map = {c: "{:.4f}" for c in ["PR-AUC", "Accuracy"] if c in display_df.columns}
+            if "Time (s)" in display_df.columns:
+                format_map["Time (s)"] = "{:.2f}"
+            styled = display_df.style.format(format_map, na_rep="—")
+            if "PR-AUC" in display_df.columns:
+                styled = styled.background_gradient(subset=["PR-AUC"], cmap="RdYlGn", vmin=0, vmax=1)
+            if "Accuracy" in display_df.columns:
+                styled = styled.background_gradient(subset=["Accuracy"], cmap="RdYlGn", vmin=0, vmax=1)
+            st.dataframe(styled, use_container_width=True)
+        best = opt.get("ranking", [])
+        if best:
+            best_overall = best[0]
+            best_classical = next((r for r in best if r.get("type") == "classical"), best[0])
+            best_quantum = next((r for r in best if r.get("type") == "quantum"), None)
+            st.caption(
+                f"**Best overall:** {best_overall.get('name', 'N/A')} — PR-AUC {best_overall.get('pr_auc', 0):.4f}  |  "
+                f"**Best classical:** {best_classical.get('name', 'N/A')} — PR-AUC {best_classical.get('pr_auc', 0):.4f}"
+                + (f"  |  **Best quantum:** {best_quantum.get('name', 'N/A')} — PR-AUC {best_quantum.get('pr_auc', 0):.4f}" if best_quantum else "")
+            )
+        if opt.get("timestamp"):
+            st.caption(f"Run timestamp: {opt['timestamp']}")
+        # Metrics by model: show PR-AUC, Accuracy, Time (s) for every model (not just classical/quantum buckets)
+        st.subheader("Metrics by model")
+        st.caption("PR-AUC, Accuracy, and Time for each model from the latest run. All models are shown so the audience can compare any model.")
+        ranking_list = opt.get("ranking", [])
+        n_models = len(ranking_list)
+        if n_models > 0:
+            n_cols = 3  # 3 columns, multiple rows so each model gets space
+            for start in range(0, n_models, n_cols):
+                chunk = ranking_list[start : start + n_cols]
+                cols = st.columns(len(chunk))
+                for idx, r in enumerate(chunk):
+                    with cols[idx]:
+                        name = r.get("name", "—")
+                        pr_auc = r.get("pr_auc")
+                        acc = r.get("accuracy")
+                        fit_t = r.get("fit_time", r.get("fit_seconds"))
+                        st.markdown(f"**{name}**")
+                        st.metric("PR-AUC", f"{pr_auc:.4f}" if pr_auc is not None and not pd.isna(pr_auc) else "—", None)
+                        st.metric("Accuracy", f"{acc:.4f}" if acc is not None and not pd.isna(acc) else "—", None)
+                        st.metric("Time (s)", f"{fit_t:.2f}" if fit_t is not None and not pd.isna(fit_t) else "—", None)
+                        st.markdown("---")
+        st.markdown("---")
+    else:
+        st.caption("_Full model ranking (all 6 models) appears here after you run a benchmark with **Run benchmarks** (classical + quantum). The pipeline writes `optimized_results_*.json`; if you ran locally, upload that run's results or run from the dashboard._")
+        st.markdown("---")
+
     if df_latest is not None:
-        # Extract metrics
+        # Extract metrics (single classical / single quantum from latest_run.csv; kept for when no full ranking)
         classical_pr_auc = df_latest['classical_pr_auc'].iloc[0]
         quantum_pr_auc = df_latest['quantum_pr_auc'].iloc[0]
         classical_params = df_latest['classical_num_parameters'].iloc[0]
@@ -685,7 +879,10 @@ elif page == "3. Results (latest run)":
         classical_acc = df_latest['classical_accuracy'].iloc[0]
         quantum_acc = df_latest['quantum_accuracy'].iloc[0]
         
-        # Metrics display
+        # Show aggregate classical/quantum metrics only when we don't already show full per-model metrics above
+        if not (opt and opt.get("ranking")):
+            st.subheader("Latest run metrics (classical vs quantum)")
+            st.caption("Single representative classical and quantum model from `latest_run.csv`. For all models, run a full benchmark to see the **Full model ranking** and **Metrics by model** above.")
         col1, col2, col3 = st.columns(3)
         
         with col1:
@@ -1231,6 +1428,7 @@ elif page == "4. Live prediction (interactive)":
                         ax.set_xlabel("Dimension index")
                         ax.set_ylabel("Embedding value")
                         st.pyplot(fig)
+                        plt.close(fig)
                     with col2:
                         st.caption(f"Reduced (PCA) vector – {qml_dim} dims (used by QML + classical features)")
                         fig2, ax2 = plt.subplots(figsize=(6, 3))
@@ -1238,6 +1436,7 @@ elif page == "4. Live prediction (interactive)":
                         ax2.set_xlabel("Dimension index")
                         ax2.set_ylabel("Reduced (PCA) value")
                         st.pyplot(fig2)
+                        plt.close(fig2)
 
                     st.subheader("Evidence")
                     st.caption(
@@ -1381,6 +1580,7 @@ elif page == "5. Experiments (history)":
         ax.legend()
         ax.grid(True)
         st.pyplot(fig)
+        plt.close(fig)
 
         st.subheader("Quantum vs Classical PR-AUC Delta")
         st.caption("Bar chart: positive = quantum beat classical on that run; negative = classical won. Green/red by sign.")
@@ -1391,6 +1591,7 @@ elif page == "5. Experiments (history)":
         ax3.set_xlabel("Experiment #")
         ax3.set_ylabel("Δ PR-AUC (Q - C)")
         st.pyplot(fig3)
+        plt.close(fig3)
 
         # Kernel observables (if present)
         obs_cols = [c for c in filtered.columns if c.startswith("obs_")]
@@ -1409,6 +1610,7 @@ elif page == "5. Experiments (history)":
             ax_obs.set_title(f"{metric} over experiments")
             ax_obs.grid(True)
             st.pyplot(fig_obs)
+            plt.close(fig_obs)
 
             # If ZNE is present, show a quick raw vs mitigated comparison for the primary observable.
             if "obs_kernel_posneg_mean" in filtered.columns and "obs_zne_kernel_posneg_mean_C0" in filtered.columns:
@@ -1436,6 +1638,7 @@ elif page == "5. Experiments (history)":
                 ax_zne.grid(True)
                 ax_zne.legend()
                 st.pyplot(fig_zne)
+                plt.close(fig_zne)
 
                 # Quick table: latest mitigation diagnostics (if present)
                 diag_cols = [
@@ -1469,7 +1672,8 @@ elif page == "5. Experiments (history)":
         ax2.legend()
         ax2.grid(True, axis='y')
         st.pyplot(fig2)
-        
+        plt.close(fig2)
+
         # Ideal vs Noisy comparison (if metadata available)
         comparison_cols = {"execution_mode", "noise_model", "backend_label"}
         if comparison_cols.issubset(df_history.columns):
@@ -1655,6 +1859,7 @@ elif page == "6. Comparison (classical vs quantum)":
             ax.grid(True)
             ax.legend()
             st.pyplot(fig)
+            plt.close(fig)
 
             st.subheader("Distribution: Δ PR-AUC (Quantum - Classical)")
             st.caption("Spread of the per-run difference. Centered above 0 = quantum tends to win; below 0 = classical tends to win.")
@@ -1665,6 +1870,7 @@ elif page == "6. Comparison (classical vs quantum)":
             ax2.set_ylabel("Count")
             ax2.grid(True)
             st.pyplot(fig2)
+            plt.close(fig2)
 
             st.subheader("By quantum kernel variant (full vs Nyström)")
             st.caption("Aggregates by kernel source: full kernel vs Nyström approximation. Compare mean_delta and mean_kernel_seconds to choose a variant.")
@@ -1723,6 +1929,7 @@ elif page == "6. Comparison (classical vs quantum)":
                 axc.set_title("Benefit vs cost")
                 axc.grid(True)
                 st.pyplot(figc)
+                plt.close(figc)
 
             st.subheader("Drilldown table (paired runs)")
             st.caption("Per-run details: timestamp, backend, shots, kernel time, model variant, and PR-AUC values for inspection or export.")
@@ -1787,6 +1994,7 @@ elif page == "8. Knowledge graph (inventory)":
     ax.grid(True, axis="x")
     fig.tight_layout()
     st.pyplot(fig)
+    plt.close(fig)
 
     st.download_button(
         "Download KG relation counts (CSV)",
@@ -2029,11 +2237,15 @@ python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results -
     )
     if not pipeline_ready:
         st.warning(
-            "Some pipeline dependencies are missing. Use **Generate demo results** or upload results from a local run. "
-            "If you expected the full pipeline here, check that the Space finished rebuilding with the full requirements (can take 15–25 min)."
+            "Pipeline dependencies (torch, pykeen, qiskit_algorithms) are not installed in this environment. "
+            "**Run benchmark** will not work here. Use **Generate demo results** below to load sample data, or **Upload** a CSV from a local run."
         )
     else:
         st.success("Pipeline dependencies are available. You can run benchmarks below.")
+
+    # Show writable results path when using /tmp (e.g. HF Spaces)
+    if str(RESULTS_DIR).startswith("/tmp"):
+        st.caption(f"Results are saved under a temporary directory (e.g. on Hugging Face Spaces). Data may not persist after the app restarts.")
 
     st.subheader("Configure run")
     with st.form("benchmark_form"):
@@ -2080,19 +2292,44 @@ python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results -
             step=1,
             help="Number of times to repeat the benchmark (each repeat = one run for Single run, or ideal+noisy for Ideal + Noisy).",
         )
+        use_full_config = st.checkbox(
+            "Use full config (classical + quantum, QSVC + hybrid, same as recommended terminal run)",
+            value=False,
+            help="Runs the exact pipeline: full-graph embeddings, contrastive learning, task-specific finetuning, calibration, 12 qubits, ZZ reps=1 linear, no pre-PCA. Slower but matches the full ranking (LR, RF, Ensemble, QSVC, Hybrid) in the Results tab.",
+        )
         submitted = st.form_submit_button("Run benchmark")
 
-    if submitted:
+    if submitted and not pipeline_ready:
+        st.error("Cannot run: pipeline dependencies are missing. Use **Generate demo results** or **Upload** a CSV instead.")
+    elif submitted:
         log_container = st.empty()
-        base_args = ["--relation", relation.strip() or "CtD", "--results_dir", "results"]
-        if fast_mode:
-            base_args.append("--fast_mode")
-        if run_classical and not run_quantum:
-            base_args.append("--classical_only")
-        elif run_quantum and not run_classical:
-            base_args.append("--quantum_only")
-        if full_graph:
-            base_args.append("--full_graph_embeddings")
+        # Use writable RESULTS_DIR so HF Spaces and any cwd work
+        base_args = ["--relation", relation.strip() or "CtD", "--results_dir", str(RESULTS_DIR)]
+        if use_full_config:
+            base_args = [
+                "--relation", relation.strip() or "CtD", "--results_dir", str(RESULTS_DIR),
+                "--pos_edge_sample", "1500",
+                "--full_graph_embeddings",
+                "--embedding_method", "RotatE", "--embedding_dim", "128", "--embedding_epochs", "200",
+                "--use_evidence_weighting", "--min_shared_genes", "1",
+                "--use_contrastive_learning", "--contrastive_epochs", "75",
+                "--use_task_specific_finetuning", "--task_specific_epochs", "100", "--task_specific_lr", "0.001",
+                "--calibrate_probabilities", "--calibration_method", "isotonic",
+                "--qml_dim", "12", "--qml_encoding", "hybrid", "--qml_reduction_method", "pca",
+                "--qml_feature_selection_method", "f_classif", "--qml_feature_select_k_mult", "6.0",
+                "--qml_pre_pca_dim", "0", "--qml_feature_map", "ZZ", "--qml_feature_map_reps", "1",
+                "--qml_entanglement", "linear", "--negative_sampling", "hard", "--neg_ratio", "2.0",
+                "--skip_svm_rbf", "--skip_svm_linear", "--skip_vqc", "--random_state", "42",
+            ]
+        else:
+            if fast_mode:
+                base_args.append("--fast_mode")
+            if run_classical and not run_quantum:
+                base_args.append("--classical_only")
+            elif run_quantum and not run_classical:
+                base_args.append("--quantum_only")
+            if full_graph:
+                base_args.append("--full_graph_embeddings")
         python_exe = sys.executable
         script = PROJECT_ROOT / "scripts" / "run_optimized_pipeline.py"
         run_ideal_noisy = benchmark_mode.startswith("Ideal + Noisy")
@@ -2170,12 +2407,12 @@ python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results -
     )
     if st.button("Generate demo results", key="gen_demo_results"):
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        # latest_run.csv – one row, required columns for dashboard
+        # latest_run.csv – one row with both classical and quantum (classical best, like real runs)
         latest = pd.DataFrame([{
-            "classical_pr_auc": 0.58,
-            "quantum_pr_auc": 0.62,
-            "classical_accuracy": 0.72,
-            "quantum_accuracy": 0.74,
+            "classical_pr_auc": 0.8859,
+            "quantum_pr_auc": 0.4159,
+            "classical_accuracy": 0.8937,
+            "quantum_accuracy": 0.5556,
             "classical_num_parameters": 49,
             "quantum_num_parameters": 24,
             "execution_mode": "simulator",
@@ -2187,15 +2424,28 @@ python3 scripts/run_optimized_pipeline.py --relation CtD --results_dir results -
             "qml_relation": "CtD",
         }])
         latest.to_csv(LATEST_RUN, index=False)
-        # experiment_history.csv – a few rows for history/compare
+        # experiment_history.csv – classical + quantum runs (ideal and noisy)
         history = pd.DataFrame([
-            {"execution_mode": "simulator", "noise_model": "ideal", "backend_label": "ideal_sim", "classical_pr_auc": 0.58, "quantum_pr_auc": 0.62, "classical_accuracy": 0.72, "quantum_accuracy": 0.74, "classical_num_parameters": 49, "quantum_num_parameters": 24},
-            {"execution_mode": "simulator", "noise_model": "noise", "backend_label": "noisy_sim", "classical_pr_auc": 0.58, "quantum_pr_auc": 0.55, "classical_accuracy": 0.72, "quantum_accuracy": 0.68, "classical_num_parameters": 49, "quantum_num_parameters": 24},
+            {"execution_mode": "simulator", "noise_model": "ideal", "backend_label": "ideal_sim", "classical_pr_auc": 0.8859, "quantum_pr_auc": 0.4159, "classical_accuracy": 0.8937, "quantum_accuracy": 0.5556, "classical_num_parameters": 49, "quantum_num_parameters": 24},
+            {"execution_mode": "simulator", "noise_model": "noise", "backend_label": "noisy_sim", "classical_pr_auc": 0.8859, "quantum_pr_auc": 0.38, "classical_accuracy": 0.8937, "quantum_accuracy": 0.52, "classical_num_parameters": 49, "quantum_num_parameters": 24},
         ])
         history.to_csv(HISTORY_FILE, index=False)
+        # optimized_results_*.json – full model ranking so Results tab shows all models (classical, quantum, hybrid)
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+        demo_ranking = [
+            {"name": "LogisticRegression-L2", "type": "classical", "pr_auc": 0.8859, "accuracy": 0.8937, "fit_time": 0.35},
+            {"name": "RandomForest-Optimized", "type": "classical", "pr_auc": 0.7586, "accuracy": 0.8406, "fit_time": 0.67},
+            {"name": "Ensemble-RF-LR", "type": "classical", "pr_auc": 0.7498, "accuracy": 0.9082, "fit_time": 1.14},
+            {"name": "Hybrid-Quantum-Classical", "type": "quantum", "pr_auc": 0.7421, "accuracy": 0.9034, "fit_time": 0.0},
+            {"name": "QSVC-Optimized", "type": "quantum", "pr_auc": 0.4159, "accuracy": 0.5556, "fit_time": 0.94},
+            {"name": "QSVC-Optimized-Calibrated", "type": "quantum", "pr_auc": 0.3344, "accuracy": 0.6280, "fit_time": 0.94},
+        ]
+        demo_opt_path = RESULTS_DIR / f"optimized_results_{stamp}.json"
+        with open(demo_opt_path, "w") as f:
+            json.dump({"config": {}, "ranking": demo_ranking, "timestamp": stamp}, f, indent=2)
         st.cache_data.clear()
         st.cache_resource.clear()
-        st.success("Demo results written to results/. Refreshing...")
+        st.success("Demo results written (latest_run, history, and full model ranking). Refreshing...")
         st.rerun()
 
     st.subheader("Upload results from a local run")

@@ -60,7 +60,7 @@ Classical Path                 Quantum Path
 - **Quantum layer** (`quantum_layer/`): QSVC with fidelity quantum kernels (ZZ, Pauli feature maps), VQC with configurable ansatzes (RealAmplitudes, EfficientSU2, TwoLocal) and SPSA optimizer, kernel-target alignment, and quantum-classical ensemble (stacking or weighted average).
 - **Classical baselines** (`classical_baseline/`): Logistic regression, random forest, and extra trees with optional GridSearchCV hyperparameter tuning.
 - **Execution backends** (`quantum_layer/quantum_executor.py`): Statevector simulator (default), noisy simulator (Aer with device noise models), GPU-accelerated simulator (cuStateVec via `--gpu`), and IBM Quantum hardware (Heron).
-- **Dashboard** (`benchmarking/dashboard.py`): Streamlit application for running benchmarks, viewing results, live predictions, experiment comparison, and knowledge graph exploration.
+- **Dashboard** (`benchmarking/dashboard.py`): Streamlit application with a narrative-driven, six-page layout: **The Problem**, **Our Approach**, **Results**, **What We Learned**, **Try It**, and **Technical Reference**. Includes Mermaid diagrams (KG subgraph, pipeline architecture, improvement journey), styled HTML cards with accent borders, dark sidebar navigation, best-run defaults, and Generate-demo / Run pipeline / Upload flows. Deployed to [Hugging Face Spaces](https://huggingface.co/spaces/rocRevyAreGoals15/QGG-HYBRID-PROJECT).
 - **API** (`middleware/api.py`): FastAPI service for programmatic link predictions.
 
 ---
@@ -97,10 +97,14 @@ python scripts/run_optimized_pipeline.py --relation CtD \
 ### Launch the Dashboard
 
 ```bash
+# Default port (8501)
 streamlit run benchmarking/dashboard.py
+
+# Or use the launch script to pick the first available port (8501, 8502, ...)
+./scripts/launch_dashboard.sh
 ```
 
-The dashboard includes a **Generate demo results** button (under **Run benchmarks**) that populates the interface with the best-run metrics without requiring a full pipeline execution.
+The dashboard uses a **six-page narrative flow**: The Problem, Our Approach, Results, What We Learned, Try It, and Technical Reference. It includes **Generate demo results** (under Try It) to load best-run metrics without running the pipeline, Mermaid diagrams for the knowledge graph and pipeline, and a dark sidebar with pill-style navigation. A live instance is hosted on [Hugging Face Spaces](https://huggingface.co/spaces/rocRevyAreGoals15/QGG-HYBRID-PROJECT).
 
 ### Start the API Server
 
@@ -204,6 +208,7 @@ hybrid-qml-kg-poc/
 |   +-- train_baseline.py
 |-- scripts/                     # Pipeline and experiment scripts
 |   |-- run_optimized_pipeline.py    # Main pipeline entry point
+|   |-- launch_dashboard.sh          # Find free port and run Streamlit
 |   |-- optuna_pipeline_search.py    # Bayesian HPO
 |   +-- ...
 |-- benchmarking/                # Performance evaluation
@@ -256,8 +261,19 @@ hybrid-qml-kg-poc/
 |----------|-------------|
 | `NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` | Full experiment log, recommended commands, and optimization roadmap |
 | `IMPLEMENTATION_RECAP.md` | Summary of pipeline improvements and GPU/hardware readiness |
+| `DEPLOY_HUGGINGFACE.md` | Deploying the dashboard to Hugging Face Spaces and pushing updates |
 | `docs/WHY_QUANTUM_UNDERPERFORMS.md` | Root cause analysis of quantum-classical performance gap |
 | `docs/OPTIMIZATION_PLAN.md` | Detailed optimization roadmap |
+
+---
+
+## Recent work
+
+- **Dashboard rewrite**: Replaced the former 10-page info-dump with a six-page narrative (The Problem, Our Approach, Results, What We Learned, Try It, Technical Reference). Added Mermaid diagrams for the Hetionet subgraph, pipeline architecture, and improvement journey; custom HTML cards with colored accent borders and stat highlights; dark gradient sidebar with pill-style navigation; and section labels for clearer hierarchy.
+- **Best-run defaults**: Dashboard and README default to the configuration that achieves PR-AUC 0.7987 (Pauli feature map, stacking ensemble, RotatE 128D, hard negatives, `--tune_classical`, `--qml_pre_pca_dim 24`). Generate demo results and Reproduce-command fallback use this configuration.
+- **Launch script**: `scripts/launch_dashboard.sh` finds the first available port (8501, 8502, …) and runs the Streamlit app, so multiple instances or a busy port do not block startup.
+- **Hugging Face Space**: The app is deployed at [QGG-HYBRID-PROJECT](https://huggingface.co/spaces/rocRevyAreGoals15/QGG-HYBRID-PROJECT). Push to the Space with `git push hf <your-branch>:main` (see `DEPLOY_HUGGINGFACE.md`).
+- **Documentation**: README updated with current results, pipeline features, project structure, and dashboard description. `NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` and `IMPLEMENTATION_RECAP.md` document the experiment log, recommended commands, and GPU/configuration options.
 
 ---
 

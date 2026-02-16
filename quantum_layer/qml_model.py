@@ -230,6 +230,11 @@ class QMLLinkPredictor:
             The constructed quantum kernel.
         """
         fm = self._make_feature_map()
+        if exec_mode == "gpu_simulator":
+            fm_exec = fm.decompose(reps=10)
+            fidelity = ComputeUncompute(sampler=sampler)
+            logger.info("Using GPU-backed FidelityQuantumKernel (cuStateVec)")
+            return FidelityQuantumKernel(feature_map=fm_exec, fidelity=fidelity)
         if exec_mode in ("statevector", "simulator_statevector"):
             return FidelityStatevectorKernel(feature_map=fm)
         # Decompose composite feature maps so Aer/backends don't error on unknown instructions
@@ -281,7 +286,7 @@ class QMLLinkPredictor:
             if self.encoding_method != "feature_map":
                 raise NotImplementedError("VQC supports only 'feature_map' in this project.")
             feature_map = self._make_feature_map()
-            if exec_mode not in ("statevector", "simulator_statevector"):
+            if exec_mode not in ("statevector", "simulator_statevector") or exec_mode == "gpu_simulator":
                 feature_map = feature_map.decompose(reps=10)
             ansatz = self._build_ansatz()
             optimizer = self._build_optimizer()

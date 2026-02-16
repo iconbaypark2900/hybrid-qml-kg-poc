@@ -181,7 +181,10 @@ class AdvancedKGEmbedder:
             'num_negs_per_pos': self.negative_samples,
         }
 
-        # Train model
+        # Train model (use GPU if available)
+        import torch
+        _device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        logger.info(f"PyKEEN training device: {_device}")
         result = pipeline(
             dataset=dataset,
             model=self.method,
@@ -195,6 +198,7 @@ class AdvancedKGEmbedder:
             stopper_kwargs={'patience': 10, 'frequency': 5},
             evaluator='RankBasedEvaluator',
             random_seed=self.random_state,
+            device=_device,
         )
 
         # Extract embeddings

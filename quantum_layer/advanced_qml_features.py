@@ -245,7 +245,8 @@ class QuantumFeatureEngineer:
         h_embeddings: np.ndarray,
         t_embeddings: np.ndarray,
         labels: Optional[np.ndarray] = None,
-        fit: bool = False
+        fit: bool = False,
+        X_extra: Optional[np.ndarray] = None
     ) -> np.ndarray:
         """
         Prepare QML features from head/tail embeddings using selected encoding strategy.
@@ -255,6 +256,9 @@ class QuantumFeatureEngineer:
             t_embeddings: Tail embeddings [N, D]
             labels: Labels for supervised feature selection (optional, only used if fit=True)
             fit: Whether to fit the reduction (True for training, False for test)
+            X_extra: Optional extra features [N, K] (e.g. graph-derived) to concatenate
+                before dimensionality reduction. The combined vector is reduced to
+                num_qubits dimensions as usual.
 
         Returns:
             QML features [N, num_qubits]
@@ -289,6 +293,16 @@ class QuantumFeatureEngineer:
             self.encoding_strategy = original_strategy  # Restore original
         else:
             combined = self._combine_embeddings(h_embeddings, t_embeddings)
+
+        # Step 1b: Concatenate extra features (e.g. graph-derived) if provided
+        if X_extra is not None:
+            if X_extra.shape[0] != combined.shape[0]:
+                raise ValueError(
+                    f"X_extra rows ({X_extra.shape[0]}) must match embeddings rows ({combined.shape[0]})"
+                )
+            logger.info(f"Appending {X_extra.shape[1]} extra features to encoded embeddings "
+                       f"({combined.shape[1]}D -> {combined.shape[1] + X_extra.shape[1]}D)")
+            combined = np.hstack([combined, X_extra])
 
         # Step 2: Reduce to quantum dimension
         if fit:

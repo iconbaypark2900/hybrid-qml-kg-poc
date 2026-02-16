@@ -37,8 +37,19 @@ logger = logging.getLogger(__name__)
 
 class QuantumExecutor:
     """
-    Unified executor for quantum circuits supporting both simulator and IBM Heron/Torino.
+    Unified executor for quantum circuits supporting simulator, GPU-backed
+    Aer (via cuStateVec), and IBM Heron/Torino hardware.
     """
+
+    @staticmethod
+    def gpu_available() -> bool:
+        """Check if GPU-backed Aer simulation is available (cuStateVec)."""
+        try:
+            from qiskit_aer import AerSimulator
+            AerSimulator(method='statevector', device='GPU')
+            return True
+        except Exception:
+            return False
     
     def __init__(self, config_path: str = "config/quantum_config.yaml"):
         self.config = self._load_config(config_path)
@@ -170,7 +181,7 @@ class QuantumExecutor:
         return None, None
 
     def _get_simulator_sampler(self):
-        """Get simulator sampler - fixed to return proper tuple"""
+        """Get simulator sampler - enhanced with better error handling and fallbacks"""
         sim_config = self.config.get('quantum', {}).get('simulator', {})
         shots = int(sim_config.get("shots", 1024) or 1024)
 
@@ -180,6 +191,7 @@ class QuantumExecutor:
                 # Qiskit Machine Learning expects a BaseSamplerV2-compatible primitive.
                 from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
                 self.noise_label = noise_label
+                logger.info(f"Using noisy simulator with noise model: {noise_label}")
                 return (
                     AerSamplerV2(
                         default_shots=shots,
@@ -189,23 +201,73 @@ class QuantumExecutor:
                 )
             except Exception as e:
                 logger.warning(f"⚠️  Failed to initialize noisy simulator, falling back to ideal: {e}")
+                import traceback
+                logger.debug(f"Noisy simulator error details: {traceback.format_exc()}")
 
+        # Try different sampler implementations in order of preference
+        sampler_implementations = [
+            ("StatevectorSampler", lambda: __import__('qiskit.primitives', fromlist=['StatevectorSampler']).StatevectorSampler()),
+            ("AerSamplerV2", lambda: __import__('qiskit_aer.primitives', fromlist=['SamplerV2']).SamplerV2(default_shots=shots)),
+            ("Base Sampler", lambda: __import__('qiskit.primitives', fromlist=['Sampler']).Sampler()),
+            ("Aer Sampler", lambda: __import__('qiskit_aer.primitives', fromlist=['Sampler']).Sampler())
+        ]
+        
+        for name, factory in sampler_implementations:
+            try:
+                sampler = factory()
+                logger.info(f"Successfully initialized {name}")
+                return sampler, "simulator_statevector" if "Statevector" in name else "simulator"
+            except ImportError:
+                logger.debug(f"{name} not available, trying next option")
+                continue
+            except Exception as e:
+                logger.warning(f"Failed to initialize {name}: {e}")
+                continue
+        
+        # Fallback: try importing directly
         try:
-            from qiskit.primitives import StatevectorSampler
-            return StatevectorSampler(), "simulator_statevector"
-        except Exception:
-            pass
-        try:
-            from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
-            return AerSamplerV2(default_shots=shots), "simulator"
-        except Exception:
-            pass
-        try:
-            from qiskit.primitives import Sampler
-            return Sampler(), "simulator"
-        except Exception:
             from qiskit_aer.primitives import Sampler
+            logger.info("Using fallback Aer Sampler")
             return Sampler(), "simulator"
+        except Exception as e:
+            logger.error(f"All sampler options failed, using basic fallback: {e}")
+            # Final fallback - create a basic sampler if possible
+            try:
+                # Try to create a minimal working sampler
+                import qiskit_aer
+                from qiskit_aer import AerSimulator
+                backend = AerSimulator()
+                from qiskit_aer.primitives import Sampler
+                return Sampler(backend=backend), "simulator"
+            except Exception:
+                # Last resort: return a mock sampler
+                logger.error("All sampler options exhausted. Returning error state.")
+                raise RuntimeError("Unable to initialize any quantum sampler. Please check Qiskit installation.")
+
+    def _get_gpu_simulator_sampler(self):
+        """Get GPU-accelerated Aer sampler using cuStateVec."""
+        gpu_config = self.config.get('quantum', {}).get('gpu_simulator', {})
+        method = gpu_config.get('method', 'statevector')
+        shots = int(gpu_config.get('shots', 0) or 0)
+        precision = gpu_config.get('precision', 'double')
+
+        from qiskit_aer import AerSimulator
+        try:
+            backend = AerSimulator(method=method, device='GPU')
+            backend.set_options(precision=precision)
+            if shots > 0:
+                backend.set_options(shots=shots)
+            logger.info(f"GPU AerSimulator initialized: method={method}, device=GPU, precision={precision}")
+        except Exception as e:
+            logger.warning(f"GPU Aer unavailable ({e}), falling back to CPU simulator")
+            return self._get_simulator_sampler()
+
+        from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
+        if shots > 0:
+            sampler = AerSamplerV2(backend=backend, default_shots=shots)
+        else:
+            sampler = AerSamplerV2(backend=backend)
+        return sampler, "gpu_simulator"
 
     def _get_heron_sampler(self) -> Tuple[Any, str]:
         """Get IBM Heron/Torino sampler with error mitigation."""
@@ -263,6 +325,14 @@ class QuantumExecutor:
 
     def get_sampler(self):
         """Get sampler - fixed to always return tuple"""
+        # GPU-accelerated simulator (cuStateVec / Aer GPU)
+        if self.execution_mode == "gpu_simulator":
+            try:
+                return self._get_gpu_simulator_sampler()
+            except Exception as e:
+                logger.warning(f"GPU simulator failed, falling back to CPU: {e}")
+                return self._get_simulator_sampler()
+
         # Prefer exact sims locally (statevector if available)
         if self.execution_mode in ("simulator", "auto", "statevector", "simulator_statevector"):
             return self._get_simulator_sampler()
@@ -284,7 +354,10 @@ class QuantumExecutor:
         noise_model = sim_cfg.get('noise_model')
         heron_cfg = self.config.get('quantum', {}).get('heron', {}) if isinstance(self.config.get('quantum', {}).get('heron', {}), dict) else {}
 
-        if execution_mode == "heron":
+        if execution_mode == "gpu_simulator":
+            gpu_cfg = self.config.get('quantum', {}).get('gpu_simulator', {})
+            backend_label = f"gpu_{gpu_cfg.get('method', 'statevector')}"
+        elif execution_mode == "heron":
             backend_label = self.config.get('quantum', {}).get('heron', {}).get('backend')
         elif execution_mode in ("simulator", "auto", "statevector", "simulator_statevector"):
             backend_label = "simulator_noisy" if noise_model else "simulator"

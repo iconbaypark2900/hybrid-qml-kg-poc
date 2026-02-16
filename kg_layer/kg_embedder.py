@@ -245,6 +245,9 @@ class HetionetEmbedder:
         """
         dataset = self._create_pykeen_dataset(triples_df)
         logger.info(f"Training TransE embeddings with PyKEEN (dim={self.embedding_dim})...")
+        import torch
+        _device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        logger.info(f"PyKEEN training device: {_device}")
         result = pipeline(
             dataset=dataset,
             model="TransE",
@@ -253,6 +256,7 @@ class HetionetEmbedder:
             training_kwargs=dict(num_epochs=50, batch_size=1024),
             optimizer="adam",
             stopper="early",
+            device=_device,
         )
         # Extract embeddings
         embs = result.model.entity_representations[0]().detach().cpu().numpy()
@@ -396,25 +400,60 @@ class HetionetEmbedder:
             X: np.ndarray of shape [num_edges, feature_dim]
         """
         h_col, _, t_col = _infer_ht_columns(link_df)
-        feats = []
+        
+        # Validate input DataFrame
+        if link_df.empty:
+            logger.warning("Empty DataFrame provided to prepare_link_features")
+            return np.array([]).reshape(0, 0)
+        
+        # Convert to string and handle NaN values
+        head_entities = link_df[h_col].astype(str).fillna('').values
+        tail_entities = link_df[t_col].astype(str).fillna('').values
+        
+        # Check for empty strings after conversion
+        empty_heads = np.sum(head_entities == '')
+        empty_tails = np.sum(tail_entities == '')
+        
+        if empty_heads > 0 or empty_tails > 0:
+            logger.warning(f"Found {empty_heads} empty head entities and {empty_tails} empty tail entities")
+        
+        # Pre-allocate arrays for efficiency
+        n_samples = len(link_df)
+        embedding_size = self.reduced_embeddings.shape[1] if (reduced and self.reduced_embeddings is not None) else self.entity_embeddings.shape[1]
+        feature_size = embedding_size * 4  # [h, t, |h-t|, h*t]
+        
+        X = np.zeros((n_samples, feature_size), dtype=np.float32)
+        
         missing_heads = 0
         missing_tails = 0
-        for h, t in zip(link_df[h_col].astype(str).values, link_df[t_col].astype(str).values):
-            # Track missing entities
-            if h not in self.entity_to_id:
-                missing_heads += 1
-            if t not in self.entity_to_id:
-                missing_tails += 1
+        
+        # Process entities in batches for better performance
+        batch_size = min(1000, n_samples)
+        for start_idx in range(0, n_samples, batch_size):
+            end_idx = min(start_idx + batch_size, n_samples)
+            batch_heads = head_entities[start_idx:end_idx]
+            batch_tails = tail_entities[start_idx:end_idx]
+            
+            for i, (h, t) in enumerate(zip(batch_heads, batch_tails)):
+                local_idx = start_idx + i
+                
+                # Skip empty entities
+                if h == '' or t == '':
+                    continue
+                
+                # Track missing entities
+                if h not in self.entity_to_id:
+                    missing_heads += 1
+                if t not in self.entity_to_id:
+                    missing_tails += 1
 
-            hv = self._get_vec(h, reduced=reduced)
-            tv = self._get_vec(t, reduced=reduced)
-            diff = np.abs(hv - tv)
-            had = hv * tv
-            feats.append(np.concatenate([hv, tv, diff, had], axis=0))
-        X = np.stack(feats, axis=0)
-
+                hv = self._get_vec(h, reduced=reduced)
+                tv = self._get_vec(t, reduced=reduced)
+                diff = np.abs(hv - tv)
+                had = hv * tv
+                X[local_idx] = np.concatenate([hv, tv, diff, had], axis=0)
+        
         # Validation: warn if too many entities are missing
-        n_samples = len(link_df)
         if n_samples > 0:
             missing_head_pct = missing_heads / n_samples * 100
             missing_tail_pct = missing_tails / n_samples * 100

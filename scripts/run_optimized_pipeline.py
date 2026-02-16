@@ -607,7 +607,8 @@ def train_classical_model(name, model, X_train, y_train, X_test, y_test, cv_fold
             'status': 'success',
             'train_metrics': train_metrics,
             'test_metrics': test_metrics,
-            'fit_seconds': fit_time
+            'fit_seconds': fit_time,
+            'test_scores': test_scores,  # For predictions_compare.csv
         }
         
         # Add feature importances if available
@@ -725,11 +726,23 @@ def main():
     parser.add_argument("--skip_quantum", action="store_true", help="Skip quantum models")
     parser.add_argument("--skip_vqc", action="store_true", help="Skip VQC training (only train QSVC)")
 
+    # VQC ansatz / optimizer (tunable from experiments/vqc_optimization_analysis.py results)
+    parser.add_argument("--vqc_ansatz_type", type=str, default="RealAmplitudes",
+                       choices=["RealAmplitudes", "EfficientSU2", "TwoLocal"],
+                       help="VQC ansatz architecture (default: RealAmplitudes)")
+    parser.add_argument("--vqc_ansatz_reps", type=int, default=3,
+                       help="VQC ansatz repetitions (default: 3)")
+    parser.add_argument("--vqc_optimizer", type=str, default="SPSA",
+                       choices=["SPSA", "COBYLA", "NFT"],
+                       help="VQC optimizer (default: SPSA)")
+
     # QSVC kernel scaling / approximation
     parser.add_argument("--qsvc_nystrom_m", type=int, default=None,
                        help="Enable Nyström kernel approximation for QSVC with m landmark points (reduces O(n^2) to O(n*m))")
     parser.add_argument("--nystrom_ridge", type=float, default=1e-6,
                        help="Ridge added to K_mm before pseudo-inverse for Nyström (stability)")
+    parser.add_argument("--qsvc_C", type=float, default=1.0,
+                       help="QSVC regularization parameter C (smaller = more regularization, may reduce overfitting)")
     parser.add_argument("--nystrom_max_pairs", type=int, default=20000,
                        help="Safety cap: if n_train*m exceeds this, landmark mitigation may be reduced/skipped")
     parser.add_argument("--no_nystrom_landmark_mitigation", action="store_true",
@@ -752,8 +765,17 @@ def main():
     # Experiment args
     parser.add_argument("--classical_only", action="store_true", help="Run only classical models")
     parser.add_argument("--quantum_only", action="store_true", help="Run only quantum models (skip classical)")
+    parser.add_argument("--run_gnn", action="store_true",
+                       help="Train a GNN link predictor alongside classical and quantum models")
+    # parser.add_argument("--gnn_arch", type=str, default="graphsage", choices=["graphsage", "gin"],
+    #                    help="GNN architecture to use (graphsage or gin)")
+    # parser.add_argument("--gnn_hidden", type=int, default=128, help="GNN hidden dimension")
+    # parser.add_argument("--gnn_layers", type=int, default=2, help="Number of GNN layers")
+    # parser.add_argument("--gnn_epochs", type=int, default=60, help="GNN training epochs")
     parser.add_argument("--use_classical_features_in_kernel", action="store_true",
                        help="Use classical features (reduced via PCA) in quantum kernel instead of quantum-reduced features")
+    parser.add_argument("--restrict_classical_to_qml_dim", action="store_true",
+                       help="Train classical models on the same PCA-reduced dimensions as QML (e.g., 12D) for fair algorithm comparison")
     parser.add_argument("--use_feature_selection", action="store_true", 
                        help="Apply mutual information feature selection when feature-to-sample ratio > 1.0")
     parser.add_argument("--use_contrastive_learning", action="store_true",
@@ -785,6 +807,28 @@ def main():
                        help="Skip SVM-RBF model (if it continues to fail)")
     parser.add_argument("--skip_svm_linear", action="store_true",
                        help="Skip SVM-Linear model")
+    # Classical hyperparameter tuning
+    parser.add_argument("--tune_classical", action="store_true",
+                       help="Run GridSearchCV hyperparameter tuning for classical models (ExtraTrees, RF, LR)")
+
+    # Quantum kernel alignment
+    parser.add_argument("--use_kernel_alignment", action="store_true",
+                       help="Run quantum kernel alignment analysis before QSVC to diagnose/improve kernel separability")
+
+    # Graph features in QML path
+    parser.add_argument("--use_graph_features_in_qml", action="store_true",
+                       help="Append graph-derived features (degree, common neighbors, etc.) to quantum input "
+                            "before dimensionality reduction, giving QSVC richer signal")
+
+    # Quantum-classical ensemble
+    parser.add_argument("--run_ensemble", action="store_true",
+                       help="Run quantum-classical ensemble after individual model training")
+    parser.add_argument("--ensemble_method", type=str, default="weighted_average",
+                       choices=['weighted_average', 'voting', 'stacking'],
+                       help="Ensemble combination method (default: weighted_average)")
+    parser.add_argument("--ensemble_quantum_weight", type=float, default=0.5,
+                       help="Weight for quantum model in weighted_average ensemble (0.0-1.0, classical gets 1-this)")
+
     parser.add_argument("--fast_mode", action="store_true", help="Fast mode (fewer models, less tuning)")
     parser.add_argument("--cheap_mode", action="store_true",
                        help="Cheapest runnable settings (implies --fast_mode + caps shots/ZNE/readout calibration + defaults max_entities)")
@@ -793,6 +837,12 @@ def main():
     parser.add_argument("--cheap_max_entities", type=int, default=80, help="Cheap mode: default max_entities if not provided")
     parser.add_argument("--cheap_zne_sample_size", type=int, default=64, help="Cheap mode: ZNE sample_size cap")
     parser.add_argument("--cheap_zne_max_train_for_zne", type=int, default=60, help="Cheap mode: ZNE max_train_for_zne cap")
+    
+    # Mitigation ablation options
+    parser.add_argument("--disable_zne", action="store_true",
+                       help="Disable Zero-Noise Extrapolation (for mitigation ablation)")
+    parser.add_argument("--disable_readout_mitigation", action="store_true",
+                       help="Disable readout error mitigation (for mitigation ablation)")
     parser.add_argument("--cheap_readout_cal_shots", type=int, default=512, help="Cheap mode: readout calibration shots cap")
     parser.add_argument("--cv_folds", type=int, default=5, help="Cross-validation folds")
     parser.add_argument("--use_cv_evaluation", action="store_true",
@@ -801,8 +851,27 @@ def main():
     parser.add_argument("--results_dir", type=str, default="results", help="Results directory")
     parser.add_argument("--quantum_config_path", type=str, default="config/quantum_config.yaml",
                        help="Quantum execution config path")
+    parser.add_argument("--gpu", action="store_true",
+                       help="Use GPU-backed quantum simulator (requires NVIDIA GPU + qiskit-aer with GPU support)")
 
     args = parser.parse_args()
+
+    # --gpu flag overrides config selection to GPU simulator
+    if getattr(args, "gpu", False):
+        args.quantum_config_path = "config/quantum_config_gpu.yaml"
+        logger.info(f"GPU mode enabled: using {args.quantum_config_path}")
+
+    # Auto-select quantum config based on HYBRID_QML_SYSTEM env var (if not explicitly provided)
+    # gmktec -> config/quantum_config_gmktec.yaml (simulator mode)
+    # dgx -> config/quantum_config_dgx.yaml (gpu_simulator mode)
+    if args.quantum_config_path == "config/quantum_config.yaml":
+        system_env = os.environ.get("HYBRID_QML_SYSTEM", "").lower().strip()
+        if system_env == "gmktec":
+            args.quantum_config_path = "config/quantum_config_gmktec.yaml"
+            logger.info(f"Auto-selected quantum config for GMKtec: {args.quantum_config_path}")
+        elif system_env == "dgx":
+            args.quantum_config_path = "config/quantum_config_dgx.yaml"
+            logger.info(f"Auto-selected quantum config for DGX: {args.quantum_config_path}")
 
     # #region agent log
     dbg_run_id = f"perf-{uuid.uuid4()}"
@@ -867,6 +936,25 @@ def main():
     logger.info(f"Embedding method: {args.embedding_method} (dim={args.embedding_dim})")
     logger.info(f"Full-graph embeddings: {args.full_graph_embeddings}")
     logger.info(f"Quantum config: {args.quantum_config_path}")
+
+    # Log GPU availability for quantum simulation and PyTorch
+    try:
+        from quantum_layer.quantum_executor import QuantumExecutor
+        if QuantumExecutor.gpu_available():
+            logger.info("GPU: NVIDIA GPU detected for quantum simulation (cuStateVec)")
+        else:
+            logger.info("GPU: No GPU-backed Aer available; using CPU simulation")
+    except Exception:
+        logger.info("GPU: Could not check GPU availability")
+    try:
+        import torch
+        if torch.cuda.is_available():
+            logger.info(f"GPU: PyTorch CUDA available ({torch.cuda.get_device_name(0)})")
+        else:
+            logger.info("GPU: PyTorch CUDA not available; embeddings will train on CPU")
+    except ImportError:
+        pass
+
     logger.info(f"Negative sampling: {args.negative_sampling}")
     if args.negative_sampling == 'diverse':
         logger.info(f"Diversity weight: {args.diversity_weight}")
@@ -898,10 +986,10 @@ def main():
     logger.info(f"Extracted {len(task_edges)} edges for '{args.relation}'")
 
     # Optional: evidence-weighted positives (shared gene support proxy).
-    # This is a pragmatic way to (a) filter to stronger positives and (b) create training weights.
+    # Only for CtD: compound/disease–gene maps are relation-specific.
     comp2g = None
     dis2g = None
-    if bool(getattr(args, "use_evidence_weighting", False)):
+    if bool(getattr(args, "use_evidence_weighting", False)) and (str(getattr(args, "relation", "CtD")).strip() == "CtD"):
         try:
             from kg_layer.evidence_weighting import EvidenceConfig, build_compound_disease_gene_maps, add_shared_gene_evidence
             comp2g, dis2g = build_compound_disease_gene_maps(df, EvidenceConfig())
@@ -1237,6 +1325,25 @@ def main():
     # Get embeddings dict
     embeddings = embedder.get_all_embeddings()
     logger.info(f"Loaded {len(embeddings)} entity embeddings")
+
+    # ========== EMBEDDING DIVERSITY CHECK ==========
+    try:
+        emb_matrix = np.array(list(embeddings.values()))
+        n_total = len(emb_matrix)
+        if n_total > 0:
+            unique_rows = np.unique(np.round(emb_matrix, decimals=6), axis=0)
+            n_unique = len(unique_rows)
+            diversity_ratio = n_unique / n_total
+            logger.info(f"Embedding diversity: {n_unique}/{n_total} unique vectors ({diversity_ratio:.1%})")
+            if diversity_ratio < 0.3:
+                logger.warning(
+                    f"LOW EMBEDDING DIVERSITY ({diversity_ratio:.1%}). Many entities share identical embeddings. "
+                    f"This limits quantum kernel separability. Consider: "
+                    f"--embedding_dim 128+ | --embedding_epochs 150+ | --full_graph_embeddings | "
+                    f"--embedding_method RotatE"
+                )
+    except Exception:
+        pass
 
     # #region agent log
     try:
@@ -2130,9 +2237,10 @@ def main():
     rf_model = None
     rf_result = None
 
-    # Optional: evidence-based positive weights (only if evidence maps exist from STEP 1).
+    # Optional: evidence-based positive weights (only for CtD when evidence maps exist from STEP 1).
     sample_weight_train = None
-    if bool(getattr(args, "use_evidence_weighting", False)) and (comp2g is not None and dis2g is not None):
+    if (str(getattr(args, "relation", "CtD")).strip() == "CtD"
+        and bool(getattr(args, "use_evidence_weighting", False)) and (comp2g is not None and dis2g is not None)):
         try:
             from kg_layer.evidence_weighting import add_shared_gene_evidence, weights_from_shared_genes
             if "source" in train_df.columns and "target" in train_df.columns:
@@ -2155,6 +2263,20 @@ def main():
         logger.info("\n" + "="*80)
         logger.info("STEP 4: TRAINING CLASSICAL MODELS")
         logger.info("="*80)
+
+        # Optional: restrict classical models to same dimensions as QML for fair comparison
+        X_train_classical = X_train
+        X_test_classical = X_test
+        if args.restrict_classical_to_qml_dim:
+            from sklearn.decomposition import PCA
+            qml_dim = args.qml_dim
+            if X_train.shape[1] > qml_dim:
+                pca_classical = PCA(n_components=qml_dim, random_state=args.random_state)
+                X_train_classical = pca_classical.fit_transform(X_train)
+                X_test_classical = pca_classical.transform(X_test)
+                logger.info(f"✓ Classical models restricted to {qml_dim}D (same as QML) — train {X_train_classical.shape}, test {X_test_classical.shape}")
+            else:
+                logger.info(f"Classical features already <= {qml_dim}D, no reduction needed")
 
         models = {
             'RandomForest-Optimized': RandomForestClassifier(
@@ -2201,6 +2323,75 @@ def main():
             # Only use top 2 models in fast mode
             models = {k: v for i, (k, v) in enumerate(models.items()) if i < 2}
 
+        # Optional: GridSearchCV hyperparameter tuning for classical models
+        if getattr(args, "tune_classical", False):
+            logger.info("\n" + "="*80)
+            logger.info("CLASSICAL HYPERPARAMETER TUNING (GridSearchCV)")
+            logger.info("="*80)
+
+            tuning_cv = StratifiedKFold(n_splits=min(3, args.cv_folds), shuffle=True, random_state=args.random_state)
+
+            # Tune ExtraTrees
+            if 'ExtraTrees-Optimized' in models:
+                try:
+                    et_param_grid = {
+                        'n_estimators': [250, 500],
+                        'max_depth': [None, 20, 40],
+                        'min_samples_split': [2, 4, 8],
+                        'min_samples_leaf': [1, 2],
+                    }
+                    et_base = ExtraTreesClassifier(
+                        max_features='sqrt', class_weight='balanced',
+                        random_state=args.random_state, n_jobs=-1
+                    )
+                    et_gs = GridSearchCV(et_base, et_param_grid, cv=tuning_cv, scoring='average_precision',
+                                        n_jobs=-1, refit=True)
+                    et_gs.fit(X_train_classical, y_train)
+                    models['ExtraTrees-Optimized'] = et_gs.best_estimator_
+                    logger.info(f"  ExtraTrees best params: {et_gs.best_params_} (CV PR-AUC: {et_gs.best_score_:.4f})")
+                except Exception as e:
+                    logger.warning(f"  ExtraTrees tuning failed: {e}")
+
+            # Tune RandomForest
+            if 'RandomForest-Optimized' in models:
+                try:
+                    rf_param_grid = {
+                        'n_estimators': [100, 300],
+                        'max_depth': [10, 20, None],
+                        'min_samples_split': [5, 10],
+                        'min_samples_leaf': [2, 5],
+                    }
+                    rf_base = RandomForestClassifier(
+                        max_features='sqrt', class_weight='balanced',
+                        random_state=args.random_state, n_jobs=-1
+                    )
+                    rf_gs = GridSearchCV(rf_base, rf_param_grid, cv=tuning_cv, scoring='average_precision',
+                                        n_jobs=-1, refit=True)
+                    rf_gs.fit(X_train_classical, y_train)
+                    models['RandomForest-Optimized'] = rf_gs.best_estimator_
+                    logger.info(f"  RandomForest best params: {rf_gs.best_params_} (CV PR-AUC: {rf_gs.best_score_:.4f})")
+                except Exception as e:
+                    logger.warning(f"  RandomForest tuning failed: {e}")
+
+            # Tune LogisticRegression
+            if 'LogisticRegression-L2' in models:
+                try:
+                    lr_param_grid = {
+                        'C': [0.01, 0.1, 1.0, 10.0],
+                        'penalty': ['l2'],
+                    }
+                    lr_base = LogisticRegression(
+                        class_weight='balanced', max_iter=2000,
+                        random_state=args.random_state, solver='lbfgs'
+                    )
+                    lr_gs = GridSearchCV(lr_base, lr_param_grid, cv=tuning_cv, scoring='average_precision',
+                                        n_jobs=-1, refit=True)
+                    lr_gs.fit(X_train_classical, y_train)
+                    models['LogisticRegression-L2'] = lr_gs.best_estimator_
+                    logger.info(f"  LogisticRegression best params: {lr_gs.best_params_} (CV PR-AUC: {lr_gs.best_score_:.4f})")
+                except Exception as e:
+                    logger.warning(f"  LogisticRegression tuning failed: {e}")
+
         # Train models (rf_model and rf_result already initialized above)
         for name, model in models.items():
             if name == 'SVM-RBF-Optimized':
@@ -2221,9 +2412,9 @@ def main():
                         cv_folds=args.cv_folds, random_state=args.random_state
                     )
             else:
-                # Regular model training
+                # Regular model training (use reduced features if restrict_classical_to_qml_dim is set)
                 result = train_classical_model(
-                    name, model, X_train, y_train, X_test, y_test,
+                    name, model, X_train_classical, y_train, X_test_classical, y_test,
                     cv_folds=args.cv_folds, random_state=args.random_state,
                     calibrate=args.calibrate_probabilities,
                     calibration_method=args.calibration_method,
@@ -2305,6 +2496,65 @@ def main():
                     'status': 'failed',
                     'error': str(e)
                 }
+
+    # ========== STEP 4.5: TRAIN GNN BASELINE (optional) ==========
+    gnn_results = {}
+    if args.run_gnn:
+        logger.info("\n" + "="*80)
+        logger.info("STEP 4.5: TRAINING GNN BASELINE")
+        logger.info("="*80)
+        try:
+            from kg_layer.gnn_baselines import train_gnn_link_predictor
+            
+            # Prepare entity_to_id mapping and node features
+            all_entities = sorted(set(train_df["source"].tolist() + train_df["target"].tolist() + 
+                                      test_df["source"].tolist() + test_df["target"].tolist()))
+            entity_to_id = {e: i for i, e in enumerate(all_entities)}
+            
+            # Use embeddings as node features
+            node_features = np.zeros((len(entity_to_id), embedder.entity_embeddings.shape[1]))
+            for entity, idx in entity_to_id.items():
+                if entity in embedder.entity_to_idx:
+                    emb_idx = embedder.entity_to_idx[entity]
+                    node_features[idx] = embedder.entity_embeddings[emb_idx]
+            
+            # Prepare train/test DataFrames with source_id and target_id
+            train_gnn_df = train_df.copy()
+            train_gnn_df["source_id"] = train_gnn_df["source"].map(entity_to_id)
+            train_gnn_df["target_id"] = train_gnn_df["target"].map(entity_to_id)
+            test_gnn_df = test_df.copy()
+            test_gnn_df["source_id"] = test_gnn_df["source"].map(entity_to_id)
+            test_gnn_df["target_id"] = test_gnn_df["target"].map(entity_to_id)
+            
+            # Load edges for GNN
+            # from kg_layer.kg_loader import load_hetionet_edges  # Already imported globally
+            df_edges = load_hetionet_edges()
+            
+            gnn_result = train_gnn_link_predictor(
+                df_edges=df_edges,
+                entity_to_id=entity_to_id,
+                node_features=node_features,
+                train_df=train_gnn_df,
+                test_df=test_gnn_df,
+                arch=args.gnn_arch,
+                hidden_dim=args.gnn_hidden,
+                layers=args.gnn_layers,
+                epochs=args.gnn_epochs,
+                random_state=args.random_state,
+            )
+            gnn_results[gnn_result.model_name] = {
+                "status": "success",
+                "pr_auc": gnn_result.pr_auc,
+                "roc_auc": gnn_result.roc_auc,
+                "accuracy": gnn_result.accuracy,
+                "fit_seconds": gnn_result.train_seconds,
+                "n_nodes": gnn_result.n_nodes,
+                "n_edges": gnn_result.n_edges,
+            }
+            logger.info(f"✓ GNN ({gnn_result.model_name}) PR-AUC: {gnn_result.pr_auc:.4f}, Accuracy: {gnn_result.accuracy:.4f}")
+        except Exception as e:
+            logger.warning(f"⚠️  GNN training failed: {e}")
+            gnn_results["GNN"] = {"status": "failed", "error": str(e)}
 
     # ========== STEP 5: PREPARE QUANTUM FEATURES ==========
     quantum_results = {}
@@ -2448,12 +2698,32 @@ def main():
         logger.info(f"Preparing quantum features with {qml_engineer.encoding_strategy} encoding...")
         logger.info(f"  Input embedding dim: {train_h_embs.shape[1]}")
         logger.info(f"  Target qubits: {args.qml_dim}")
-        
+
+        # Build optional graph-derived features for QML path
+        X_extra_train = None
+        X_extra_test = None
+        if getattr(args, "use_graph_features_in_qml", False):
+            logger.info("Building graph-derived features for QML path...")
+            if feature_builder.graph is not None:
+                def _build_graph_features_for_df(df_subset):
+                    feats = []
+                    for _, row in df_subset.iterrows():
+                        sid = id_to_entity.get(int(row["source_id"]), "")
+                        tid = id_to_entity.get(int(row["target_id"]), "")
+                        feats.append(feature_builder.build_graph_features(sid, tid))
+                    return np.array(feats, dtype=np.float32)
+
+                X_extra_train = _build_graph_features_for_df(train_df)
+                X_extra_test = _build_graph_features_for_df(test_df)
+                logger.info(f"  Graph features for QML: train {X_extra_train.shape}, test {X_extra_test.shape}")
+            else:
+                logger.warning("Graph not built (--use_graph_features may be off). Skipping graph features in QML.")
+
         X_train_qml = qml_engineer.prepare_qml_features(
-            train_h_embs, train_t_embs, y_train, fit=True
+            train_h_embs, train_t_embs, y_train, fit=True, X_extra=X_extra_train
         )
         X_test_qml = qml_engineer.prepare_qml_features(
-            test_h_embs, test_t_embs, fit=False
+            test_h_embs, test_t_embs, fit=False, X_extra=X_extra_test
         )
         
         logger.info(f"Quantum features prepared: train {X_train_qml.shape}, test {X_test_qml.shape}")
@@ -2599,6 +2869,41 @@ def main():
         test_df_qml = test_df.copy()
         test_df_qml['qml_features'] = list(X_test_qml)
 
+        # ========== STEP 5.5: QUANTUM KERNEL ALIGNMENT (optional) ==========
+        if getattr(args, "use_kernel_alignment", False):
+            logger.info("\n" + "="*80)
+            logger.info("STEP 5.5: QUANTUM KERNEL ALIGNMENT ANALYSIS")
+            logger.info("="*80)
+            try:
+                from quantum_layer.quantum_kernel_engineering import QuantumKernelAligner
+                sample_size = min(200, len(X_train_qml))
+                rng = np.random.default_rng(args.random_state)
+                sample_idx = rng.choice(len(X_train_qml), size=sample_size, replace=False)
+                X_sample = X_train_qml[sample_idx]
+                y_sample = y_train[sample_idx]
+
+                aligner = QuantumKernelAligner(
+                    feature_map_type=args.qml_feature_map if args.qml_feature_map != 'custom_link_prediction' else 'ZZ',
+                    num_qubits=args.qml_dim,
+                    reps=args.qml_feature_map_reps,
+                    entanglement=args.qml_entanglement,
+                )
+                alignment_results = aligner.align_to_target(X_sample, y_sample)
+                score = alignment_results.get('alignment_score', 0.0)
+                logger.info(f"Kernel-target alignment score: {score:.4f}")
+                if score < 0.1:
+                    logger.warning(
+                        f"LOW kernel-target alignment ({score:.4f}). "
+                        f"The quantum kernel does not match the ideal task kernel well. "
+                        f"Consider: more feature_map_reps, different feature_map (Pauli), or more qubits."
+                    )
+                else:
+                    logger.info(f"Kernel alignment is reasonable ({score:.4f})")
+            except ImportError:
+                logger.warning("Quantum kernel engineering not available (Qiskit may be missing). Skipping alignment.")
+            except Exception as e:
+                logger.warning(f"Kernel alignment analysis failed: {e}")
+
         # ========== STEP 6: TRAIN QUANTUM MODELS ==========
         logger.info("\n" + "="*80)
         logger.info("STEP 6: TRAINING QUANTUM MODELS")
@@ -2626,17 +2931,32 @@ def main():
             "feature_map_type": args.qml_feature_map,
             "feature_map_reps": args.qml_feature_map_reps,
             "entanglement": args.qml_entanglement,
+            "encoding_strategy": chosen_encoding,  # Log the actual encoding used (may differ from args if sweep)
             "use_classical_features_in_kernel": args.use_classical_features_in_kernel,
             "use_data_reuploading": args.use_data_reuploading,
             "use_variational_feature_map": args.use_variational_feature_map,
             "optimize_feature_map_reps": args.optimize_feature_map_reps,
             "random_state": args.random_state,
+            # Mitigation settings (for ablation logging)
+            "zne_enabled": not args.disable_zne,
+            "readout_mitigation_enabled": not args.disable_readout_mitigation,
+            # Regularization
+            "qsvc_C": args.qsvc_C,
             # Nyström approximation (optional)
             "nystrom_m": args.qsvc_nystrom_m,
             "nystrom_ridge": args.nystrom_ridge,
             "nystrom_max_pairs": args.nystrom_max_pairs,
             # Enable landmark mitigation by default; allow opt-out
             "nystrom_landmark_mitigation": (not args.no_nystrom_landmark_mitigation),
+            # Pipeline options (for Comparison / ablation in dashboard)
+            "use_evidence_weighting": bool(getattr(args, "use_evidence_weighting", False)),
+            "negative_sampling": str(getattr(args, "negative_sampling", "random")),
+            "restrict_classical_to_qml_dim": bool(getattr(args, "restrict_classical_to_qml_dim", False)),
+            # Embedding diversity (for Diagnostics: diversity vs quantum PR-AUC)
+            "head_unique_fraction": (h_unique / len(train_h_embs)) if len(train_h_embs) else 0.0,
+            "tail_unique_fraction": (t_unique / len(train_t_embs)) if len(train_t_embs) else 0.0,
+            "head_unique_count": int(h_unique),
+            "tail_unique_count": int(t_unique),
         }
         
         # If using classical features in kernel, pass the enhanced features
@@ -2710,18 +3030,24 @@ def main():
 
         # VQC (if not fast mode and not quantum_only and not skip_vqc - skip VQC for faster QSVC-only runs)
         if not args.skip_vqc and not args.fast_mode and not args.quantum_only:
+            vqc_ansatz_type = getattr(args, "vqc_ansatz_type", "RealAmplitudes")
+            vqc_ansatz_reps = int(getattr(args, "vqc_ansatz_reps", 3))
+            vqc_optimizer = getattr(args, "vqc_optimizer", "SPSA")
             vqc_config = {
                 "model_type": "VQC",
                 "encoding_method": "feature_map",
                 "num_qubits": args.qml_dim,
-                "feature_map_type": "ZZ",
-                "feature_map_reps": 2,
-                "ansatz_type": "RealAmplitudes",
-                "ansatz_reps": 3,
-                "optimizer": "COBYLA",
+                "feature_map_type": args.qml_feature_map if args.qml_feature_map != 'custom_link_prediction' else 'ZZ',
+                "feature_map_reps": args.qml_feature_map_reps,
+                "ansatz_type": vqc_ansatz_type,
+                "ansatz_reps": vqc_ansatz_reps,
+                "optimizer": vqc_optimizer,
                 "max_iter": args.qml_max_iter,
                 "random_state": args.random_state
             }
+            logger.info(f"VQC config: ansatz={vqc_ansatz_type} reps={vqc_ansatz_reps}, "
+                       f"optimizer={vqc_optimizer}, feature_map={vqc_config['feature_map_type']} "
+                       f"reps={vqc_config['feature_map_reps']}")
 
             logger.info("Training VQC...")
             try:
@@ -2745,6 +3071,203 @@ def main():
             except Exception as e:
                 logger.error(f"  ❌ VQC failed: {e}")
                 quantum_results['VQC-Optimized'] = {'status': 'failed', 'error': str(e)}
+
+    # ========== STEP 6.5: WRITE PREDICTIONS_COMPARE.CSV (Q vs C) ==========
+    # When both classical and quantum ran, write a joint predictions file for link-level comparison
+    if classical_results and quantum_results:
+        try:
+            # Get the best classical model's test scores (prefer LogisticRegression, then RandomForest)
+            classical_test_scores = None
+            for model_name in ['LogisticRegression-L2', 'RandomForest-Optimized', 'Ensemble-RF-LR']:
+                if model_name in classical_results and classical_results[model_name].get('status') == 'success':
+                    classical_test_scores = classical_results[model_name].get('test_scores')
+                    if classical_test_scores is not None:
+                        logger.info(f"Using {model_name} test scores for predictions_compare.csv")
+                        break
+            
+            # Get quantum test scores from predictions_latest.csv
+            quantum_test_scores = None
+            pred_latest_path = os.path.join(args.results_dir, "predictions_latest.csv")
+            if os.path.exists(pred_latest_path):
+                try:
+                    pred_df = pd.read_csv(pred_latest_path)
+                    # Filter to test set only
+                    if 'split' in pred_df.columns:
+                        test_pred = pred_df[pred_df['split'] == 'test'].copy()
+                        if 'y_score' in test_pred.columns:
+                            quantum_test_scores = test_pred['y_score'].values
+                except Exception as e:
+                    logger.warning(f"Could not read quantum scores from predictions_latest.csv: {e}")
+            
+            # Write predictions_compare.csv if we have both
+            if classical_test_scores is not None and quantum_test_scores is not None:
+                # Ensure lengths match (should be len(test_df))
+                if len(classical_test_scores) == len(y_test) and len(quantum_test_scores) == len(y_test):
+                    compare_df = pd.DataFrame({
+                        'source': test_df['source'].values if 'source' in test_df.columns else test_df['source_id'].values,
+                        'target': test_df['target'].values if 'target' in test_df.columns else test_df['target_id'].values,
+                        'y_true': y_test,
+                        'y_score_classical': classical_test_scores,
+                        'y_score_quantum': quantum_test_scores,
+                    })
+                    compare_path = os.path.join(args.results_dir, "predictions_compare.csv")
+                    compare_df.to_csv(compare_path, index=False)
+                    logger.info(f"✅ Written Q vs C comparison: {compare_path}")
+                else:
+                    logger.warning(f"Score length mismatch: classical={len(classical_test_scores)}, quantum={len(quantum_test_scores)}, test={len(y_test)}")
+            else:
+                if classical_test_scores is None:
+                    logger.info("No classical test scores available for predictions_compare.csv")
+                if quantum_test_scores is None:
+                    logger.info("No quantum test scores available for predictions_compare.csv")
+        except Exception as e:
+            logger.warning(f"Could not write predictions_compare.csv: {e}")
+
+    # ========== STEP 6.8: QUANTUM-CLASSICAL ENSEMBLE ==========
+    ensemble_results = {}
+    if getattr(args, "run_ensemble", False) and classical_results and quantum_results:
+        logger.info("\n" + "=" * 80)
+        logger.info("STEP 6.8: QUANTUM-CLASSICAL ENSEMBLE")
+        logger.info("=" * 80)
+
+        try:
+            # --- Collect classical prediction scores ---
+            best_classical_name = None
+            best_classical_test_scores = None
+            best_classical_train_scores = None
+            for cname in ['LogisticRegression-L2', 'RandomForest-Optimized', 'Ensemble-RF-LR',
+                          'ExtraTrees-Optimized', 'HistGBDT']:
+                cres = classical_results.get(cname)
+                if cres and cres.get('status') == 'success' and cres.get('test_scores') is not None:
+                    best_classical_name = cname
+                    best_classical_test_scores = np.asarray(cres['test_scores'])
+                    break
+
+            # --- Collect quantum prediction scores ---
+            best_quantum_name = None
+            best_quantum_test_scores = None
+            pred_latest_path = os.path.join(args.results_dir, "predictions_latest.csv")
+            if os.path.exists(pred_latest_path):
+                try:
+                    pred_df = pd.read_csv(pred_latest_path)
+                    if 'split' in pred_df.columns and 'y_score' in pred_df.columns:
+                        test_pred = pred_df[pred_df['split'] == 'test']
+                        if len(test_pred) > 0:
+                            best_quantum_test_scores = test_pred['y_score'].values
+                except Exception:
+                    pass
+
+            # Identify which quantum model succeeded (for naming)
+            for qname in ['QSVC-Optimized', 'VQC-Optimized']:
+                qres = quantum_results.get(qname)
+                if qres and qres.get('status') == 'success':
+                    best_quantum_name = qname
+                    break
+
+            if best_classical_test_scores is not None and best_quantum_test_scores is not None:
+                # Ensure lengths match
+                if len(best_classical_test_scores) == len(y_test) and len(best_quantum_test_scores) == len(y_test):
+                    ensemble_method = str(getattr(args, "ensemble_method", "weighted_average"))
+                    q_weight = float(getattr(args, "ensemble_quantum_weight", 0.5))
+                    c_weight = 1.0 - q_weight
+
+                    logger.info(f"Ensemble method: {ensemble_method}")
+                    logger.info(f"Classical model: {best_classical_name}")
+                    logger.info(f"Quantum model: {best_quantum_name}")
+
+                    t0 = time.time()
+
+                    if ensemble_method == "weighted_average":
+                        total_w = q_weight + c_weight
+                        ensemble_test_scores = (q_weight / total_w) * best_quantum_test_scores + (c_weight / total_w) * best_classical_test_scores
+
+                    elif ensemble_method == "voting":
+                        ensemble_test_scores = (best_quantum_test_scores + best_classical_test_scores) / 2.0
+
+                    elif ensemble_method == "stacking":
+                        # Train a LogisticRegression meta-learner on train predictions
+                        # Get train-set predictions: classical from OOF, quantum from predictions_latest
+                        classical_train_scores = None
+                        quantum_train_scores = None
+
+                        # Classical train scores: re-predict on train set from fitted model
+                        # The model objects are in `models` dict (from STEP 4) and already fitted
+                        if 'models' in dir() and best_classical_name in models and models[best_classical_name] is not None:
+                            fitted_model = models[best_classical_name]
+                            if hasattr(fitted_model, 'predict_proba'):
+                                classical_train_scores = fitted_model.predict_proba(X_train_classical)[:, 1]
+                            elif hasattr(fitted_model, 'decision_function'):
+                                raw = fitted_model.decision_function(X_train_classical)
+                                classical_train_scores = 1.0 / (1.0 + np.exp(-raw))
+
+                        # Quantum train scores from predictions_latest.csv
+                        if os.path.exists(pred_latest_path):
+                            try:
+                                if 'pred_df' not in dir():
+                                    pred_df = pd.read_csv(pred_latest_path)
+                                if 'split' in pred_df.columns and 'y_score' in pred_df.columns:
+                                    train_pred = pred_df[pred_df['split'] == 'train']
+                                    if len(train_pred) > 0:
+                                        quantum_train_scores = train_pred['y_score'].values
+                            except Exception:
+                                pass
+
+                        if (classical_train_scores is not None and quantum_train_scores is not None
+                                and len(classical_train_scores) == len(y_train)
+                                and len(quantum_train_scores) == len(y_train)):
+                            meta_X_train = np.column_stack([quantum_train_scores, classical_train_scores])
+                            meta_X_test = np.column_stack([best_quantum_test_scores, best_classical_test_scores])
+                            meta_lr = LogisticRegression(random_state=args.random_state, max_iter=1000)
+                            meta_lr.fit(meta_X_train, y_train)
+                            ensemble_test_scores = meta_lr.predict_proba(meta_X_test)[:, 1]
+                            logger.info(f"Stacking meta-learner coefficients: {meta_lr.coef_[0]}")
+                        else:
+                            logger.warning("Stacking: could not obtain aligned train scores; falling back to weighted_average")
+                            total_w = q_weight + c_weight
+                            ensemble_test_scores = (q_weight / total_w) * best_quantum_test_scores + (c_weight / total_w) * best_classical_test_scores
+                            ensemble_method = "weighted_average (stacking fallback)"
+                    else:
+                        ensemble_test_scores = (best_quantum_test_scores + best_classical_test_scores) / 2.0
+
+                    fit_time = time.time() - t0
+                    ensemble_preds = (ensemble_test_scores >= 0.5).astype(int)
+                    ensemble_metrics = compute_metrics(y_test, ensemble_preds, ensemble_test_scores)
+
+                    ensemble_label = f"Ensemble-QC-{ensemble_method.replace(' ', '_')}"
+                    logger.info(f"  ✅ {ensemble_label} - Test PR-AUC: {ensemble_metrics.get('pr_auc', 0.0):.4f} (fit: {fit_time:.2f}s)")
+
+                    # Compare to individual models
+                    q_pr_auc = quantum_results.get(best_quantum_name, {}).get('test_metrics', {}).get('pr_auc', 0.0)
+                    c_pr_auc = classical_results.get(best_classical_name, {}).get('test_metrics', {}).get('pr_auc', 0.0)
+                    ens_pr_auc = ensemble_metrics.get('pr_auc', 0.0)
+                    improvement = ens_pr_auc - max(q_pr_auc, c_pr_auc)
+                    logger.info(f"  Quantum PR-AUC: {q_pr_auc:.4f}, Classical PR-AUC: {c_pr_auc:.4f}, Ensemble PR-AUC: {ens_pr_auc:.4f}")
+                    logger.info(f"  Ensemble improvement over best individual: {improvement:+.4f}")
+
+                    ensemble_results[ensemble_label] = {
+                        'status': 'success',
+                        'test_metrics': ensemble_metrics,
+                        'fit_seconds': fit_time,
+                        'method': ensemble_method,
+                        'quantum_model': best_quantum_name,
+                        'classical_model': best_classical_name,
+                        'quantum_weight': q_weight,
+                        'classical_weight': c_weight,
+                        'improvement_over_best': improvement,
+                    }
+                else:
+                    logger.warning(f"Score length mismatch for ensemble: classical={len(best_classical_test_scores)}, quantum={len(best_quantum_test_scores)}, y_test={len(y_test)}")
+            else:
+                missing = []
+                if best_classical_test_scores is None:
+                    missing.append("classical")
+                if best_quantum_test_scores is None:
+                    missing.append("quantum")
+                logger.warning(f"Cannot build ensemble: missing test scores from {', '.join(missing)} model(s)")
+        except Exception as e:
+            logger.error(f"Quantum-classical ensemble failed: {e}")
+            import traceback
+            traceback.print_exc()
 
     # ========== STEP 7: COMPARISON REPORT ==========
     logger.info("\n" + "="*80)
@@ -2773,6 +3296,28 @@ def main():
                 'pr_auc': result['test_metrics'].get('pr_auc', 0.0),
                 'accuracy': result['test_metrics'].get('accuracy', 0.0),
                 'fit_time': result['fit_seconds']
+            })
+
+    # Add GNN results
+    for name, result in gnn_results.items():
+        if result.get('status') == 'success':
+            all_results.append({
+                'name': name,
+                'type': 'gnn',
+                'pr_auc': result.get('pr_auc', 0.0),
+                'accuracy': result.get('accuracy', 0.0),
+                'fit_time': result.get('fit_seconds', 0.0)
+            })
+
+    # Add ensemble results
+    for name, result in ensemble_results.items():
+        if result.get('status') == 'success':
+            all_results.append({
+                'name': name,
+                'type': 'ensemble',
+                'pr_auc': result['test_metrics'].get('pr_auc', 0.0),
+                'accuracy': result['test_metrics'].get('accuracy', 0.0),
+                'fit_time': result.get('fit_seconds', 0.0)
             })
 
     # Sort by PR-AUC
@@ -2804,10 +3349,22 @@ def main():
         if best_quantum:
             print(f"🏆 Best Quantum: {best_quantum['name']} - PR-AUC: {best_quantum['pr_auc']:.4f}")
 
+        best_ensemble = next((r for r in all_results if r['type'] == 'ensemble'), None)
+        if best_ensemble:
+            print(f"🏆 Best Ensemble: {best_ensemble['name']} - PR-AUC: {best_ensemble['pr_auc']:.4f}")
+
         if best_classical and best_quantum:
             diff = best_quantum['pr_auc'] - best_classical['pr_auc']
             winner = 'Quantum wins!' if diff > 0 else 'Classical wins!' if diff < 0 else 'Tie!'
             print(f"\n📊 Quantum vs Classical: {diff:+.4f} ({winner})")
+
+        if best_ensemble:
+            best_individual = max(
+                (best_classical['pr_auc'] if best_classical else 0.0),
+                (best_quantum['pr_auc'] if best_quantum else 0.0)
+            )
+            ens_diff = best_ensemble['pr_auc'] - best_individual
+            print(f"📊 Ensemble vs Best Individual: {ens_diff:+.4f}")
 
     # Save results
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -2817,8 +3374,10 @@ def main():
         "config": vars(args),
         "classical_results": classical_results,
         "quantum_results": quantum_results,
+        "ensemble_results": ensemble_results,
+        "gnn_results": gnn_results,
         "pykeen_direct": pykeen_direct_metrics,
-        "gnn_baseline": gnn_metrics,
+        "gnn_baseline": gnn_metrics,  # Legacy field
         "ranking": all_results,
         "timestamp": stamp
     }

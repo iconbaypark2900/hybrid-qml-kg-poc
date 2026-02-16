@@ -147,6 +147,8 @@ PyYAML==6.0.1
 pyzmq==27.1.0
 qiskit==1.4.4
 qiskit-aer==0.17.2
+# GPU-accelerated quantum simulation: pip install qiskit-aer-gpu (replaces qiskit-aer)
+# Or compile qiskit-aer from source with -DAER_THRUST_BACKEND=CUDA
 qiskit-algorithms==0.4.0
 qiskit-ibm-runtime==0.42.0
 qiskit-machine-learning==0.8.4

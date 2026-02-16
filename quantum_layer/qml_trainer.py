@@ -695,7 +695,11 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
 
     qe = QuantumExecutor(args.quantum_config)
     sampler, exec_mode = qe.get_sampler()
-    if exec_mode in ("statevector", "simulator_statevector"):
+    if exec_mode == "gpu_simulator":
+        fm_exec = fm.decompose(reps=10)
+        qk = FidelityQuantumKernel(feature_map=fm_exec, fidelity=ComputeUncompute(sampler=sampler))
+        log.info("Using GPU-backed FidelityQuantumKernel (cuStateVec)")
+    elif exec_mode in ("statevector", "simulator_statevector"):
         qk = FidelityStatevectorKernel(feature_map=fm)
     else:
         # Aer (and most backends) can't execute custom composite instructions like "ZZFeatureMap"
@@ -768,8 +772,8 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
         Evaluate a kernel block, optionally applying entrywise ZNE (landmark mitigation)
         when on noisy depolarizing simulator and enabled.
         """
-        # No mitigation needed/possible in statevector mode
-        if exec_mode in ("statevector", "simulator_statevector"):
+        # No mitigation needed/possible in statevector or GPU simulator mode (ideal sim)
+        if exec_mode in ("statevector", "simulator_statevector", "gpu_simulator"):
             return qk.evaluate(XA, XB)
 
         sim_cfg = (qe.config or {}).get("quantum", {}).get("simulator", {})
@@ -835,30 +839,33 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
     import hashlib
     import pickle
     from pathlib import Path
-    
+
     cache_dir = Path("data/kernel_cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create cache key from configuration and data hash
-    config_str = f"{args.qml_dim}_{args.feature_map}_{args.feature_map_reps}_{nystrom_enabled}_{nystrom_m if nystrom_enabled else 'full'}"
+    config_str = f"{args.qml_dim}_{args.feature_map}_{args.feature_map_reps}_{getattr(args, 'entanglement', 'linear')}_{nystrom_enabled}_{nystrom_m if nystrom_enabled else 'full'}"
+    # Include quantum config path in hash to differentiate between different quantum configurations
+    config_path_hash = hashlib.md5(str(args.quantum_config).encode()).hexdigest()[:8]
     data_hash = hashlib.md5(
         np.concatenate([X_train.flatten(), X_test.flatten()]).tobytes()
     ).hexdigest()[:16]
-    cache_key = f"{config_str}_{data_hash}"
+    cache_key = f"{config_str}_{config_path_hash}_{data_hash}"
     cache_file = cache_dir / f"kernel_{cache_key}.pkl"
-    
+
     K_train = None
     K_test = None
     kernel_cached = False
-    
+
     # Try to load cached kernels
     if cache_file.exists():
         try:
             log.info(f"[QSVC-precomputed] Loading cached kernels from {cache_file}")
             with open(cache_file, 'rb') as f:
                 cached_data = pickle.load(f)
-                if (cached_data.get('config') == config_str and 
-                    cached_data.get('data_hash') == data_hash):
+                if (cached_data.get('config') == config_str and
+                    cached_data.get('data_hash') == data_hash and
+                    cached_data.get('config_path_hash') == config_path_hash):
                     K_train = cached_data.get('K_train')
                     K_test = cached_data.get('K_test')
                     kernel_cached = True
@@ -937,6 +944,7 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
             cache_data = {
                 'config': config_str,
                 'data_hash': data_hash,
+                'config_path_hash': config_path_hash,
                 'K_train': K_train,
                 'K_test': K_test,
                 'n_train': n_train,

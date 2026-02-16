@@ -5,164 +5,231 @@ sdk: streamlit
 sdk_version: "1.32.0"
 ---
 
-# Hybrid Quantum–Classical Knowledge Graph Link Prediction
+# Hybrid Quantum-Classical Knowledge Graph Link Prediction
 
-A proof-of-concept system that combines **classical machine learning** and **quantum computing** to predict drug–disease treatment relationships in the **Hetionet** biomedical knowledge graph.
-
----
-
-## Overview
-
-This project demonstrates how **quantum machine learning (QML)** can be applied to biomedical link prediction.  
-It compares classical machine learning approaches with quantum algorithms to explore potential quantum advantages in **parameter efficiency** and **scalability**.
-
-- **Knowledge Graph**: Hetionet  
-  - Think of Hetionet as a giant **map of medical facts**.  
-  - **Nodes (dots)** represent medical entities—drugs, diseases, genes, symptoms, etc.  
-  - **Edges (lines)** represent known relationships, like *this drug treats that disease* or *this gene is linked to that condition*.
-- **Focus**: We zoom in on one relationship type: **Compound treats Disease (CtD)**.  
-- **Proof-of-Concept**: About **300 items** are sampled to quickly explore how well classical and quantum approaches can learn hidden links.
+A hybrid quantum-classical machine learning system for biomedical link prediction on the [Hetionet](https://het.io/) knowledge graph. The system predicts **Compound-treats-Disease (CtD)** relationships by combining classical ensemble methods with quantum kernel classifiers, achieving a best PR-AUC of **0.7987** via a stacking ensemble.
 
 ---
 
-## How It Works
+## Results
 
-### 1. Build a Training Set
-- **Positive examples**: known drug–disease treatments.  
-- **Negative examples**: drug–disease pairs not known to be treatments.
+| Model | Test PR-AUC | Type |
+|-------|-------------|------|
+| Ensemble-QC-stacking (Pauli) | **0.7987** | Hybrid ensemble |
+| RandomForest-Optimized | 0.7838 | Classical |
+| ExtraTrees-Optimized | 0.7807 | Classical |
+| Ensemble-QC-stacking (ZZ) | 0.7408 | Hybrid ensemble |
+| QSVC-Optimized | 0.7216 | Quantum |
 
-### 2. Convert Nodes to Numbers
-Each drug and disease is transformed into a unique numeric **fingerprint (embedding)** so that algorithms can process them.
+**Target PR-AUC > 0.70: Achieved.**
 
-### 3. Create Pairwise Features
-For every drug–disease pair, combine the two fingerprints into a single row of numbers that describes their relationship.
-
-### 4. Train Models to Spot Patterns
-- **Classical model**: Logistic Regression (standard machine learning).
-- **Quantum models**:
-  - **QSVC (Quantum Support Vector Classifier)** — computes quantum similarity between pairs.
-  - **VQC (Variational Quantum Classifier)** — a small quantum circuit trained with SPSA optimization.
-
-### 5. Predict New Links
-Once trained, the models can identify drug–disease pairs that **might represent new treatments**, helping with **drug repurposing**.
+The best result uses full-graph RotatE embeddings (128D, 200 epochs), hard negative sampling, 16-qubit Pauli feature maps (reps=2), QSVC regularization (C=0.1), and a stacking ensemble with GridSearchCV-tuned classical models.
 
 ---
 
-## Key Results
+## Architecture
 
-| Model | Train PR-AUC | Test PR-AUC | Key Takeaway |
-|-------|-------------|------------|--------------|
-| **Logistic Regression** | 0.86 | 0.60 | Strong on training data but dropped on new data (overfit). |
-| **QSVC** | 0.75 | **0.65** | Held up slightly better on unseen data. |
-| **VQC** | 0.55 | 0.49 | Performed about as well as random guessing; needs re-tuning. |
-
-> **Precision** = when we say “treats,” how often we are correct.  
-> **Recall** = of all real treatments, how many we actually find.  
-> **PR-AUC** = balances precision and recall across thresholds (higher is better and key when positives are rare).
-
----
-
-## Features
-
-- **Biomedical Link Prediction** – Predicts drug–disease treatment relationships from Hetionet.
-- **Quantum ML Implementation** – QSVC and VQC built with Qiskit and trained with SPSA.
-- **Classical Baselines** – Logistic Regression and other standard machine learning models.
-- **IBM Quantum Integration** – Ready to run on real IBM Quantum hardware (Heron, Brisbane, Torino) or simulators.
-- **Interactive Dashboard** – Streamlit app to tell the end-to-end story (data → models → benchmarks) and run benchmarks / view evidence-backed predictions.
-- **REST API** – FastAPI service for programmatic predictions.
-- **Quantum-Enhanced Embeddings** – Advanced embedding techniques optimized for quantum models using kernel alignment and expressibility optimization.
-- **Quantum Transfer Learning** – Framework for transferring knowledge from pre-trained quantum models to new domains/tasks.
-- **Advanced Error Mitigation** – State-of-the-art techniques including Zero-Noise Extrapolation, Probabilistic Error Cancellation, and Clifford Data Regression.
-- **Quantum Circuit Optimization** – Advanced optimization techniques for reducing gate count, optimizing parameters, and adapting to hardware topology.
-- **Quantum Kernel Engineering** – Adaptive and trainable quantum kernels with alignment optimization for improved performance.
-- **Quantum Variational Feature Selection** – Quantum variational algorithms for identifying the most relevant features for quantum models.
-
----
-
-## Installation
-
-```bash
-# Clone repository
-git clone <repository-url>
-cd hybrid-qml-kg
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your IBM Quantum token
 ```
+Hetionet (CtD)
+    |
+    v
+Full-Graph Embeddings (RotatE / ComplEx, 128D, 200 epochs)
+    |
+    v
+Pair Feature Construction (concat + diff + Hadamard)
+    |                               |
+    v                               v
+Classical Path                 Quantum Path
+ - LogisticRegression           - PCA reduction (pre-PCA 24 -> 16D)
+ - RandomForest                 - Pauli / ZZ feature maps
+ - ExtraTrees                   - QSVC (C=0.1, kernel alignment)
+ - GridSearchCV tuning          - VQC (SPSA optimizer)
+    |                               |
+    +-------------------------------+
+                    |
+                    v
+          Stacking Ensemble
+                    |
+                    v
+          PR-AUC & Rankings
+```
+
+### Pipeline Components
+
+- **Knowledge graph layer** (`kg_layer/`): Hetionet ingestion, full-graph embedding training (RotatE, ComplEx, DistMult via PyKEEN), enhanced feature engineering (graph topology features, hard negative sampling), and embedding diversity analysis.
+- **Quantum layer** (`quantum_layer/`): QSVC with fidelity quantum kernels (ZZ, Pauli feature maps), VQC with configurable ansatzes (RealAmplitudes, EfficientSU2, TwoLocal) and SPSA optimizer, kernel-target alignment, and quantum-classical ensemble (stacking or weighted average).
+- **Classical baselines** (`classical_baseline/`): Logistic regression, random forest, and extra trees with optional GridSearchCV hyperparameter tuning.
+- **Execution backends** (`quantum_layer/quantum_executor.py`): Statevector simulator (default), noisy simulator (Aer with device noise models), GPU-accelerated simulator (cuStateVec via `--gpu`), and IBM Quantum hardware (Heron).
+- **Dashboard** (`benchmarking/dashboard.py`): Streamlit application for running benchmarks, viewing results, live predictions, experiment comparison, and knowledge graph exploration.
+- **API** (`middleware/api.py`): FastAPI service for programmatic link predictions.
 
 ---
 
 ## Quick Start
 
-1. **Load Knowledge Graph Data**
-   ```bash
-   python kg_layer/kg_loader.py
-   ```
-2. **Train Classical Baseline**
-   ```bash
-   python classical_baseline/train_baseline.py
-   ```
-3. **Train Quantum Model (Simulator)**
-   ```bash
-   python quantum_layer/qml_trainer.py
-   ```
-4. **Launch Dashboard**
-   ```bash
-   streamlit run benchmarking/dashboard.py
-   ```
-5. **Start API Server**
-   ```bash
-   uvicorn middleware.api:app --reload
-   ```
+### Installation
+
+```bash
+git clone <repository-url>
+cd hybrid-qml-kg-poc
+
+python -m venv .venv
+source .venv/bin/activate
+
+# Dashboard and lightweight runs
+pip install -r requirements.txt
+
+# Full pipeline (PyTorch, PyKEEN, embedding training)
+pip install -r requirements-full.txt
+```
+
+### Reproduce the Best Result
+
+```bash
+python scripts/run_optimized_pipeline.py --relation CtD \
+  --full_graph_embeddings --embedding_method RotatE --embedding_dim 128 \
+  --embedding_epochs 200 --negative_sampling hard --qml_dim 16 \
+  --qml_feature_map Pauli --qml_feature_map_reps 2 --qsvc_C 0.1 \
+  --optimize_feature_map_reps --run_ensemble --ensemble_method stacking \
+  --tune_classical --qml_pre_pca_dim 24 --fast_mode
+```
+
+### Launch the Dashboard
+
+```bash
+streamlit run benchmarking/dashboard.py
+```
+
+The dashboard includes a **Generate demo results** button (under **Run benchmarks**) that populates the interface with the best-run metrics without requiring a full pipeline execution.
+
+### Start the API Server
+
+```bash
+uvicorn middleware.api:app --reload
+```
+
+---
+
+## Pipeline Configuration
+
+### Key Flags
+
+| Flag | Description | Best-run value |
+|------|-------------|----------------|
+| `--full_graph_embeddings` | Train embeddings on all Hetionet relations | Enabled |
+| `--embedding_method` | KG embedding algorithm | `RotatE` |
+| `--embedding_dim` | Embedding dimensionality | `128` |
+| `--embedding_epochs` | Training epochs for embeddings | `200` |
+| `--negative_sampling` | Negative sampling strategy | `hard` |
+| `--qml_dim` | Number of qubits / quantum feature dimension | `16` |
+| `--qml_feature_map` | Quantum feature map type | `Pauli` |
+| `--qml_feature_map_reps` | Feature map repetitions | `2` |
+| `--qsvc_C` | QSVC regularization parameter | `0.1` |
+| `--run_ensemble` | Enable quantum-classical ensemble | Enabled |
+| `--ensemble_method` | Ensemble strategy | `stacking` |
+| `--tune_classical` | GridSearchCV for classical models | Enabled |
+| `--qml_pre_pca_dim` | Pre-PCA dimensionality | `24` |
+| `--optimize_feature_map_reps` | Auto-select reps via kernel alignment | Enabled |
+| `--use_graph_features_in_qml` | Add graph topology features to quantum input | Optional |
+| `--gpu` | Use GPU-accelerated quantum simulation | Optional |
+
+### Execution Modes
+
+```bash
+# CPU simulator (default)
+python scripts/run_optimized_pipeline.py --relation CtD ...
+
+# GPU-accelerated simulation (requires qiskit-aer-gpu)
+python scripts/run_optimized_pipeline.py --relation CtD --gpu ...
+
+# DGX Spark (auto-detected)
+HYBRID_QML_SYSTEM=dgx python scripts/run_optimized_pipeline.py --relation CtD ...
+
+# Explicit config file
+python scripts/run_optimized_pipeline.py --quantum_config_path config/quantum_config_gpu.yaml ...
+```
+
+All GPU paths fall back to CPU automatically if no GPU is detected.
+
+### Hyperparameter Search (Optuna)
+
+```bash
+python scripts/optuna_pipeline_search.py --n_trials 30 --objective ensemble
+python scripts/optuna_pipeline_search.py --n_trials 20 --objective qsvc
+python scripts/optuna_pipeline_search.py --n_trials 20 --objective classical
+```
+
+Results are saved to `results/optuna/optuna_trials.csv` and `results/optuna/optuna_best.json`.
+
+---
+
+## Experiment Log
+
+| Variant | RF | ET | QSVC | Ensemble | Notes |
+|---------|------|------|------|----------|-------|
+| Base (200 ep, stacking, tune, pre-PCA 24) | 0.7838 | 0.7807 | 0.7216 | 0.7408 | Best classical |
+| + Pauli feature map (reps=2) | 0.7838 | 0.7807 | 0.6343 | **0.7987** | Best ensemble |
+| + diverse negatives (dw=0.5) | 0.7144 | 0.7298 | 0.6689 | 0.6919 | Diverse hurts here |
+| + qsvc_C=0.05 | 0.7838 | 0.7807 | 0.7216 | 0.7408 | Same as C=0.1 |
+| + ensemble_quantum_weight=0.4 | 0.7838 | 0.7807 | 0.7216 | 0.7408 | Stacking learns weights |
+
+**Key findings:**
+
+- The Pauli feature map substantially improves ensemble performance (0.7408 to 0.7987) by changing how quantum kernels encode pair features.
+- Stacking ensemble learns optimal classical/quantum weights automatically; manually setting `ensemble_quantum_weight` has no additional effect.
+- Hard negative sampling outperforms diverse negative sampling in this configuration.
+- VQC remains near random (best: 0.5474 with RealAmplitudes reps=4, SPSA); QSVC is the effective quantum model.
 
 ---
 
 ## Project Structure
 
 ```
-hybrid-qml-kg/
-├── kg_layer/               # Knowledge graph processing
-│   ├── kg_loader.py        # Load Hetionet data
-│   └── kg_embedder.py      # Generate embeddings
-├── classical_baseline/     # Classical ML models
-│   └── train_baseline.py   # Train classical models
-├── quantum_layer/          # Quantum ML implementation
-│   ├── qml_model.py        # QSVC and VQC models
-│   └── qml_trainer.py      # Quantum training pipeline
-├── benchmarking/           # Performance evaluation
-│   └── dashboard.py        # Streamlit dashboard
-├── middleware/             # FastAPI prediction service
-│   └── api.py
-└── notebooks/              # Jupyter notebooks for experiments
-```
-
----
-
-## Usage Example
-
-### Make a Prediction via API
-```python
-import requests
-
-response = requests.post("http://localhost:8000/predict-link", json={
-    "drug": "DB00945",      # Aspirin
-    "disease": "DOID_9352"  # Type 2 Diabetes
-})
-print(response.json())
-# {"link_probability": 0.73, "model_used": "QSVC"}
-```
-
-### Run on IBM Quantum Hardware
-```bash
-python quantum_layer/train_on_heron.py
+hybrid-qml-kg-poc/
+|-- kg_layer/                    # Knowledge graph processing
+|   |-- kg_loader.py             # Hetionet data ingestion
+|   |-- kg_embedder.py           # Embedding training (PyKEEN)
+|   |-- advanced_embeddings.py   # RotatE, ComplEx, DistMult
+|   |-- enhanced_features.py     # Graph topology features
+|   +-- ...
+|-- quantum_layer/               # Quantum ML implementation
+|   |-- qml_model.py             # QSVC and VQC models
+|   |-- qml_trainer.py           # Quantum training pipeline
+|   |-- quantum_executor.py      # Backend routing (sim/GPU/hardware)
+|   |-- advanced_qml_features.py # Quantum feature preparation
+|   |-- quantum_kernel_engineering.py
+|   |-- quantum_classical_ensemble.py
+|   +-- ...
+|-- classical_baseline/          # Classical ML baselines
+|   +-- train_baseline.py
+|-- scripts/                     # Pipeline and experiment scripts
+|   |-- run_optimized_pipeline.py    # Main pipeline entry point
+|   |-- optuna_pipeline_search.py    # Bayesian HPO
+|   +-- ...
+|-- benchmarking/                # Performance evaluation
+|   |-- dashboard.py             # Streamlit dashboard
+|   +-- ...
+|-- config/                      # Quantum backend configurations
+|   |-- quantum_config_gpu.yaml  # GPU simulator
+|   |-- quantum_config_dgx.yaml  # DGX Spark
+|   |-- quantum_config_ideal.yaml
+|   |-- quantum_config_noisy.yaml
+|   +-- ...
+|-- experiments/                 # Ablation and analysis scripts
+|   |-- vqc_optimization_analysis.py
+|   |-- quantum_ablation.py
+|   +-- ...
+|-- middleware/                   # FastAPI prediction service
+|   +-- api.py
+|-- utils/                       # Shared utilities
+|   |-- evaluation.py            # CV, metrics, model comparison
+|   |-- calibration.py           # Model calibration
+|   +-- reproducibility.py       # Seed control
+|-- notebooks/                   # Jupyter notebooks
+|-- docs/                        # Additional documentation
+|-- requirements.txt             # Dashboard dependencies
+|-- requirements-full.txt        # Full pipeline dependencies
++-- README.md
 ```
 
 ---
@@ -170,39 +237,50 @@ python quantum_layer/train_on_heron.py
 ## Requirements
 
 - Python 3.9+
-- IBM Quantum account (free tier available)
-- 8 GB RAM minimum
-- Optional: Docker for containerized deployment
+- 8 GB RAM minimum (16 GB recommended for 16-qubit runs)
+- Optional: NVIDIA GPU with CUDA for accelerated quantum simulation
+- Optional: IBM Quantum account for hardware execution
+
+### Dependency Groups
+
+| File | Scope |
+|------|-------|
+| `requirements.txt` | Dashboard and lightweight local runs (Streamlit, Qiskit, scikit-learn) |
+| `requirements-full.txt` | Full pipeline including PyTorch, PyKEEN, and embedding training |
 
 ---
 
-## Takeaways
+## Documentation
 
-- The **classical model** fit the training set well but overfit, dropping from 0.86 to 0.60 PR-AUC on unseen data.
-- The **quantum kernel model (QSVC)** generalized slightly better, achieving 0.65 PR-AUC on the test set.
-- The **VQC** configuration needs feature/circuit re-tuning; future work will increase feature dimension, add graph-based priors, and use better early stopping.
-
-This demonstrates how quantum methods can **complement classical techniques**, and how combining them may uncover new treatment relationships hidden in biomedical data.
+| Document | Description |
+|----------|-------------|
+| `NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` | Full experiment log, recommended commands, and optimization roadmap |
+| `IMPLEMENTATION_RECAP.md` | Summary of pipeline improvements and GPU/hardware readiness |
+| `docs/WHY_QUANTUM_UNDERPERFORMS.md` | Root cause analysis of quantum-classical performance gap |
+| `docs/OPTIMIZATION_PLAN.md` | Detailed optimization roadmap |
 
 ---
 
 ## License
+
 MIT
 
 ---
 
 ## Citation
-```
+
+```bibtex
 @software{hybrid_qml_kg,
-  title = {Hybrid Quantum–Classical Knowledge Graph Link Prediction},
-  year = {2025},
-  url = {https://github.com/yourusername/hybrid-qml-kg}
+  title  = {Hybrid Quantum-Classical Knowledge Graph Link Prediction},
+  year   = {2026},
+  url    = {https://github.com/yourusername/hybrid-qml-kg-poc}
 }
 ```
 
 ---
 
 ## Acknowledgments
-- Hetionet biomedical knowledge graph  
-- IBM Quantum and Qiskit community  
-- Complexity science concepts for understanding emergent behavior in large-scale biomedical networks
+
+- [Hetionet](https://het.io/) biomedical knowledge graph
+- [IBM Quantum](https://quantum.ibm.com/) and the Qiskit community
+- [PyKEEN](https://pykeen.github.io/) for knowledge graph embedding training

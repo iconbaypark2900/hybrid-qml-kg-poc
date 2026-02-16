@@ -45,30 +45,54 @@ logger = logging.getLogger(__name__)
 
 
 class LossTracker:
-    """Callback to track loss during VQC training."""
-    
+    """Callback to track loss during VQC training.
+
+    Compatible with multiple optimizer callback signatures:
+    - COBYLA (scipy): callback(x)
+    - SPSA (Qiskit): callback(nfev, params, fval, stepsize, accepted)
+    - Generic Qiskit: callback(nfev, parameters, loss, step)
+    """
+
     def __init__(self):
         self.losses: List[float] = []
         self.iterations: List[int] = []
         self.start_time = None
-        
-    def callback(self, nfev: int, parameters: np.ndarray, loss: float, step: int) -> None:
-        """Called during optimizer iteration."""
+        self._call_count = 0
+
+    def callback(self, *args, **kwargs) -> None:
+        """Called during optimizer iteration. Accepts variable signatures."""
         if self.start_time is None:
             self.start_time = time.time()
-        
+
+        self._call_count += 1
+        nfev = self._call_count
+
+        if len(args) >= 3:
+            # Qiskit SPSA / generic: (nfev, params, fval, ...)
+            nfev = int(args[0]) if not isinstance(args[0], np.ndarray) else self._call_count
+            loss = float(args[2]) if len(args) > 2 and not isinstance(args[2], np.ndarray) else float("nan")
+        elif len(args) == 1:
+            # COBYLA: callback(x) -- no loss available directly
+            loss = float("nan")
+        else:
+            loss = float("nan")
+
         self.iterations.append(nfev)
         self.losses.append(loss)
-        
+
         if nfev % 10 == 0:
             elapsed = time.time() - self.start_time
-            logger.info(f"  Iter {nfev}: loss={loss:.6f} (elapsed: {elapsed:.1f}s)")
-    
+            if np.isnan(loss):
+                logger.info(f"  Iter {nfev}: (elapsed: {elapsed:.1f}s)")
+            else:
+                logger.info(f"  Iter {nfev}: loss={loss:.6f} (elapsed: {elapsed:.1f}s)")
+
     def reset(self):
         """Reset tracker for new run."""
         self.losses = []
         self.iterations = []
         self.start_time = None
+        self._call_count = 0
 
 
 class VQCOptimizationAnalyzer:

@@ -300,16 +300,6 @@ def load_optimized_results():
                         "accuracy": tm.get("accuracy", 0.0),
                         "fit_time": res.get("fit_seconds", 0.0),
                     })
-            for name, res in (out.get("ensemble_results") or {}).items():
-                if isinstance(res, dict) and res.get("status") == "success":
-                    tm = res.get("test_metrics") or {}
-                    ranking.append({
-                        "name": name,
-                        "type": "ensemble",
-                        "pr_auc": tm.get("pr_auc", 0.0),
-                        "accuracy": tm.get("accuracy", 0.0),
-                        "fit_time": res.get("fit_seconds", 0.0),
-                    })
             ranking.sort(key=lambda x: x.get("pr_auc", 0.0), reverse=True)
             out = dict(out)
             out["ranking"] = ranking
@@ -905,7 +895,6 @@ elif page == "3. Results (latest run)":
         # Pipeline labels Hybrid as type "quantum"; treat name containing "Hybrid" as hybrid for display
         hybrid_names = [r.get("name") for r in ranking_list if "Hybrid" in (r.get("name") or "")]
         quantum_names = [r.get("name") for r in ranking_list if r.get("type") == "quantum" and r.get("name") not in hybrid_names]
-        ensemble_names = [r.get("name") for r in ranking_list if r.get("type") == "ensemble"]
         parts = []
         if classical_names:
             parts.append(f"**Classical:** {', '.join(classical_names)}")
@@ -913,8 +902,6 @@ elif page == "3. Results (latest run)":
             parts.append(f"**Quantum:** {', '.join(quantum_names)}")
         if hybrid_names:
             parts.append(f"**Hybrid:** {', '.join(hybrid_names)}")
-        if ensemble_names:
-            parts.append(f"**Ensemble:** {', '.join(ensemble_names)}")
         if parts:
             st.markdown("**Models in this run:** " + "  |  ".join(parts))
 
@@ -988,9 +975,7 @@ elif page == "3. Results (latest run)":
                 # Add color column based on model type
                 def _model_color(name):
                     name_lower = str(name).lower()
-                    if "ensemble-qc" in name_lower:
-                        return "Ensemble"
-                    elif "hybrid" in name_lower or ("ensemble" in name_lower and "rf-lr" not in name_lower):
+                    if "hybrid" in name_lower or "ensemble" in name_lower:
                         return "Hybrid"
                     elif "qsvc" in name_lower or "vqc" in name_lower or "quantum" in name_lower:
                         return "Quantum"
@@ -1004,7 +989,7 @@ elif page == "3. Results (latest run)":
 
                 fig = px.bar(
                     chart_df, x="PR-AUC", y="Model", color="Type", orientation="h",
-                    color_discrete_map={"Classical": "#3182ce", "Quantum": "#805ad5", "Hybrid": "#38a169", "GNN": "#e74c3c", "Ensemble": "#d69e2e"},
+                    color_discrete_map={"Classical": "#3182ce", "Quantum": "#805ad5", "Hybrid": "#38a169", "GNN": "#e74c3c"},
                     title="Model PR-AUC Comparison",
                     labels={"PR-AUC": "PR-AUC (higher = better)", "Model": ""},
                 )
@@ -1021,16 +1006,11 @@ elif page == "3. Results (latest run)":
             best_overall = best[0]
             best_classical = next((r for r in best if r.get("type") == "classical"), best[0])
             best_quantum = next((r for r in best if r.get("type") == "quantum"), None)
-            best_ensemble = next((r for r in best if r.get("type") == "ensemble"), None)
-            caption_parts = [
-                f"**Best overall:** {best_overall.get('name', 'N/A')} — PR-AUC {best_overall.get('pr_auc', 0):.4f}",
-                f"**Best classical:** {best_classical.get('name', 'N/A')} — PR-AUC {best_classical.get('pr_auc', 0):.4f}",
-            ]
-            if best_quantum:
-                caption_parts.append(f"**Best quantum:** {best_quantum.get('name', 'N/A')} — PR-AUC {best_quantum.get('pr_auc', 0):.4f}")
-            if best_ensemble:
-                caption_parts.append(f"**Best ensemble:** {best_ensemble.get('name', 'N/A')} — PR-AUC {best_ensemble.get('pr_auc', 0):.4f}")
-            st.caption("  |  ".join(caption_parts))
+            st.caption(
+                f"**Best overall:** {best_overall.get('name', 'N/A')} — PR-AUC {best_overall.get('pr_auc', 0):.4f}  |  "
+                f"**Best classical:** {best_classical.get('name', 'N/A')} — PR-AUC {best_classical.get('pr_auc', 0):.4f}"
+                + (f"  |  **Best quantum:** {best_quantum.get('name', 'N/A')} — PR-AUC {best_quantum.get('pr_auc', 0):.4f}" if best_quantum else "")
+            )
         if opt.get("timestamp"):
             st.caption(f"Run timestamp: {opt['timestamp']}")
         # Metrics by model: show PR-AUC, Accuracy, Time (s) for every model (not just classical/quantum buckets)

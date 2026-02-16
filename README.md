@@ -70,6 +70,12 @@ Once trained, the models can identify drug–disease pairs that **might represen
 - **IBM Quantum Integration** – Ready to run on real IBM Quantum hardware (Heron, Brisbane, Torino) or simulators.
 - **Interactive Dashboard** – Streamlit app to tell the end-to-end story (data → models → benchmarks) and run benchmarks / view evidence-backed predictions.
 - **REST API** – FastAPI service for programmatic predictions.
+- **Quantum-Enhanced Embeddings** – Advanced embedding techniques optimized for quantum models using kernel alignment and expressibility optimization.
+- **Quantum Transfer Learning** – Framework for transferring knowledge from pre-trained quantum models to new domains/tasks.
+- **Advanced Error Mitigation** – State-of-the-art techniques including Zero-Noise Extrapolation, Probabilistic Error Cancellation, and Clifford Data Regression.
+- **Quantum Circuit Optimization** – Advanced optimization techniques for reducing gate count, optimizing parameters, and adapting to hardware topology.
+- **Quantum Kernel Engineering** – Adaptive and trainable quantum kernels with alignment optimization for improved performance.
+- **Quantum Variational Feature Selection** – Quantum variational algorithms for identifying the most relevant features for quantum models.
 
 ---
 

@@ -1,0 +1,13 @@
+{
+  "summary": {
+    "total_tests": 6,
+    "passed": 3,
+    "failed": 1,
+    "skipped": 2,
+    "errors": 0,
+    "total_duration": 2.2560360431671143
+  },
+  "results": [
+    {
+      "name": "Quantum-Enhanced Embeddings",
+      "status": 

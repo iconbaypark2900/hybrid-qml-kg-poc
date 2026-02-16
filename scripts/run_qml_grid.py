@@ -53,6 +53,12 @@ def main() -> int:
                         help="Comma-separated embedding dims.")
     parser.add_argument("--qml_encodings", type=str, default="hybrid,optimized_diff,tensor_product",
                         help="Comma-separated QML encoding strategies.")
+    parser.add_argument("--qml_dims", type=str, default="12",
+                        help="Comma-separated QML dimensions (num qubits), e.g., '8,12,16,24'.")
+    parser.add_argument("--qml_feature_map_reps", type=str, default="1",
+                        help="Comma-separated feature map reps, e.g., '1,2'.")
+    parser.add_argument("--qml_entanglements", type=str, default="linear",
+                        help="Comma-separated entanglement strategies, e.g., 'linear,full'.")
     parser.add_argument("--qml_pre_pca_dim", type=int, default=128, help="Pre-PCA dimension for QML.")
     parser.add_argument("--qml_feature_selection_method", type=str, default="f_classif",
                         choices=["mutual_info", "f_classif", "variance", "none"])
@@ -66,8 +72,11 @@ def main() -> int:
     args = parser.parse_args()
 
     methods = _split_list(args.embedding_methods)
-    dims = [int(x) for x in _split_list(args.embedding_dims)]
+    emb_dims = [int(x) for x in _split_list(args.embedding_dims)]
     encodings = _split_list(args.qml_encodings)
+    qml_dims = [int(x) for x in _split_list(args.qml_dims)]
+    fm_reps_list = [int(x) for x in _split_list(args.qml_feature_map_reps)]
+    entanglements = _split_list(args.qml_entanglements)
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_csv = Path(args.out_csv) if args.out_csv else RESULTS_DIR / f"qml_grid_{ts}.csv"
@@ -75,41 +84,55 @@ def main() -> int:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     rows: List[Dict[str, Any]] = []
 
-    for method in methods:
-        for dim in dims:
-            for enc in encodings:
-                cmd = [
-                    sys.executable, "scripts/run_optimized_pipeline.py",
-                    "--relation", args.relation,
-                    "--embedding_method", method,
-                    "--embedding_dim", str(dim),
-                    "--qml_encoding", enc,
-                    "--qml_pre_pca_dim", str(args.qml_pre_pca_dim),
-                    "--qml_feature_selection_method", str(args.qml_feature_selection_method),
-                    "--qml_feature_select_k_mult", str(args.qml_feature_select_k_mult),
-                    "--neg_ratio", str(args.neg_ratio),
-                    "--negative_sampling", str(args.negative_sampling),
-                    "--random_state", str(args.random_state),
-                ]
-                if args.full_graph_embeddings:
-                    cmd.append("--full_graph_embeddings")
-                if args.pos_edge_sample and args.pos_edge_sample > 0:
-                    cmd.extend(["--pos_edge_sample", str(args.pos_edge_sample)])
+    # Calculate total runs for progress
+    total = len(methods) * len(emb_dims) * len(encodings) * len(qml_dims) * len(fm_reps_list) * len(entanglements)
+    run_num = 0
 
-                print(f"\n=== Running: method={method} dim={dim} enc={enc} ===")
-                result = _run_once(cmd)
-                result.update({
-                    "embedding_method": method,
-                    "embedding_dim": dim,
-                    "qml_encoding": enc,
-                    "qml_pre_pca_dim": args.qml_pre_pca_dim,
-                    "qml_feature_selection_method": args.qml_feature_selection_method,
-                    "qml_feature_select_k_mult": args.qml_feature_select_k_mult,
-                    "neg_ratio": args.neg_ratio,
-                    "negative_sampling": args.negative_sampling,
-                    "pos_edge_sample": args.pos_edge_sample,
-                })
-                rows.append(result)
+    for method in methods:
+        for emb_dim in emb_dims:
+            for enc in encodings:
+                for qml_dim in qml_dims:
+                    for fm_reps in fm_reps_list:
+                        for ent in entanglements:
+                            run_num += 1
+                            cmd = [
+                                sys.executable, "scripts/run_optimized_pipeline.py",
+                                "--relation", args.relation,
+                                "--embedding_method", method,
+                                "--embedding_dim", str(emb_dim),
+                                "--qml_encoding", enc,
+                                "--qml_dim", str(qml_dim),
+                                "--qml_feature_map_reps", str(fm_reps),
+                                "--qml_entanglement", ent,
+                                "--qml_pre_pca_dim", str(args.qml_pre_pca_dim),
+                                "--qml_feature_selection_method", str(args.qml_feature_selection_method),
+                                "--qml_feature_select_k_mult", str(args.qml_feature_select_k_mult),
+                                "--neg_ratio", str(args.neg_ratio),
+                                "--negative_sampling", str(args.negative_sampling),
+                                "--random_state", str(args.random_state),
+                            ]
+                            if args.full_graph_embeddings:
+                                cmd.append("--full_graph_embeddings")
+                            if args.pos_edge_sample and args.pos_edge_sample > 0:
+                                cmd.extend(["--pos_edge_sample", str(args.pos_edge_sample)])
+
+                            print(f"\n=== Run {run_num}/{total}: method={method} emb_dim={emb_dim} enc={enc} qml_dim={qml_dim} reps={fm_reps} ent={ent} ===")
+                            result = _run_once(cmd)
+                            result.update({
+                                "embedding_method": method,
+                                "embedding_dim": emb_dim,
+                                "qml_encoding": enc,
+                                "qml_dim": qml_dim,
+                                "qml_feature_map_reps": fm_reps,
+                                "qml_entanglement": ent,
+                                "qml_pre_pca_dim": args.qml_pre_pca_dim,
+                                "qml_feature_selection_method": args.qml_feature_selection_method,
+                                "qml_feature_select_k_mult": args.qml_feature_select_k_mult,
+                                "neg_ratio": args.neg_ratio,
+                                "negative_sampling": args.negative_sampling,
+                                "pos_edge_sample": args.pos_edge_sample,
+                            })
+                            rows.append(result)
 
     # Write summary CSV
     if rows:

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import logging
 import os
-from orchestrator import LinkPredictionOrchestrator
+from .orchestrator import LinkPredictionOrchestrator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -73,6 +73,27 @@ class StatusResponse(BaseModel):
     quantum_model_loaded: bool
     entity_count: int
     supported_relations: List[str] = ["CtD"]  # Compound treats Disease
+
+
+class RankedMechanismsRequest(BaseModel):
+    hypothesis_id: str  # "H-001" | "H-002" | "H-003"
+    disease_id: str     # Disease name or Hetionet ID
+    top_k: Optional[int] = 50
+
+
+class RankedCandidate(BaseModel):
+    compound_id: str
+    compound_name: str
+    score: float
+    mechanism_summary: str
+
+
+class RankedMechanismsResponse(BaseModel):
+    ranked_candidates: List[RankedCandidate]
+    model_used: str
+    hypothesis_id: str
+    status: Optional[str] = "success"
+    error_message: Optional[str] = None
 
 
 @app.get("/", include_in_schema=False)
@@ -177,6 +198,33 @@ async def batch_predict(requests: List[PredictionRequest]):
             ))
     
     return results
+
+
+@app.post("/ranked-mechanisms", response_model=RankedMechanismsResponse)
+async def ranked_mechanisms(request: RankedMechanismsRequest):
+    """
+    Rank intervention candidates for a disease using mechanism-informed hypothesis.
+
+    Uses the mechanism subgraph (H-001, H-002, or H-003) to filter and score
+    compound-disease pairs. Returns top-k candidates sorted by link probability.
+    """
+    if orchestrator is None:
+        raise HTTPException(status_code=500, detail="System not initialized")
+
+    try:
+        result = orchestrator.rank_mechanism_candidates(
+            hypothesis_id=request.hypothesis_id,
+            disease_id=request.disease_id,
+            top_k=request.top_k or 50,
+        )
+        if result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=result.get("error_message", "Ranking failed"))
+        return RankedMechanismsResponse(**result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ranked mechanisms failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Example usage (for local testing)

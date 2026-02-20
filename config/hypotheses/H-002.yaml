@@ -1,0 +1,15 @@
+# H-002: Lysosomal dysfunction mediates CLN5 -> neurodegeneration through BMP imbalance
+# Depends on H-001; adds lysosomal pathway/assay focus
+
+hypothesis_id: H-002
+seed_entities: []  # Same as H-001 when mapped
+metaedges:
+  - CdG
+  - CuG
+  - DdG
+  - DuG
+  - CbG
+  - GpPW
+pathway_filter: null  # Lysosomal pathway IDs (e.g., from Reactome/WikiPathways) when available
+lipid_nodes: []
+max_depth: 2

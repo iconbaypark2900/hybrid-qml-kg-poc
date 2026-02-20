@@ -259,6 +259,7 @@ hybrid-qml-kg-poc/
 
 | Document | Description |
 |----------|-------------|
+| `docs/TECHNICAL_PAPER.md` | Technical paper: hybrid QML-KG link prediction, methods, results, and discussion |
 | `NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` | Full experiment log, recommended commands, and optimization roadmap |
 | `IMPLEMENTATION_RECAP.md` | Summary of pipeline improvements and GPU/hardware readiness |
 | `DEPLOY_HUGGINGFACE.md` | Deploying the dashboard to Hugging Face Spaces and pushing updates |

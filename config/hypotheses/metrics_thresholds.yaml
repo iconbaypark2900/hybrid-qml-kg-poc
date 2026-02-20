@@ -1,0 +1,6 @@
+# Hypothesis acceptance thresholds
+# Used by metrics_tracker for directional consistency and replication gates
+
+directional_consistency_min: 0.6
+replication_splits_min: 2
+min_samples: 10  # Minimum sample size for directional claims

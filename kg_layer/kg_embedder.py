@@ -107,7 +107,8 @@ class HetionetEmbedder:
         qml_dim: Optional[int] = None,
         work_dir: Optional[str] = None,
         config_path: Optional[str] = None,
-        config: Optional[Dict] = None
+        config: Optional[Dict] = None,
+        mechanism_mask: bool = False,
     ):
         """
         Initializes the HetionetEmbedder.
@@ -132,6 +133,9 @@ class HetionetEmbedder:
 
         # Store config for reference
         self.config = config
+
+        # Mechanism mode: when True, prepare_link_features can append mechanism-specific and perturbation features
+        self.mechanism_mask = mechanism_mask or config.get("mechanism", {}).get("mechanism_mask", False)
 
         self.entity_to_id: Dict[str, int] = {}
         self.id_to_entity: Dict[int, str] = {}
@@ -387,14 +391,24 @@ class HetionetEmbedder:
         base = self.reduced_embeddings if (reduced and self.reduced_embeddings is not None) else self.entity_embeddings
         return base[idx].astype(np.float32)
 
-    def prepare_link_features(self, link_df: pd.DataFrame, reduced: bool = True) -> np.ndarray:
+    def prepare_link_features(
+        self,
+        link_df: pd.DataFrame,
+        reduced: bool = True,
+        mechanism_subgraph_nodes: Optional[Iterable[str]] = None,
+        perturbation_assay_df: Optional[pd.DataFrame] = None,
+    ) -> np.ndarray:
         """
         Build pairwise features for (head, tail) edges in link_df:
         [h, t, |h - t|, h * t]  (concat)
+        When mechanism_mask is True and mechanism_subgraph_nodes/perturbation_assay_df provided,
+        appends signed mechanism and perturbation features.
 
         Args:
             link_df: DataFrame with head/source and tail/target columns.
             reduced: Whether to use reduced-dimension embeddings.
+            mechanism_subgraph_nodes: Optional set of entity IDs in mechanism subgraph (for mechanism indicator).
+            perturbation_assay_df: Optional DataFrame with entity_id, perturbation columns.
 
         Returns:
             X: np.ndarray of shape [num_edges, feature_dim]
@@ -475,6 +489,23 @@ class HetionetEmbedder:
                     "Likely cause: DataFrame has integer IDs but string IDs expected. "
                     f"Sample head values: {link_df[h_col].head(3).tolist()}"
                 )
+
+        # Mechanism-specific features (only when mechanism_mask is True)
+        if self.mechanism_mask and (mechanism_subgraph_nodes is not None or perturbation_assay_df is not None):
+            from .perturbation_encoder import build_perturbation_features
+            mech_nodes = set(mechanism_subgraph_nodes) if mechanism_subgraph_nodes else set()
+            pert_dim = 4
+            # Mechanism indicator: [h_in_mech, t_in_mech]
+            h_in = np.array([1.0 if str(h) in mech_nodes else 0.0 for h in head_entities], dtype=np.float32)
+            t_in = np.array([1.0 if str(t) in mech_nodes else 0.0 for t in tail_entities], dtype=np.float32)
+            mech_block = np.column_stack([h_in, t_in])
+            # Perturbation features when assay data available
+            if perturbation_assay_df is not None and len(perturbation_assay_df) > 0:
+                pert_h = build_perturbation_features(head_entities.tolist(), perturbation_assay_df, pert_dim)
+                pert_t = build_perturbation_features(tail_entities.tolist(), perturbation_assay_df, pert_dim)
+                pert_block = np.concatenate([pert_h, pert_t], axis=1)  # (n, 8)
+                mech_block = np.concatenate([mech_block, pert_block], axis=1)
+            X = np.concatenate([X, mech_block], axis=1)
 
         return X
 

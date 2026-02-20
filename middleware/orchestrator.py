@@ -4,8 +4,11 @@ import os
 import logging
 import numpy as np
 import pandas as pd
-from typing import Optional, Tuple, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
+
 from kg_layer.kg_embedder import HetionetEmbedder
+from kg_layer.kg_loader import load_hetionet_edges
+from middleware.ranked_mechanisms import rank_mechanism_candidates as _rank_mechanism_candidates
 from classical_baseline.train_baseline import ClassicalLinkPredictor
 from quantum_layer.qml_model import QMLLinkPredictor
 
@@ -183,7 +186,72 @@ class LinkPredictionOrchestrator:
                 "status": "error",
                 "error_message": str(e)
             }
-    
+
+    def rank_mechanism_candidates(
+        self,
+        hypothesis_id: str,
+        disease_id: str,
+        top_k: int = 50,
+        method: str = "auto",
+    ) -> Dict[str, Any]:
+        """
+        Rank compound candidates for a disease using mechanism-informed subgraph.
+
+        Args:
+            hypothesis_id: H-001, H-002, or H-003
+            disease_id: Disease entity ID (e.g., Disease::DOID:1234)
+            top_k: Number of top candidates to return
+            method: Prediction method ("classical", "quantum", "auto")
+
+        Returns:
+            Dict with ranked_candidates, model_used, hypothesis_id
+        """
+        try:
+            disease_id = self._resolve_entity(disease_id)
+        except ValueError:
+            return {
+                "hypothesis_id": hypothesis_id,
+                "ranked_candidates": [],
+                "model_used": "error",
+                "status": "error",
+                "error_message": f"Disease '{disease_id}' not found",
+            }
+
+        try:
+            df_edges = load_hetionet_edges(data_dir=self.data_dir)
+        except Exception as e:
+            logger.error(f"Failed to load Hetionet: {e}")
+            return {
+                "hypothesis_id": hypothesis_id,
+                "ranked_candidates": [],
+                "model_used": "error",
+                "status": "error",
+                "error_message": str(e),
+            }
+
+        def predictor(drug_id: str, dis_id: str, m: str):
+            return self.predict_link_probability(drug=drug_id, disease=dis_id, method=m)
+
+        compound_ids = None
+        if self.embedder:
+            all_compounds = [
+                e for e in self.embedder.entity_to_id
+                if isinstance(e, str) and e.startswith("Compound::")
+            ]
+            compound_ids = all_compounds[:500] if all_compounds else None
+
+        return _rank_mechanism_candidates(
+            hypothesis_id=hypothesis_id,
+            disease_id=disease_id,
+            top_k=top_k,
+            df_edges=df_edges,
+            predictor=predictor,
+            id_to_name=self.id_to_name,
+            compound_ids=compound_ids,
+            max_compounds=200,
+            method=method,
+        )
+
     def _load_quantum_model(self, config_path: Optional[str] = None) -> None:
         """Load pre-trained quantum model (not implemented in this PoC)."""
         # In a full system, you'd save/load QML models

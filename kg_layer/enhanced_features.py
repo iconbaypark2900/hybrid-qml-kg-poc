@@ -70,16 +70,19 @@ class EnhancedFeatureBuilder:
         self,
         include_graph_features: bool = True,
         include_domain_features: bool = True,
+        include_directional_features: bool = False,
         normalize: bool = True
     ):
         """
         Args:
             include_graph_features: Include topological graph features
             include_domain_features: Include biomedical domain-specific features
+            include_directional_features: Include up/down regulation evidence (evidence_up, evidence_down, etc.)
             normalize: Apply standard scaling to features
         """
         self.include_graph_features = include_graph_features
         self.include_domain_features = include_domain_features
+        self.include_directional_features = include_directional_features
         self.normalize = normalize
         self.scaler: Optional[StandardScaler] = None
         self.graph: Optional[nx.Graph] = None
@@ -435,7 +438,20 @@ class EnhancedFeatureBuilder:
 
         if src_col is None or tgt_col is None:
             raise ValueError(f"Could not infer source/target columns from: {list(cols)}")
-        
+
+        # Pre-build directional features for all rows if requested
+        directional_feats_array = None
+        if self.include_directional_features and edges_df is not None:
+            from .directional_features import build_directional_features, get_directional_feature_names
+            from .evidence_weighting import EvidenceConfigDirectional, build_directional_gene_maps
+            cfg = EvidenceConfigDirectional()
+            comp2g_up, comp2g_down, dis2g_up, dis2g_down = build_directional_gene_maps(edges_df, cfg)
+            directional_feats_array = build_directional_features(
+                links_df, comp2g_up, comp2g_down, dis2g_up, dis2g_down,
+                source_col=src_col, target_col=tgt_col
+            )
+            directional_feat_names = get_directional_feature_names()
+
         # Diagnostic: Log inferred columns and sample values
         logger.warning(f"build_features: Inferred src_col='{src_col}', tgt_col='{tgt_col}'")
         if len(links_df) > 0:
@@ -507,6 +523,12 @@ class EnhancedFeatureBuilder:
                         'h_is_gene', 't_is_gene', 'h_metaedge_diversity', 't_metaedge_diversity'
                     ]
                     feature_names.extend(domain_feat_names)
+
+            # 4. Directional (perturbation) features
+            if self.include_directional_features and directional_feats_array is not None:
+                features_list.append(directional_feats_array[idx])
+                if idx == 0:
+                    feature_names.extend(directional_feat_names)
 
             # Concatenate all features
             combined_feats = np.concatenate(features_list)

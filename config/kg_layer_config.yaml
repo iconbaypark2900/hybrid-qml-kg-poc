@@ -21,3 +21,11 @@ features:
   qml_features_mode: "diff"  # QML feature mode: "diff", "hadamard", or "both"
   use_reduced: true         # Whether to use reduced-dimension embeddings for QML
 
+# Hypothesis testing (H-001, H-002, H-003)
+hypotheses:
+  enabled: ["H-001", "H-002", "H-003"]
+  data_dir: "data/hypothesis"
+  thresholds:
+    directional_consistency_min: 0.6
+    replication_splits_min: 2
+

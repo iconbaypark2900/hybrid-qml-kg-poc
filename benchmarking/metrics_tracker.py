@@ -2,6 +2,7 @@
 
 """
 Metrics tracking and logging utilities for benchmarking experiments.
+Includes hypothesis-specific metrics: directional consistency, control ranking.
 """
 
 import pandas as pd
@@ -10,7 +11,10 @@ import json
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Tuple, Union
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +76,69 @@ class MetricsTracker:
         """
         for name, value in metrics_dict.items():
             self.log_metric(name, value, step)
+
+    def _load_hypothesis_thresholds(self, config_path: str = "config/hypotheses/metrics_thresholds.yaml") -> Dict[str, Any]:
+        """Load configurable thresholds for hypothesis acceptance gates."""
+        path = Path(config_path)
+        if not path.exists():
+            return {
+                "directional_consistency_min": 0.6,
+                "replication_splits_min": 2,
+                "min_samples": 10,
+            }
+        with open(path, "r") as f:
+            return yaml.safe_load(f) or {}
+
+    def log_directional_consistency(
+        self,
+        scores_by_split: Dict[str, Union[float, int]],
+        threshold: Optional[float] = None,
+    ) -> float:
+        """
+        Compare effect direction across splits; compute fraction with consistent sign.
+
+        scores_by_split: e.g. {"split_0": 0.3, "split_1": -0.2, "split_2": 0.1}
+        Returns directional_consistency in [0, 1].
+        """
+        if not scores_by_split:
+            self.log_metric("directional_consistency", 0.0)
+            return 0.0
+        signs = [1 if v >= 0 else -1 for v in scores_by_split.values() if v is not None]
+        if not signs:
+            self.log_metric("directional_consistency", 0.0)
+            return 0.0
+        majority = 1 if sum(signs) >= 0 else -1
+        consistent = sum(1 for s in signs if s == majority)
+        consistency = consistent / len(signs)
+        self.log_metric("directional_consistency", consistency)
+        self.log_metric("directional_consistent_splits", f"{consistent}/{len(signs)}")
+        return consistency
+
+    def log_control_ranking(
+        self,
+        candidate_ranks: List[float],
+        control_ranks: List[float],
+    ) -> Tuple[float, bool]:
+        """
+        Compare ranking of hypothesis candidates vs negative controls.
+
+        candidate_ranks: scores for hypothesis-related candidates (higher = better)
+        control_ranks: scores for negative controls
+        Returns (rank_diff, better_than_control) where rank_diff is mean(candidate) - mean(control).
+        """
+        if not candidate_ranks and not control_ranks:
+            self.log_metric("control_vs_candidate_rank_diff", 0.0)
+            self.log_metric("better_than_control", False)
+            return 0.0, False
+        mean_cand = np.mean(candidate_ranks) if candidate_ranks else 0.0
+        mean_ctrl = np.mean(control_ranks) if control_ranks else 0.0
+        rank_diff = mean_cand - mean_ctrl
+        better = rank_diff > 0
+        self.log_metric("control_vs_candidate_rank_diff", rank_diff)
+        self.log_metric("better_than_control", better)
+        self.log_metric("mean_candidate_score", mean_cand)
+        self.log_metric("mean_control_score", mean_ctrl)
+        return rank_diff, better
 
     def log_model_info(self, model_type: str, num_parameters: int, model_config: Dict[str, Any]):
         """

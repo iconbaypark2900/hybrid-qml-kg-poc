@@ -1,0 +1,16 @@
+# H-003: Intervention candidates that restore BMP-like profile reduce disease-risk signals
+# Depends on H-001 + H-002 validated outputs
+
+hypothesis_id: H-003
+seed_entities: []  # Inherit from H-001/H-002
+metaedges:
+  - CtD
+  - CdG
+  - CuG
+  - DdG
+  - DuG
+  - CbG
+  - GpPW
+pathway_filter: null
+lipid_nodes: []
+max_depth: 2

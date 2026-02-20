@@ -1,0 +1,15 @@
+# H-001: CLN5 loss reduces BMP synthesis capacity
+# Populate seed_entities when CLN5/BMP entities are mapped to Hetionet
+
+hypothesis_id: H-001
+seed_entities: []  # e.g., ["Gene::1234"] when CLN5 mapped
+metaedges:
+  - CdG
+  - CuG
+  - DdG
+  - DuG
+  - CbG
+  - GpPW
+pathway_filter: null  # lysosomal pathway IDs when available
+lipid_nodes: []       # BMP species from lipidomics when available
+max_depth: 2         # BFS expansion hops from seeds (1-3)

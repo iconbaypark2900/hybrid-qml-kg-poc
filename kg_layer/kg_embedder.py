@@ -36,10 +36,6 @@ def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
     """
     Infer (head/source), (relation/metaedge), (tail/target) column names.
 
-def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
-    """
-    Infer (head/source), (relation/metaedge), (tail/target) column names.
-
     Accepts common variants found in this repo's link splits:
     - head/source:  source, source_id, head, head_id, h, src, src_id, u
     - tail/target:  target, target_id, tail, tail_id, t, dst, dst_id, v
@@ -65,18 +61,55 @@ def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
 
 
 class HetionetEmbedder:
-    def __init__(self, embedding_dim: int = 32, qml_dim: int = 5, work_dir: str = "data"):
+    def __init__(
+        self,
+        embedding_dim: Optional[int] = None,
+        qml_dim: Optional[int] = None,
+        work_dir: Optional[str] = None,
+        config_path: Optional[str] = None,
+        config: Optional[Dict] = None,
+        mechanism_mask: bool = False,
+    ):
         """
         Initializes the HetionetEmbedder.
 
         Args:
-            embedding_dim: The dimensionality of the KG embeddings.
-            qml_dim: The dimensionality of the reduced embeddings for QML.
-            work_dir: The directory to store embeddings and other artifacts.
+            embedding_dim: The dimensionality of the KG embeddings (default 32).
+            qml_dim: The dimensionality of the reduced embeddings for QML (default 5).
+            work_dir: The directory to store embeddings and other artifacts (default "data").
+            config_path: Optional YAML path merged into ``config`` when provided.
+            config: Optional dict; overrides keys loaded from ``config_path``.
+            mechanism_mask: When True, ``prepare_link_features`` can append mechanism/perturbation features.
         """
-        self.embedding_dim = int(embedding_dim)
-        self.qml_dim = int(qml_dim)
+        cfg: Dict = dict(config) if config else {}
+        if config_path and os.path.isfile(config_path):
+            try:
+                import yaml
+
+                with open(config_path, "r", encoding="utf-8") as f:
+                    loaded = yaml.safe_load(f)
+                if isinstance(loaded, dict):
+                    cfg = {**loaded, **cfg}
+            except Exception as e:
+                logger.warning("Could not load embedder config from %s: %s", config_path, e)
+
+        if embedding_dim is None:
+            embedding_dim = int(cfg.get("embedding_dim", 32))
+        else:
+            embedding_dim = int(embedding_dim)
+        if qml_dim is None:
+            qml_dim = int(cfg.get("qml_dim", 5))
+        else:
+            qml_dim = int(qml_dim)
+        if work_dir is None:
+            work_dir = str(cfg.get("work_dir", "data"))
+
+        self.embedding_dim = embedding_dim
+        self.qml_dim = qml_dim
         self.work_dir = work_dir
+
+        mech = cfg.get("mechanism") if isinstance(cfg.get("mechanism"), dict) else {}
+        self.mechanism_mask = bool(mechanism_mask or mech.get("mechanism_mask", False))
 
         self.entity_to_id: Dict[str, int] = {}
         self.id_to_entity: Dict[int, str] = {}
@@ -328,27 +361,125 @@ class HetionetEmbedder:
         base = self.reduced_embeddings if (reduced and self.reduced_embeddings is not None) else self.entity_embeddings
         return base[idx].astype(np.float32)
 
-    def prepare_link_features(self, link_df: pd.DataFrame, reduced: bool = True) -> np.ndarray:
+    def prepare_link_features(
+        self,
+        link_df: pd.DataFrame,
+        reduced: bool = True,
+        mechanism_subgraph_nodes: Optional[Iterable[str]] = None,
+        perturbation_assay_df: Optional[pd.DataFrame] = None,
+    ) -> np.ndarray:
         """
         Build pairwise features for (head, tail) edges in link_df:
         [h, t, |h - t|, h * t]  (concat)
+        When mechanism_mask is True and mechanism_subgraph_nodes/perturbation_assay_df provided,
+        appends signed mechanism and perturbation features.
 
         Args:
             link_df: DataFrame with head/source and tail/target columns.
             reduced: Whether to use reduced-dimension embeddings.
+            mechanism_subgraph_nodes: Optional set of entity IDs in mechanism subgraph (for mechanism indicator).
+            perturbation_assay_df: Optional DataFrame with entity_id, perturbation columns.
 
         Returns:
             X: np.ndarray of shape [num_edges, feature_dim]
         """
         h_col, _, t_col = _infer_ht_columns(link_df)
-        feats = []
-        for h, t in zip(link_df[h_col].astype(str).values, link_df[t_col].astype(str).values):
-            hv = self._get_vec(h, reduced=reduced)
-            tv = self._get_vec(t, reduced=reduced)
-            diff = np.abs(hv - tv)
-            had = hv * tv
-            feats.append(np.concatenate([hv, tv, diff, had], axis=0))
-        X = np.stack(feats, axis=0)
+
+        # Validate input DataFrame
+        if link_df.empty:
+            logger.warning("Empty DataFrame provided to prepare_link_features")
+            return np.array([]).reshape(0, 0)
+
+        # Convert to string and handle NaN values
+        head_entities = link_df[h_col].astype(str).fillna("").values
+        tail_entities = link_df[t_col].astype(str).fillna("").values
+
+        # Check for empty strings after conversion
+        empty_heads = np.sum(head_entities == "")
+        empty_tails = np.sum(tail_entities == "")
+
+        if empty_heads > 0 or empty_tails > 0:
+            logger.warning(f"Found {empty_heads} empty head entities and {empty_tails} empty tail entities")
+
+        # Pre-allocate arrays for efficiency
+        n_samples = len(link_df)
+        if reduced and self.reduced_embeddings is not None:
+            embedding_size = self.reduced_embeddings.shape[1]
+        elif self.entity_embeddings is not None:
+            embedding_size = self.entity_embeddings.shape[1]
+        else:
+            embedding_size = self.embedding_dim
+        feature_size = embedding_size * 4  # [h, t, |h-t|, h*t]
+        
+        X = np.zeros((n_samples, feature_size), dtype=np.float32)
+        
+        missing_heads = 0
+        missing_tails = 0
+        
+        # Process entities in batches for better performance
+        batch_size = min(1000, n_samples)
+        for start_idx in range(0, n_samples, batch_size):
+            end_idx = min(start_idx + batch_size, n_samples)
+            batch_heads = head_entities[start_idx:end_idx]
+            batch_tails = tail_entities[start_idx:end_idx]
+            
+            for i, (h, t) in enumerate(zip(batch_heads, batch_tails)):
+                local_idx = start_idx + i
+
+                # Skip empty entities
+                if h == "" or t == "":
+                    continue
+
+                # Track missing entities
+                if h not in self.entity_to_id:
+                    missing_heads += 1
+                if t not in self.entity_to_id:
+                    missing_tails += 1
+
+                hv = self._get_vec(h, reduced=reduced)
+                tv = self._get_vec(t, reduced=reduced)
+                diff = np.abs(hv - tv)
+                had = hv * tv
+                X[local_idx] = np.concatenate([hv, tv, diff, had], axis=0)
+
+        # Validation: warn if too many entities are missing
+        if n_samples > 0:
+            missing_head_pct = missing_heads / n_samples * 100
+            missing_tail_pct = missing_tails / n_samples * 100
+
+            if missing_head_pct > 10 or missing_tail_pct > 10:
+                logger.warning(
+                    "HIGH MISSING ENTITY RATE detected in prepare_link_features:\n"
+                    f"   Missing heads: {missing_heads}/{n_samples} ({missing_head_pct:.1f}%)\n"
+                    f"   Missing tails: {missing_tails}/{n_samples} ({missing_tail_pct:.1f}%)\n"
+                    "   This may indicate a column mismatch (source vs source_id).\n"
+                    "   Check that DataFrame has correct string entity ID columns."
+                )
+
+            if missing_head_pct > 90 or missing_tail_pct > 90:
+                logger.error(
+                    "CRITICAL: Almost all entities missing. "
+                    f"Heads: {missing_head_pct:.1f}%, Tails: {missing_tail_pct:.1f}%. "
+                    "Likely cause: DataFrame has integer IDs but string IDs expected. "
+                    f"Sample head values: {link_df[h_col].head(3).tolist()}"
+                )
+
+        # Mechanism-specific features (only when mechanism_mask is True)
+        if self.mechanism_mask and (mechanism_subgraph_nodes is not None or perturbation_assay_df is not None):
+            from .perturbation_encoder import build_perturbation_features
+
+            mech_nodes = set(mechanism_subgraph_nodes) if mechanism_subgraph_nodes else set()
+            pert_dim = 4
+            h_in = np.array([1.0 if str(h) in mech_nodes else 0.0 for h in head_entities], dtype=np.float32)
+            t_in = np.array([1.0 if str(t) in mech_nodes else 0.0 for t in tail_entities], dtype=np.float32)
+            mech_block = np.column_stack([h_in, t_in])
+            if perturbation_assay_df is not None and len(perturbation_assay_df) > 0:
+                pert_h = build_perturbation_features(head_entities.tolist(), perturbation_assay_df, pert_dim)
+                pert_t = build_perturbation_features(tail_entities.tolist(), perturbation_assay_df, pert_dim)
+                pert_block = np.concatenate([pert_h, pert_t], axis=1)
+                mech_block = np.concatenate([mech_block, pert_block], axis=1)
+            X = np.concatenate([X, mech_block], axis=1)
+
         return X
 
     def prepare_link_features_qml(self, link_df: pd.DataFrame, mode: str = "diff") -> np.ndarray:

@@ -1,0 +1,6 @@
+# Weights for intervention ranking composite score
+# Score = w1 * mechanism_score + w2 * directional_consistency - w3 * variance_across_splits
+
+w1_mechanism_score: 0.5
+w2_directional_consistency: 0.4
+w3_variance_penalty: 0.1

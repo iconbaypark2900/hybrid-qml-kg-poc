@@ -135,6 +135,41 @@ def download_hetionet_if_missing(data_dir: str = "data") -> str:
     )
 
 
+    last_err = None
+    for url, gz in candidates:
+        try:
+            logger.info(f"Trying {url}")
+            df = pd.read_csv(
+                url,
+                sep="\t",
+                names=["source", "metaedge", "target"],
+                dtype=str,
+                compression=("gzip" if gz else None),
+            )
+            # Basic sanity check
+            if {"source", "metaedge", "target"}.issubset(df.columns) and len(df) > 0:
+                df.to_csv(edge_file, sep="\t", index=False, header=False)
+                logger.info(f"Saved Hetionet edges to {edge_file} ({len(df)} rows)")
+                return edge_file
+            else:
+                raise ValueError(f"Downloaded file from {url} but schema/rows look invalid.")
+        except Exception as e:
+            last_err = e
+            logger.warning(f"Failed to fetch from {url}: {e}")
+
+    raise RuntimeError(
+        "Could not download Hetionet edges from any known location. "
+        "Manual workaround:\n"
+        "  1) curl -L -o data/hetionet-v1.0-edges.sif.gz "
+        "https://github.com/hetio/hetionet/raw/main/hetnet/tsv/hetionet-v1.0-edges.sif.gz\n"
+        "  2) python - <<'PY'\n"
+        "import gzip, shutil; "
+        "shutil.copyfileobj(gzip.open('data/hetionet-v1.0-edges.sif.gz','rb'), open('data/hetionet-v1.0-edges.sif','wb'))\n"
+        "PY\n"
+        f"Last error was: {last_err}"
+    )
+
+
 def load_hetionet_edges(
     data_dir: Optional[str] = None,
     config_path: Optional[str] = None,
@@ -144,9 +179,7 @@ def load_hetionet_edges(
     Load Hetionet edges from local cache (auto-downloads if missing).
 
     Args:
-        data_dir: The directory where the data is stored (overrides config).
-        config_path: Path to KG layer config YAML file (default: "config/kg_layer_config.yaml").
-        config: Configuration dictionary (if provided, config_path is ignored).
+        data_dir: The directory where the data is stored.
 
     Returns:
         A DataFrame with columns: ['source', 'metaedge', 'target'] (dtype=str).
@@ -183,10 +216,8 @@ def extract_task_edges(
 
     Args:
         df_edges: Full Hetionet edge DataFrame
-        relation_type: Metaedge code (e.g., 'CtD' for Compound-treats-Disease) (overrides config)
-        max_entities: Optional cap on number of unique entities (for PoC scalability) (overrides config)
-        config_path: Path to KG layer config YAML file (default: "config/kg_layer_config.yaml")
-        config: Configuration dictionary (if provided, config_path is ignored)
+        relation_type: Metaedge code (e.g., 'CtD' for Compound-treats-Disease)
+        max_entities: Optional cap on number of unique entities (for PoC scalability)
 
     Returns:
         filtered_edges: DataFrame with only the desired relation
@@ -263,10 +294,8 @@ def get_negative_samples(
 
     Args:
         task_edges:
-        num_negatives: Number of negative samples (overrides config)
-        random_state: Random seed (overrides config)
-        config_path: Path to KG layer config YAML file (default: "config/kg_layer_config.yaml")
-        config: Configuration dictionary (if provided, config_path is ignored)
+        num_negatives:
+        random_state:
 
     Returns:
         DataFrame with negative samples: ['source_id', 'target_id', 'label' (0)]
@@ -279,12 +308,7 @@ def get_negative_samples(
 
     # Use provided parameters or fall back to config
     if num_negatives is None:
-        num_negatives = config["data_loading"].get("num_negatives")
-        if num_negatives is None:
-            num_negatives = len(task_edges)  # 1:1 ratio
-
-    if random_state is None:
-        random_state = config["data_loading"]["random_state"]
+        num_negatives = len(task_edges)  # 1:1 ratio
 
     sources = task_edges["source_id"].values
     targets = task_edges["target_id"].values
@@ -294,60 +318,28 @@ def get_negative_samples(
     unique_targets = task_edges["target_id"].unique()
 
     import numpy as np
-    rng = np.random.default_rng(int(random_state))
-
-    # degree-based sampling for "hard" mode
-    src_deg = task_edges["source_id"].value_counts().to_dict()
-    tgt_deg = task_edges["target_id"].value_counts().to_dict()
-    src_ids = np.array(list(src_deg.keys()), dtype=int)
-    tgt_ids = np.array(list(tgt_deg.keys()), dtype=int)
-    src_p = np.array([src_deg[int(i)] for i in src_ids], dtype=float)
-    tgt_p = np.array([tgt_deg[int(i)] for i in tgt_ids], dtype=float)
-    src_p = src_p / max(1e-9, src_p.sum())
-    tgt_p = tgt_p / max(1e-9, tgt_p.sum())
-
-    pos_pairs = list(existing_pairs)
-    rng.shuffle(pos_pairs)
-
-    def _random_pair() -> tuple[int, int]:
-        s = int(rng.choice(unique_sources))
-        t = int(rng.choice(unique_targets))
-        return s, t
-
-    def _hard_pair() -> tuple[int, int]:
-        s_pos, t_pos = pos_pairs[rng.integers(0, max(1, len(pos_pairs)))]
-        if bool(rng.random() < 0.5):
-            # corrupt tail (keep head)
-            return int(s_pos), int(rng.choice(tgt_ids, p=tgt_p))
-        # corrupt head (keep tail)
-        return int(rng.choice(src_ids, p=src_p)), int(t_pos)
-
-    strat = str(strategy or "random").lower().strip()
-    w = float(diversity_weight)
-    w = min(1.0, max(0.0, w))
+    np.random.seed(random_state)
 
     neg_sources = []
     neg_targets = []
     attempts = 0
-    max_attempts = max(2000, int(num_negatives) * 40)
-    seen = set()
+    max_attempts = num_negatives * 10
 
-    while len(neg_sources) < int(num_negatives) and attempts < max_attempts:
-        if strat == "hard":
-            s, t = _hard_pair()
-        elif strat == "diverse":
-            s, t = _random_pair() if (rng.random() < w) else _hard_pair()
-        else:
-            s, t = _random_pair()
-
-        if (s, t) not in existing_pairs and (s, t) not in seen:
+    while len(neg_sources) < num_negatives and attempts < max_attempts:
+        s = np.random.choice(unique_sources)
+        t = np.random.choice(unique_targets)
+        if (s, t) not in existing_pairs and (s, t) not in zip(neg_sources, neg_targets):
             neg_sources.append(s)
             neg_targets.append(t)
             seen.add((s, t))
         attempts += 1
 
-    logger.info(f"Generated {len(neg_sources)} negative samples (strategy={strat}, target={num_negatives}).")
-    return pd.DataFrame({"source_id": neg_sources, "target_id": neg_targets, "label": 0})
+    logger.info(f"Generated {len(neg_sources)} negative samples.")
+    return pd.DataFrame({
+        "source_id": neg_sources,
+        "target_id": neg_targets,
+        "label": 0
+    })
 
 def prepare_link_prediction_dataset(
     task_edges: pd.DataFrame,
@@ -362,10 +354,8 @@ def prepare_link_prediction_dataset(
 
     Args:
         task_edges:
-        test_size: Test set split ratio (overrides config)
-        random_state: Random seed (overrides config)
-        config_path: Path to KG layer config YAML file (default: "config/kg_layer_config.yaml")
-        config: Configuration dictionary (if provided, config_path is ignored)
+        test_size:
+        random_state:
 
     Returns:
         train_df: Training DataFrame with positive and negative samples
@@ -395,8 +385,8 @@ def prepare_link_prediction_dataset(
     )
 
     # Generate negatives
-    neg_train = get_negative_samples(pos_train, random_state=random_state, config=config)
-    neg_test = get_negative_samples(pos_test, random_state=random_state + 1, config=config)
+    neg_train = get_negative_samples(pos_train, random_state=random_state)
+    neg_test = get_negative_samples(pos_test, random_state=random_state + 1)
 
     # Combine
     train_df = pd.concat([pos_train, neg_train], ignore_index=True).sample(frac=1, random_state=random_state)

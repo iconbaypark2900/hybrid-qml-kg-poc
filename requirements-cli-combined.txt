@@ -20,6 +20,3 @@ qiskit-machine-learning==0.8.4
 
 # Plotting used by scalability sim in run_pipeline.py
 matplotlib==3.10.6
-
-# Knowledge Graph Embeddings
-pykeen==1.11.1

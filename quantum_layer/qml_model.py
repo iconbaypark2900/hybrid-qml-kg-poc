@@ -16,23 +16,24 @@ from __future__ import annotations
 
 import logging
 from typing import Optional, Dict
-from pathlib import Path
-import yaml
 
 import numpy as np
 
 # Core Qiskit imports (tested with qiskit~=1.2, qiskit-ml~=0.8.4, qiskit-algorithms~=0.3)
 from qiskit.circuit.library import RealAmplitudes, EfficientSU2, ZZFeatureMap, ZFeatureMap
-try:
-    from qiskit.primitives import Sampler
-except ImportError:
-    from qiskit_aer.primitives import Sampler  # Aer Sampler when qiskit.primitives.Sampler removed
+from qiskit.primitives import Sampler
 from qiskit_algorithms.optimizers import COBYLA, SPSA
 from qiskit_machine_learning.algorithms import VQC, QSVC
 from qiskit_machine_learning.kernels import FidelityQuantumKernel, FidelityStatevectorKernel
 from qiskit_machine_learning.state_fidelities import ComputeUncompute
 
 logger = logging.getLogger(__name__)
+
+# Try to import the local encoder (not strictly required for this class to run)
+try:
+    from .qml_encoder import QMLEncoder  # noqa: F401
+except Exception:
+    QMLEncoder = None  # type: ignore
 
 
 def load_quantum_config(config_path: str = "config/quantum_layer_config.yaml") -> Dict:
@@ -102,41 +103,29 @@ class QMLLinkPredictor:
 
     def __init__(
         self,
-        model_type: Optional[str] = None,
-        encoding_method: Optional[str] = None,
-        num_qubits: Optional[int] = None,
-        ansatz_type: Optional[str] = None,
-        ansatz_reps: Optional[int] = None,
-        optimizer: Optional[str] = None,
-        max_iter: Optional[int] = None,
-        feature_map_type: Optional[str] = None,
-        feature_map_reps: Optional[int] = None,
-        random_state: Optional[int] = None,
-        quantum_config_path: Optional[str] = None,
-        config_path: Optional[str] = None,
-        config: Optional[Dict] = None,
+        model_type: str = "QSVC",
+        encoding_method: str = "feature_map",
+        num_qubits: int = 5,
+        ansatz_type: str = "RealAmplitudes",
+        ansatz_reps: int = 3,
+        optimizer: str = "COBYLA",
+        max_iter: int = 50,
+        feature_map_type: str = "ZZ",
+        feature_map_reps: int = 2,
+        random_state: int = 42,
+        quantum_config_path: str = "config/quantum_config.yaml",
     ):
-        # Load config if not provided
-        if config is None:
-            if config_path is None:
-                config_path = "config/quantum_layer_config.yaml"
-            config = load_quantum_config(config_path)
-
-        # Use provided parameters or fall back to config
-        self.model_type = (model_type if model_type is not None else config["model"]["model_type"]).upper()
-        self.encoding_method = encoding_method if encoding_method is not None else config["model"]["encoding_method"]
-        self.num_qubits = int(num_qubits if num_qubits is not None else config["model"]["num_qubits"])
-        self.ansatz_type = ansatz_type if ansatz_type is not None else config["vqc"]["ansatz_type"]
-        self.ansatz_reps = int(ansatz_reps if ansatz_reps is not None else config["vqc"]["ansatz_reps"])
-        self.optimizer_name = optimizer if optimizer is not None else config["vqc"]["optimizer"]
-        self.max_iter = int(max_iter if max_iter is not None else config["vqc"]["max_iter"])
-        self.feature_map_type = feature_map_type if feature_map_type is not None else config["feature_map"]["feature_map_type"]
-        self.feature_map_reps = int(feature_map_reps if feature_map_reps is not None else config["feature_map"]["feature_map_reps"])
-        self.random_state = int(random_state if random_state is not None else config["model"]["random_state"])
-        self.quantum_config_path = quantum_config_path if quantum_config_path is not None else config["quantum_executor"]["quantum_config_path"]
-
-        # Store config for reference
-        self.config = config
+        self.model_type = model_type.upper()
+        self.encoding_method = encoding_method
+        self.num_qubits = int(num_qubits)
+        self.ansatz_type = ansatz_type
+        self.ansatz_reps = int(ansatz_reps)
+        self.optimizer_name = optimizer
+        self.max_iter = int(max_iter)
+        self.feature_map_type = feature_map_type
+        self.feature_map_reps = int(feature_map_reps)
+        self.random_state = int(random_state)
+        self.quantum_config_path = quantum_config_path
 
         # runtime fields
         self.model = None
@@ -230,17 +219,10 @@ class QMLLinkPredictor:
             The constructed quantum kernel.
         """
         fm = self._make_feature_map()
-        if exec_mode == "gpu_simulator":
-            fm_exec = fm.decompose(reps=10)
-            fidelity = ComputeUncompute(sampler=sampler)
-            logger.info("Using GPU-backed FidelityQuantumKernel (cuStateVec)")
-            return FidelityQuantumKernel(feature_map=fm_exec, fidelity=fidelity)
         if exec_mode in ("statevector", "simulator_statevector"):
             return FidelityStatevectorKernel(feature_map=fm)
-        # Decompose composite feature maps so Aer/backends don't error on unknown instructions
-        fm_exec = fm.decompose(reps=10)
         fidelity = ComputeUncompute(sampler=sampler)
-        return FidelityQuantumKernel(feature_map=fm_exec, fidelity=fidelity)
+        return FidelityQuantumKernel(feature_map=fm, fidelity=fidelity)
 
     # ------------------------------------------------------------------
     # Public API
@@ -271,23 +253,14 @@ class QMLLinkPredictor:
             qx = QuantumExecutor(self.quantum_config_path)
             sampler, exec_mode = qx.get_sampler()
         except Exception as e:
-            logger.info(f"QuantumExecutor fallback to local sampler: {e}")
-            try:
-                from qiskit.primitives import StatevectorSampler
-                sampler = StatevectorSampler()
-                exec_mode = "simulator_statevector"
-            except Exception:
-                # Very defensive: use Aer SamplerV2 for a shot-based ideal fallback
-                from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
-                sampler = AerSamplerV2(default_shots=1024)
-                exec_mode = "simulator"
+            logger.info(f"QuantumExecutor fallback to local Sampler: {e}")
+            sampler = Sampler()
+            exec_mode = "simulator_statevector"
 
         if self.model_type == "VQC":
             if self.encoding_method != "feature_map":
                 raise NotImplementedError("VQC supports only 'feature_map' in this project.")
             feature_map = self._make_feature_map()
-            if exec_mode not in ("statevector", "simulator_statevector") or exec_mode == "gpu_simulator":
-                feature_map = feature_map.decompose(reps=10)
             ansatz = self._build_ansatz()
             optimizer = self._build_optimizer()
             self.model = VQC(

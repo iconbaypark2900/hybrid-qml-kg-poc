@@ -16,8 +16,6 @@ import json
 import hashlib
 import logging
 from typing import Dict, Tuple, Optional, Iterable
-from pathlib import Path
-import yaml
 
 import numpy as np
 import pandas as pd
@@ -34,6 +32,9 @@ try:
 except Exception:
     PYKEEN_AVAILABLE = False
 
+def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
+    """
+    Infer (head/source), (relation/metaedge), (tail/target) column names.
 
 def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
     """
@@ -50,23 +51,9 @@ def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
     tail_aliases = ("target", "target_id", "tail", "tail_id", "t", "dst", "dst_id", "v")
     rel_aliases  = ("metaedge", "relation", "rel", "r", "predicate", "edge_type")
 
-    h_candidates = [(a, cols[a]) for a in head_aliases if a in cols]
-    t_candidates = [(a, cols[a]) for a in tail_aliases if a in cols]
-    if h_candidates and t_candidates:
-        def _prefer_string_col(candidates: list[tuple[str, str]]) -> str:
-            for _, col in candidates:
-                if len(df) == 0:
-                    continue
-                series = df[col].dropna()
-                if series.empty:
-                    continue
-                sample_val = series.iloc[0]
-                if isinstance(sample_val, str) and "::" in str(sample_val):
-                    return col
-            return candidates[0][1]
-
-        h_col = _prefer_string_col(h_candidates)
-        t_col = _prefer_string_col(t_candidates)
+    h_col = next((cols[a] for a in head_aliases if a in cols), None)
+    t_col = next((cols[a] for a in tail_aliases if a in cols), None)
+    if h_col and t_col:
         r_col = next((cols[a] for a in rel_aliases if a in cols), None)
         return h_col, r_col, t_col
 
@@ -77,61 +64,19 @@ def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
     )
 
 
-def load_kg_config(config_path: str = "config/kg_layer_config.yaml") -> Dict:
-    """
-    Load KG layer configuration from YAML file.
-
-    Args:
-        config_path: Path to the KG layer config YAML file.
-
-    Returns:
-        Dictionary containing configuration parameters.
-    """
-    if not Path(config_path).exists():
-        logger.warning(f"Config file not found at {config_path}, using defaults")
-        return {
-            "embedding": {"embedding_dim": 32, "qml_dim": 5, "work_dir": "data"},
-            "features": {"qml_features_mode": "diff", "use_reduced": True}
-        }
-
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-
-    return config
-
-
 class HetionetEmbedder:
-    def __init__(
-        self,
-        embedding_dim: Optional[int] = None,
-        qml_dim: Optional[int] = None,
-        work_dir: Optional[str] = None,
-        config_path: Optional[str] = None,
-        config: Optional[Dict] = None
-    ):
+    def __init__(self, embedding_dim: int = 32, qml_dim: int = 5, work_dir: str = "data"):
         """
         Initializes the HetionetEmbedder.
 
         Args:
-            embedding_dim: The dimensionality of the KG embeddings (overrides config).
-            qml_dim: The dimensionality of the reduced embeddings for QML (overrides config).
-            work_dir: The directory to store embeddings and other artifacts (overrides config).
-            config_path: Path to KG layer config YAML file (default: "config/kg_layer_config.yaml").
-            config: Configuration dictionary (if provided, config_path is ignored).
+            embedding_dim: The dimensionality of the KG embeddings.
+            qml_dim: The dimensionality of the reduced embeddings for QML.
+            work_dir: The directory to store embeddings and other artifacts.
         """
-        # Load config if not provided
-        if config is None:
-            if config_path is None:
-                config_path = "config/kg_layer_config.yaml"
-            config = load_kg_config(config_path)
-
-        # Use provided parameters or fall back to config
-        self.embedding_dim = int(embedding_dim if embedding_dim is not None else config["embedding"]["embedding_dim"])
-        self.qml_dim = int(qml_dim if qml_dim is not None else config["embedding"]["qml_dim"])
-        self.work_dir = work_dir if work_dir is not None else config["embedding"]["work_dir"]
-
-        # Store config for reference
-        self.config = config
+        self.embedding_dim = int(embedding_dim)
+        self.qml_dim = int(qml_dim)
+        self.work_dir = work_dir
 
         self.entity_to_id: Dict[str, int] = {}
         self.id_to_entity: Dict[int, str] = {}
@@ -245,9 +190,6 @@ class HetionetEmbedder:
         """
         dataset = self._create_pykeen_dataset(triples_df)
         logger.info(f"Training TransE embeddings with PyKEEN (dim={self.embedding_dim})...")
-        import torch
-        _device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        logger.info(f"PyKEEN training device: {_device}")
         result = pipeline(
             dataset=dataset,
             model="TransE",
@@ -256,7 +198,6 @@ class HetionetEmbedder:
             training_kwargs=dict(num_epochs=50, batch_size=1024),
             optimizer="adam",
             stopper="early",
-            device=_device,
         )
         # Extract embeddings
         embs = result.model.entity_representations[0]().detach().cpu().numpy()
@@ -400,82 +341,14 @@ class HetionetEmbedder:
             X: np.ndarray of shape [num_edges, feature_dim]
         """
         h_col, _, t_col = _infer_ht_columns(link_df)
-        
-        # Validate input DataFrame
-        if link_df.empty:
-            logger.warning("Empty DataFrame provided to prepare_link_features")
-            return np.array([]).reshape(0, 0)
-        
-        # Convert to string and handle NaN values
-        head_entities = link_df[h_col].astype(str).fillna('').values
-        tail_entities = link_df[t_col].astype(str).fillna('').values
-        
-        # Check for empty strings after conversion
-        empty_heads = np.sum(head_entities == '')
-        empty_tails = np.sum(tail_entities == '')
-        
-        if empty_heads > 0 or empty_tails > 0:
-            logger.warning(f"Found {empty_heads} empty head entities and {empty_tails} empty tail entities")
-        
-        # Pre-allocate arrays for efficiency
-        n_samples = len(link_df)
-        embedding_size = self.reduced_embeddings.shape[1] if (reduced and self.reduced_embeddings is not None) else self.entity_embeddings.shape[1]
-        feature_size = embedding_size * 4  # [h, t, |h-t|, h*t]
-        
-        X = np.zeros((n_samples, feature_size), dtype=np.float32)
-        
-        missing_heads = 0
-        missing_tails = 0
-        
-        # Process entities in batches for better performance
-        batch_size = min(1000, n_samples)
-        for start_idx in range(0, n_samples, batch_size):
-            end_idx = min(start_idx + batch_size, n_samples)
-            batch_heads = head_entities[start_idx:end_idx]
-            batch_tails = tail_entities[start_idx:end_idx]
-            
-            for i, (h, t) in enumerate(zip(batch_heads, batch_tails)):
-                local_idx = start_idx + i
-                
-                # Skip empty entities
-                if h == '' or t == '':
-                    continue
-                
-                # Track missing entities
-                if h not in self.entity_to_id:
-                    missing_heads += 1
-                if t not in self.entity_to_id:
-                    missing_tails += 1
-
-                hv = self._get_vec(h, reduced=reduced)
-                tv = self._get_vec(t, reduced=reduced)
-                diff = np.abs(hv - tv)
-                had = hv * tv
-                X[local_idx] = np.concatenate([hv, tv, diff, had], axis=0)
-        
-        # Validation: warn if too many entities are missing
-        if n_samples > 0:
-            missing_head_pct = missing_heads / n_samples * 100
-            missing_tail_pct = missing_tails / n_samples * 100
-
-            if missing_head_pct > 10 or missing_tail_pct > 10:
-                logger.warning(
-                    "⚠️  HIGH MISSING ENTITY RATE detected in prepare_link_features:\n"
-                    f"   Missing heads: {missing_heads}/{n_samples} ({missing_head_pct:.1f}%)\n"
-                    f"   Missing tails: {missing_tails}/{n_samples} ({missing_tail_pct:.1f}%)\n"
-                    "   This may indicate a column mismatch (source vs source_id).\n"
-                    "   Check that DataFrame has correct string entity ID columns."
-                )
-
-            # Critical error if ALL are missing (indicates definite bug)
-            if missing_head_pct > 90 or missing_tail_pct > 90:
-                logger.error(
-                    "❌ CRITICAL: Almost all entities missing! "
-                    f"Heads: {missing_head_pct:.1f}%, Tails: {missing_tail_pct:.1f}%. "
-                    "Likely cause: DataFrame has integer IDs but string IDs expected. "
-                    f"Sample head values: {link_df[h_col].head(3).tolist()}"
-                )
-
+        feats = []
+        for h, t in zip(link_df[h_col].astype(str).values, link_df[t_col].astype(str).values):
+            hv = self._get_vec(h, reduced=reduced)
+            tv = self._get_vec(t, reduced=reduced)
+            diff = np.abs(hv - tv)
+            had = hv * tv
+            feats.append(np.concatenate([hv, tv, diff, had], axis=0))
+        X = np.stack(feats, axis=0)
         return X
 
     def prepare_link_features_qml(self, link_df: pd.DataFrame, mode: str = "diff") -> np.ndarray:

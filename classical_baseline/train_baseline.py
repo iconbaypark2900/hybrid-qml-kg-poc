@@ -6,8 +6,6 @@ import pandas as pd
 import joblib
 import logging
 from typing import Dict, Any, Optional, Tuple
-from pathlib import Path
-import yaml
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
@@ -101,11 +99,10 @@ class ClassicalLinkPredictor:
         self.scaler = None
         self.metrics: Dict[str, float] = {}
 
-        os.makedirs(self.model_dir, exist_ok=True)
+        os.makedirs(model_dir, exist_ok=True)
 
-        # Initialize model based on config
-        if self.model_type == "LogisticRegression":
-            lr_config = config["logistic_regression"]
+        # Initialize model
+        if model_type == "LogisticRegression":
             self.model = LogisticRegression(
                 random_state=self.random_state,
                 max_iter=lr_config["max_iter"],
@@ -132,7 +129,7 @@ class ClassicalLinkPredictor:
                 min_samples_leaf=rf_config["min_samples_leaf"]
             )
         else:
-            raise ValueError(f"Unsupported model_type: {self.model_type}")
+            raise ValueError(f"Unsupported model_type: {model_type}")
 
     def prepare_features_and_labels(
         self,

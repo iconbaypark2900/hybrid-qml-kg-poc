@@ -89,8 +89,10 @@ class QMLEncoder:
         if self.encoding_method not in ["amplitude", "basis", "feature_map"]:
             raise ValueError("encoding_method must be 'amplitude', 'basis', or 'feature_map'")
 
-        # Store config for reference
-        self.config = config
+        self.encoding_method = encoding_method
+        self.num_qubits = num_qubits
+        self.feature_map_type = feature_map_type
+        self.feature_map_reps = feature_map_reps
 
         # Max feature dimensions based on encoding
         if encoding_method == "amplitude":

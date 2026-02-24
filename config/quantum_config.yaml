@@ -1,5 +1,5 @@
 quantum:
-  execution_mode: heron   # simulator | heron | auto
+  execution_mode: simulator   # simulator | heron | auto
 
   simulator:
     shots: 2048

@@ -36,6 +36,52 @@ except Exception:
     QMLEncoder = None  # type: ignore
 
 
+def load_quantum_config(config_path: str = "config/quantum_layer_config.yaml") -> Dict:
+    """
+    Load quantum layer configuration from YAML file.
+
+    Args:
+        config_path: Path to the quantum layer config YAML file.
+
+    Returns:
+        Dictionary containing configuration parameters.
+    """
+    if not Path(config_path).exists():
+        logger.warning(f"Config file not found at {config_path}, using defaults")
+        return {
+            "model": {
+                "model_type": "QSVC",
+                "encoding_method": "feature_map",
+                "num_qubits": 5,
+                "random_state": 42
+            },
+            "feature_map": {
+                "feature_map_type": "ZZ",
+                "feature_map_reps": 2
+            },
+            "vqc": {
+                "ansatz_type": "RealAmplitudes",
+                "ansatz_reps": 3,
+                "optimizer": "COBYLA",
+                "max_iter": 50
+            },
+            "quantum_executor": {
+                "quantum_config_path": "config/quantum_config.yaml"
+            }
+        }
+
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    return config
+
+# Try to import the local encoder (not strictly required for this class to run)
+try:
+    from .qml_encoder import QMLEncoder  # noqa: F401
+except Exception:
+    QMLEncoder = None  # type: ignore
+
+
 class QMLLinkPredictor:
     """
     Wrapper for quantum classifiers.

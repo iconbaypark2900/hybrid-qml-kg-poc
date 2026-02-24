@@ -1,0 +1,36 @@
+# Quantum config for DGX Spark / NVIDIA GPU systems
+#
+# Supported execution_mode values:
+#   gpu_simulator  - GPU-accelerated Aer statevector (fastest for 16-30 qubits)
+#   heron          - IBM Heron / Torino real quantum hardware
+#   simulator      - CPU-based Aer simulator (fallback)
+#
+# To switch modes, change execution_mode below or use:
+#   --quantum_config_path config/quantum_config_dgx.yaml
+#   --gpu  (convenience flag that selects config/quantum_config_gpu.yaml)
+
+quantum:
+  execution_mode: gpu_simulator
+
+  gpu_simulator:
+    method: statevector       # statevector (exact) or automatic
+    device: GPU               # GPU (cuStateVec) or CPU
+    shots: 0                  # 0 = exact statevector, >0 = shot-based
+    precision: double         # double or single
+
+  simulator:
+    shots: 2048
+    noise_model: null
+
+  heron:
+    backend: ibm_torino
+    shots: 2000
+    max_runtime_minutes: 20
+    use_dynamical_decoupling: true
+    resilience_level: 1
+    optimization_level: 1
+    enable_dynamical_decoupling: true
+
+  ibm_quantum:
+    token: ${IBM_Q_TOKEN}
+    instance: ibm-q/open/main

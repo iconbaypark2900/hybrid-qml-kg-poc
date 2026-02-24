@@ -1,0 +1,99 @@
+# deployment/Dockerfile.featuremap
+# Container specifically for feat/mjgrav2001/featuremap branch
+# This Dockerfile clones code directly from the specified branch, ignoring local build context
+FROM python:3.11-slim
+
+# Install system dependencies (including findutils for robust file cleanup)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    git \
+    findutils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    MPLBACKEND=Agg \
+    PYTHONPATH=/app
+
+# Clone the repository and checkout the featuremap branch
+# This ensures we always get the correct branch code, regardless of build context
+# The build context (local files) is completely ignored - only git branch code is used
+ARG GIT_TOKEN
+ARG BRANCH=feat/mjgrav2001/featuremap
+ARG GIT_REPO=https://github.com/Quantum-Global-Group/hybrid-qml-kg-poc.git
+ARG USER_FORK=https://github.com/iconbaypark2900/hybrid-qml-kg-poc.git
+ARG USE_LOCAL_CODE=false
+
+# Option 1: Use local build context (when branch isn't publicly accessible)
+# This copies files from your local branch directly
+# Use: docker build --build-arg USE_LOCAL_CODE=true ...
+COPY . /app/
+
+# Option 2: Clone from git (when branch is publicly accessible)
+# This will only run if USE_LOCAL_CODE is false and git clone succeeds
+# CRITICAL: Uses 'find' for robust cleanup of ALL local files (including hidden)
+RUN if [ "${USE_LOCAL_CODE}" != "true" ]; then \
+        if [ -n "${GIT_TOKEN}" ] && [ "${GIT_TOKEN}" != "your-token" ]; then \
+            MAIN_REPO="https://iconbaypark2900:${GIT_TOKEN}@github.com/Quantum-Global-Group/hybrid-qml-kg-poc.git"; \
+            FORK_REPO="https://iconbaypark2900:${GIT_TOKEN}@github.com/iconbaypark2900/hybrid-qml-kg-poc.git"; \
+        else \
+            MAIN_REPO="${GIT_REPO}"; \
+            FORK_REPO="${USER_FORK}"; \
+        fi && \
+        echo "Attempting to clone branch: ${BRANCH}" && \
+        echo "Trying main repo first: ${MAIN_REPO}" && \
+        if git clone --branch ${BRANCH} --single-branch --depth 1 ${MAIN_REPO} /tmp/repo 2>/dev/null; then \
+            echo "Successfully cloned from main repo, overwriting ALL local code" && \
+            echo "Removing all local files from /app (including hidden)..." && \
+            find /app -mindepth 1 -delete && \
+            echo "Copying git repository contents to /app..." && \
+            cp -a /tmp/repo/. /app/ && \
+            rm -rf /tmp/repo && \
+            echo "Git clone complete. Verifying cleanup..." && \
+            ls -la /app/ | head -20; \
+        elif git clone --branch ${BRANCH} --single-branch --depth 1 ${FORK_REPO} /tmp/repo 2>/dev/null; then \
+            echo "Successfully cloned from user fork, overwriting ALL local code" && \
+            echo "Removing all local files from /app (including hidden)..." && \
+            find /app -mindepth 1 -delete && \
+            echo "Copying git repository contents to /app..." && \
+            cp -a /tmp/repo/. /app/ && \
+            rm -rf /tmp/repo && \
+            echo "Git clone complete. Verifying cleanup..." && \
+            ls -la /app/ | head -20; \
+        else \
+            echo "WARNING: Failed to clone branch ${BRANCH} from git repos" && \
+            echo "Using local build context instead (ensure you're on the correct branch!)" && \
+            echo "To force git clone, provide a valid GIT_TOKEN"; \
+        fi; \
+    else \
+        echo "Using local build context (USE_LOCAL_CODE=true)" && \
+        echo "Ensure you're on branch: ${BRANCH}"; \
+    fi && \
+    echo "Verifying requirements file exists..." && \
+    ls -la /app/requirements*.txt || echo "WARNING: No requirements files found!"
+
+# Install Python deps (using CLI requirements for featuremap development)
+# Check if requirements-cli-combined.txt exists, otherwise try requirements.txt
+RUN pip install --upgrade pip setuptools wheel && \
+    if [ -f requirements-cli-combined.txt ]; then \
+        echo "Installing from requirements-cli-combined.txt" && \
+        pip install --no-cache-dir -r requirements-cli-combined.txt; \
+    elif [ -f requirements.txt ]; then \
+        echo "requirements-cli-combined.txt not found, using requirements.txt" && \
+        pip install --no-cache-dir -r requirements.txt; \
+    else \
+        echo "ERROR: No requirements file found!" && \
+        ls -la /app/*.txt && \
+        exit 1; \
+    fi
+
+# Data/models/results will usually be mounted from host; create dirs if missing
+RUN mkdir -p data models results
+
+# Default command (can be overridden)
+CMD ["/bin/bash"]
+

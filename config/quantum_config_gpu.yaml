@@ -1,0 +1,26 @@
+# Quantum config for any machine with an NVIDIA GPU
+# Uses GPU-accelerated Aer statevector simulation via cuStateVec.
+# Falls back to CPU simulator automatically if no GPU is detected.
+
+quantum:
+  execution_mode: gpu_simulator
+
+  gpu_simulator:
+    method: statevector       # statevector (exact) or automatic
+    device: GPU               # GPU (cuStateVec) or CPU
+    shots: 0                  # 0 = exact statevector, >0 = shot-based
+    precision: double         # double or single
+
+  simulator:
+    shots: 2048
+    noise_model: null
+
+  heron:
+    backend: ibm_torino
+    shots: 2000
+    max_runtime_minutes: 20
+    use_dynamical_decoupling: true
+
+  ibm_quantum:
+    token: ${IBM_Q_TOKEN}
+    instance: ibm-q/open/main

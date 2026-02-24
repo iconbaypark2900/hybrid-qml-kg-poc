@@ -32,6 +32,9 @@ try:
 except Exception:
     PYKEEN_AVAILABLE = False
 
+def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
+    """
+    Infer (head/source), (relation/metaedge), (tail/target) column names.
 
 def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
     """

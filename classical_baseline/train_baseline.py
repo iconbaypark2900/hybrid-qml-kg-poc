@@ -20,6 +20,53 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def load_classical_config(config_path: str = "config/classical_layer_config.yaml") -> Dict:
+    """
+    Load classical layer configuration from YAML file.
+
+    Args:
+        config_path: Path to the classical layer config YAML file.
+
+    Returns:
+        Dictionary containing configuration parameters.
+    """
+    if not Path(config_path).exists():
+        logger.warning(f"Config file not found at {config_path}, using defaults")
+        return {
+            "model": {
+                "model_type": "LogisticRegression",
+                "random_state": 42
+            },
+            "directories": {
+                "data_dir": "data",
+                "model_dir": "models"
+            },
+            "logistic_regression": {
+                "max_iter": 1000,
+                "class_weight": "balanced"
+            },
+            "svm": {
+                "kernel": "rbf",
+                "probability": True,
+                "class_weight": "balanced",
+                "C": 1.0,
+                "gamma": "scale"
+            },
+            "random_forest": {
+                "n_estimators": 100,
+                "class_weight": "balanced",
+                "max_depth": None,
+                "min_samples_split": 2,
+                "min_samples_leaf": 1
+            }
+        }
+
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    return config
+
+
 class ClassicalLinkPredictor:
     """
     Classical ML baseline for knowledge graph link prediction.
@@ -29,15 +76,25 @@ class ClassicalLinkPredictor:
 
     def __init__(
         self,
-        model_type: str = "LogisticRegression",
-        random_state: int = 42,
-        data_dir: str = "data",
-        model_dir: str = "models"
+        model_type: Optional[str] = None,
+        random_state: Optional[int] = None,
+        data_dir: Optional[str] = None,
+        model_dir: Optional[str] = None,
+        config_path: Optional[str] = None,
+        config: Optional[Dict] = None
     ):
-        self.model_type = model_type
-        self.random_state = random_state
-        self.data_dir = data_dir
-        self.model_dir = model_dir
+        # Load config if not provided
+        if config is None:
+            if config_path is None:
+                config_path = "config/classical_layer_config.yaml"
+            config = load_classical_config(config_path)
+
+        # Use provided parameters or fall back to config
+        self.model_type = model_type if model_type is not None else config["model"]["model_type"]
+        self.random_state = random_state if random_state is not None else config["model"]["random_state"]
+        self.data_dir = data_dir if data_dir is not None else config["directories"]["data_dir"]
+        self.model_dir = model_dir if model_dir is not None else config["directories"]["model_dir"]
+        self.config = config
         self.model = None
         self.scaler = None
         self.metrics: Dict[str, float] = {}
@@ -47,22 +104,29 @@ class ClassicalLinkPredictor:
         # Initialize model
         if model_type == "LogisticRegression":
             self.model = LogisticRegression(
-                random_state=random_state,
-                max_iter=1000,
-                class_weight="balanced"  # Handle imbalanced data
+                random_state=self.random_state,
+                max_iter=lr_config["max_iter"],
+                class_weight=lr_config["class_weight"]
             )
-        elif model_type == "SVM":
+        elif self.model_type == "SVM":
+            svm_config = config["svm"]
             self.model = SVC(
-                random_state=random_state,
-                probability=True,
-                class_weight="balanced",
-                kernel="rbf"
+                random_state=self.random_state,
+                probability=svm_config["probability"],
+                class_weight=svm_config["class_weight"],
+                kernel=svm_config["kernel"],
+                C=svm_config["C"],
+                gamma=svm_config["gamma"]
             )
-        elif model_type == "RandomForest":
+        elif self.model_type == "RandomForest":
+            rf_config = config["random_forest"]
             self.model = RandomForestClassifier(
-                random_state=random_state,
-                class_weight="balanced",
-                n_estimators=100
+                random_state=self.random_state,
+                class_weight=rf_config["class_weight"],
+                n_estimators=rf_config["n_estimators"],
+                max_depth=rf_config["max_depth"],
+                min_samples_split=rf_config["min_samples_split"],
+                min_samples_leaf=rf_config["min_samples_leaf"]
             )
         else:
             raise ValueError(f"Unsupported model_type: {model_type}")

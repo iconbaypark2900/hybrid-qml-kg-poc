@@ -1,20 +1,33 @@
 # quantum_layer/quantum_executor.py
 
 import os
+import json
 import logging
 import time
 from typing import Optional, Tuple, Dict, Any
 from pathlib import Path
 from qiskit import QuantumCircuit
-from qiskit.primitives import BaseSampler
+try:
+    from qiskit.primitives import BaseSampler
+except ImportError:
+    BaseSampler = None  # type: ignore[misc, assignment]
 from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
-from qiskit_ibm_runtime import (
-    QiskitRuntimeService, Sampler as RuntimeSampler, 
-    Session, Options
-)
+try:
+    from qiskit_ibm_runtime import (
+        QiskitRuntimeService, Sampler as RuntimeSampler,
+        Session, Options
+    )
+except ImportError:
+    QiskitRuntimeService = None  # type: ignore[misc, assignment]
+    RuntimeSampler = None  # type: ignore[misc, assignment]
+    Session = None  # type: ignore[misc, assignment]
+    Options = None  # type: ignore[misc, assignment]
 from qiskit.transpiler import PassManager
-from qiskit.transpiler.passes import DynamicalDecoupling
+try:
+    from qiskit.transpiler.passes import DynamicalDecoupling
+except ImportError:
+    DynamicalDecoupling = None  # type: ignore[misc, assignment]
 from qiskit.circuit.library import XGate
 import yaml
 from dotenv import load_dotenv
@@ -26,12 +39,23 @@ class QuantumExecutor:
     """
     Unified executor for quantum circuits supporting both simulator and IBM Heron/Torino.
     """
+
+    @staticmethod
+    def gpu_available() -> bool:
+        """Check if GPU-backed Aer simulation is available (cuStateVec)."""
+        try:
+            from qiskit_aer import AerSimulator
+            AerSimulator(method='statevector', device='GPU')
+            return True
+        except Exception:
+            return False
     
     def __init__(self, config_path: str = "config/quantum_config.yaml"):
         self.config = self._load_config(config_path)
         self.execution_mode = self.config['quantum']['execution_mode']
         self.service = None
         self.session = None
+        self.noise_label = None
         self._initialize_service()
     
     def _load_config(self, config_path: str) -> Dict:
@@ -62,6 +86,12 @@ class QuantumExecutor:
     def _initialize_service(self):
         """Initialize IBM Quantum Runtime service if needed."""
         if self.execution_mode == "heron" or self.execution_mode == "auto":
+            if QiskitRuntimeService is None:
+                logger.warning("⚠️  qiskit_ibm_runtime not installed. Heron mode unavailable.")
+                if self.execution_mode == "heron":
+                    logger.info("🔄 Falling back to simulator mode")
+                    self.execution_mode = "simulator"
+                return
             try:
                 token = self.config['quantum']['ibm_quantum']['token']
                 instance = self.config['quantum']['ibm_quantum'].get('instance')
@@ -156,8 +186,8 @@ class QuantumExecutor:
         
         optimized = circuit.copy()
         
-        # Add dynamical decoupling for Heron
-        if (self.execution_mode == "heron" and 
+        # Add dynamical decoupling for Heron (when pass is available)
+        if (DynamicalDecoupling is not None and self.execution_mode == "heron" and
             self.config['quantum']['heron']['use_dynamical_decoupling']):
             try:
                 backend = self.service.backend(self.config['quantum']['heron']['backend']) if self.service else None

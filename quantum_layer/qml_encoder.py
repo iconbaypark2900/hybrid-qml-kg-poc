@@ -1,13 +1,45 @@
 # quantum_layer/qml_encoder.py
 
 import numpy as np
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional, Dict
+from pathlib import Path
+import yaml
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import ZFeatureMap, ZZFeatureMap, PauliFeatureMap
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def load_quantum_config(config_path: str = "config/quantum_layer_config.yaml") -> Dict:
+    """
+    Load quantum layer configuration from YAML file.
+
+    Args:
+        config_path: Path to the quantum layer config YAML file.
+
+    Returns:
+        Dictionary containing configuration parameters.
+    """
+    if not Path(config_path).exists():
+        logger.warning(f"Config file not found at {config_path}, using defaults")
+        return {
+            "model": {
+                "encoding_method": "feature_map",
+                "num_qubits": 5,
+                "random_state": 42
+            },
+            "feature_map": {
+                "feature_map_type": "ZZ",
+                "feature_map_reps": 2
+            }
+        }
+
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    return config
 
 
 class QMLEncoder:
@@ -24,21 +56,37 @@ class QMLEncoder:
 
     def __init__(
         self,
-        encoding_method: str = "amplitude",
-        num_qubits: int = 5,
-        feature_map_type: str = "ZZ",  # for feature map encodings
-        feature_map_reps: int = 2
+        encoding_method: Optional[str] = None,
+        num_qubits: Optional[int] = None,
+        feature_map_type: Optional[str] = None,
+        feature_map_reps: Optional[int] = None,
+        config_path: Optional[str] = None,
+        config: Optional[Dict] = None
     ):
         """
         Initialize encoder.
 
         Args:
-            encoding_method: "amplitude", "basis", or "feature_map"
-            num_qubits: Target number of qubits (determines max feature dim)
-            feature_map_type: "ZZ", "Z", or "Pauli" (used if encoding_method="feature_map")
-            feature_map_reps: Number of repetition blocks in feature map
+            encoding_method: "amplitude", "basis", or "feature_map" (overrides config)
+            num_qubits: Target number of qubits (determines max feature dim) (overrides config)
+            feature_map_type: "ZZ", "Z", or "Pauli" (used if encoding_method="feature_map") (overrides config)
+            feature_map_reps: Number of repetition blocks in feature map (overrides config)
+            config_path: Path to quantum layer config YAML file (default: "config/quantum_layer_config.yaml")
+            config: Configuration dictionary (if provided, config_path is ignored)
         """
-        if encoding_method not in ["amplitude", "basis", "feature_map"]:
+        # Load config if not provided
+        if config is None:
+            if config_path is None:
+                config_path = "config/quantum_layer_config.yaml"
+            config = load_quantum_config(config_path)
+
+        # Use provided parameters or fall back to config
+        self.encoding_method = encoding_method if encoding_method is not None else config["model"]["encoding_method"]
+        self.num_qubits = int(num_qubits if num_qubits is not None else config["model"]["num_qubits"])
+        self.feature_map_type = feature_map_type if feature_map_type is not None else config["feature_map"]["feature_map_type"]
+        self.feature_map_reps = int(feature_map_reps if feature_map_reps is not None else config["feature_map"]["feature_map_reps"])
+
+        if self.encoding_method not in ["amplitude", "basis", "feature_map"]:
             raise ValueError("encoding_method must be 'amplitude', 'basis', or 'feature_map'")
 
         self.encoding_method = encoding_method

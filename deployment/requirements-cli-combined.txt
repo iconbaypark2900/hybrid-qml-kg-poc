@@ -1,0 +1,22 @@
+# Core scientific stack
+numpy==2.3.3
+scipy==1.15.3
+pandas==2.3.2
+scikit-learn==1.7.2
+
+# Utils
+PyYAML==6.0.1
+tqdm==4.67.1
+rich==13.9.4
+networkx==3.2.1
+dotenv==0.9.9
+
+# Quantum stack for run_pipeline.py
+qiskit==1.4.4
+qiskit-aer==0.17.2
+qiskit-algorithms==0.4.0
+qiskit-ibm-runtime==0.42.0
+qiskit-machine-learning==0.8.4
+
+# Plotting used by scalability sim in run_pipeline.py
+matplotlib==3.10.6

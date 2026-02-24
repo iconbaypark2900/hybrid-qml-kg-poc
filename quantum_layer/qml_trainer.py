@@ -4,12 +4,14 @@ import os
 import numpy as np
 import pandas as pd
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
+from pathlib import Path
+import yaml
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     roc_auc_score, average_precision_score
 )
-from .qml_model import QMLLinkPredictor
+from .qml_model import QMLLinkPredictor, load_quantum_config
 from classical_baseline.train_baseline import ClassicalLinkPredictor
 from sklearn.preprocessing import MinMaxScaler
 
@@ -30,8 +32,10 @@ class QMLTrainer:
 
     def __init__(
         self,
-        results_dir: str = "results",
-        random_state: int = 42
+        results_dir: Optional[str] = None,
+        random_state: Optional[int] = None,
+        config_path: Optional[str] = None,
+        config: Optional[Dict] = None
     ):
         self.results_dir = results_dir
         self.random_state = random_state
@@ -91,7 +95,7 @@ class QMLTrainer:
 
         # AUC metrics
         try:
-            roc_auc = roc_auc_score(y_test, y_proba)
+            roc_auc = roc_auc_score(y_test, y_proba_arr)
         except ValueError:
             roc_auc = float('nan')
 
@@ -126,9 +130,11 @@ class QMLTrainer:
         train_df: pd.DataFrame,
         test_df: pd.DataFrame,
         embedder,
-        qml_config: Dict[str, Any],
-        classical_model_type: str = "LogisticRegression",
-        quantum_config_path: str = "config/quantum_config.yaml"
+        qml_config: Optional[Dict[str, Any]] = None,
+        classical_model_type: Optional[str] = None,
+        quantum_config_path: Optional[str] = None,
+        config_path: Optional[str] = None,
+        config: Optional[Dict] = None
     ) -> Dict[str, Dict[str, float]]:
         """
         Full training and evaluation pipeline.
@@ -143,6 +149,52 @@ class QMLTrainer:
         Returns:
             Dict with 'classical' and 'quantum' metric dictionaries
         """
+        # Load config if not provided
+        if config is None:
+            if config_path is None:
+                config_path = "config/quantum_layer_config.yaml"
+            config = load_quantum_config(config_path)
+
+        # Merge qml_config with config if provided
+        if qml_config is None:
+            qml_config = {}
+
+        # Build qml_config from config file, allowing overrides
+        if not qml_config:
+            qml_config = {
+                "model_type": config["model"]["model_type"],
+                "encoding_method": config["model"]["encoding_method"],
+                "num_qubits": config["model"]["num_qubits"],
+                "feature_map_type": config["feature_map"]["feature_map_type"],
+                "feature_map_reps": config["feature_map"]["feature_map_reps"],
+                "ansatz_type": config["vqc"]["ansatz_type"],
+                "ansatz_reps": config["vqc"]["ansatz_reps"],
+                "optimizer": config["vqc"]["optimizer"],
+                "max_iter": config["vqc"]["max_iter"],
+                "random_state": config["model"]["random_state"]
+            }
+
+        if quantum_config_path is None:
+            quantum_config_path = config["quantum_executor"]["quantum_config_path"]
+
+        if classical_model_type is None:
+            # Load classical config
+            from classical_baseline.train_baseline import load_classical_config
+            classical_config = load_classical_config()
+            classical_model_type = classical_config["model"]["model_type"]
+
+        # Get qml_features_mode from embedder config or default
+        if hasattr(embedder, 'config') and embedder.config:
+            qml_features_mode = embedder.config.get("features", {}).get("qml_features_mode", "diff")
+        else:
+            # Fallback: try to get from kg_config if available, otherwise use default
+            try:
+                from kg_layer.kg_loader import load_kg_config
+                kg_config = load_kg_config()
+                qml_features_mode = kg_config.get("features", {}).get("qml_features_mode", "diff")
+            except Exception:
+                qml_features_mode = "diff"
+
         # Prepare features
         logger.info("Preparing features for training...")
         # Classical uses full 128-D features, quantum uses reduced qml_dim features
@@ -164,11 +216,60 @@ class QMLTrainer:
 
         # Train classical baseline
         logger.info("Training classical baseline...")
+        # Ensure string entity IDs exist for proper embedding lookup
+        # This prevents the bug where negatives with only integer IDs get identical embeddings
+        def _ensure_string_entity_ids(df: pd.DataFrame, embedder) -> pd.DataFrame:
+            """Add string entity ID columns if missing."""
+            if df is None or df.empty:
+                return df
+
+            needs_copy = False
+            result = df
+            id_map = getattr(embedder, "id_to_entity", {}) or {}
+            added_source = 0
+            added_target = 0
+
+            # Check if we need to add 'source' column
+            if "source" not in df.columns and "source_id" in df.columns:
+                if not needs_copy:
+                    result = df.copy()
+                    needs_copy = True
+                result["source"] = result["source_id"].map(
+                    lambda x: id_map.get(int(x), f"Entity::{x}") if pd.notna(x) else None
+                )
+                added_source = int(result["source"].notna().sum())
+
+            # Check if we need to add 'target' column
+            if "target" not in df.columns and "target_id" in df.columns:
+                if not needs_copy:
+                    result = df.copy()
+                    needs_copy = True
+                result["target"] = result["target_id"].map(
+                    lambda x: id_map.get(int(x), f"Entity::{x}") if pd.notna(x) else None
+                )
+                added_target = int(result["target"].notna().sum())
+
+            if added_source or added_target:
+                try:
+                    logger.debug(
+                        "Added string entity IDs via embedder.id_to_entity: source=%s target=%s",
+                        added_source,
+                        added_target,
+                    )
+                except Exception:
+                    pass
+
+            return result
+
+        # Apply fix to prevent all negatives getting identical embeddings
+        train_df_fixed = _ensure_string_entity_ids(train_df, embedder)
+        test_df_fixed = _ensure_string_entity_ids(test_df, embedder) if test_df is not None else None
+
         classical_predictor = ClassicalLinkPredictor(
             model_type=classical_model_type,
             random_state=self.random_state
         )
-        classical_predictor.train(train_df, embedder, test_df)
+        classical_predictor.train(train_df_fixed, embedder, test_df_fixed)
         classical_metrics = self.evaluate_model(
             classical_predictor.model, X_test_classical, y_test, "Classical"
         )
@@ -273,7 +374,7 @@ class QMLTrainer:
         }
 
         # Save results
-        self.save_results(results, qml_config)
+        self.save_results(results, qml_config, quantum_config_path)
         return results
 
     def save_results(self, results: Dict, qml_config: Dict) -> None:
@@ -287,6 +388,10 @@ class QMLTrainer:
         # Flatten results for CSV
         flat_results = {}
         for model_type, metrics in results.items():
+            if model_type == "observables" and isinstance(metrics, dict):
+                for k, v in metrics.items():
+                    flat_results[f"obs_{k}"] = v
+                continue
             for key, value in metrics.items():
                 flat_results[f"{model_type}_{key}"] = value
 

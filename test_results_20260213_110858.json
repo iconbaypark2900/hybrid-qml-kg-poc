@@ -1,0 +1,113 @@
+{
+  "summary": {
+    "total_tests": 6,
+    "passed": 3,
+    "failed": 1,
+    "skipped": 2,
+    "errors": 0,
+    "total_duration": 2.233106851577759
+  },
+  "results": [
+    {
+      "name": "Quantum-Enhanced Embeddings",
+      "status": "FAILED",
+      "duration": 2.117764949798584,
+      "metrics": {},
+      "error_message": "The size of tensor a (30) must match the size of tensor b (60) at non-singleton dimension 1",
+      "timestamp": "2026-02-13T11:08:58.060430"
+    },
+    {
+      "name": "Quantum Transfer Learning",
+      "status": "PASSED",
+      "duration": 0.07769131660461426,
+      "metrics": {
+        "source_shape": [
+          50,
+          8
+        ],
+        "target_shape": [
+          30,
+          8
+        ],
+        "source_metrics": {
+          "final_loss": 0.6446546912193298,
+          "avg_loss": 0.6657987356185913,
+          "epochs_trained": 5
+        },
+        "target_metrics": {
+          "final_loss": 0.5156182050704956,
+          "avg_loss": 0.6201004266738892,
+          "epochs_trained": 5,
+          "transfer_successful": true,
+          "frozen_param_groups": 1,
+          "trainable_param_groups": 5
+        },
+        "prediction_accuracy": 0.8333333333333334
+      },
+      "error_message": null,
+      "timestamp": "2026-02-13T11:08:58.138253"
+    },
+    {
+      "name": "Quantum Error Mitigation",
+      "status": "PASSED",
+      "duration": 0.0196073055267334,
+      "metrics": {
+        "zne_result": {
+          "extrapolated_value": 0.5,
+          "noise_factors": [
+            1.0,
+            1.5,
+            2.0
+          ],
+          "method": "linear"
+        },
+        "composite_result": {
+          "zne_mitigated": 0.5,
+          "cdr_mitigated": 0.5,
+          "pec_mitigated": 0.5,
+          "composite_mitigated": 0.5
+        }
+      },
+      "error_message": null,
+      "timestamp": "2026-02-13T11:08:58.157976"
+    },
+    {
+      "name": "Quantum Circuit Optimization",
+      "status": "PASSED",
+      "duration": 0.0004010200500488281,
+      "metrics": {
+        "circuit_depth": 10,
+        "circuit_size": 15,
+        "parameters_count": 2,
+        "ops_count": {
+          "h": 3,
+          "ry": 2,
+          "cx": 4,
+          "rx": 2
+        }
+      },
+      "error_message": null,
+      "timestamp": "2026-02-13T11:08:58.158476"
+    },
+    {
+      "name": "Quantum Kernel Engineering",
+      "status": "SKIPPED",
+      "duration": 0.0036246776580810547,
+      "metrics": {
+        "reason": "Module not available"
+      },
+      "error_message": "Qiskit is required for adaptive quantum kernel",
+      "timestamp": "2026-02-13T11:08:58.162164"
+    },
+    {
+      "name": "Quantum Variational Feature Selection",
+      "status": "SKIPPED",
+      "duration": 0.013455867767333984,
+      "metrics": {
+        "reason": "Module not available"
+      },
+      "error_message": "Qiskit is required for quantum variational feature selection",
+      "timestamp": "2026-02-13T11:08:58.175696"
+    }
+  ]
+}

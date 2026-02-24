@@ -1,0 +1,19 @@
+# Quantum config for GMKtec (128 GB mini PC, no dedicated GPU)
+# Uses CPU-based simulator - works well with high RAM
+
+quantum:
+  execution_mode: simulator   # GMKtec runs on simulator (no NVIDIA GPU required)
+
+  simulator:
+    shots: 2048
+    noise_model: null         # Noiseless simulation for best results on local machine
+
+  heron:
+    backend: ibm_torino
+    shots: 2000
+    max_runtime_minutes: 20
+    use_dynamical_decoupling: true
+
+  ibm_quantum:
+    token: ${IBM_Q_TOKEN}
+    instance: ibm-q/open/main

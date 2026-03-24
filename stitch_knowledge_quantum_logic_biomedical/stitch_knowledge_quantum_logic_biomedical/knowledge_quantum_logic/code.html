@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>QuantumBio Synth - Knowledge Graph &amp; Quantum Gates</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "on-error": "#690005",
+                "on-secondary-fixed-variant": "#5516be",
+                "on-secondary-fixed": "#23005c",
+                "error-container": "#93000a",
+                "on-primary-fixed-variant": "#004c69",
+                "on-tertiary-fixed-variant": "#005047",
+                "surface-variant": "#2d3449",
+                "secondary-container": "#571bc1",
+                "surface-container-low": "#131b2e",
+                "error": "#ffb4ab",
+                "on-primary-container": "#008abb",
+                "tertiary-container": "#001c18",
+                "surface-bright": "#31394d",
+                "on-primary-fixed": "#001e2c",
+                "on-surface-variant": "#c6c6cd",
+                "on-primary": "#00354a",
+                "tertiary-fixed-dim": "#3cddc7",
+                "inverse-on-surface": "#283044",
+                "secondary-fixed": "#e9ddff",
+                "surface": "#0b1326",
+                "on-tertiary-fixed": "#00201c",
+                "primary-fixed": "#c4e7ff",
+                "primary-fixed-dim": "#7bd0ff",
+                "surface-tint": "#7bd0ff",
+                "on-error-container": "#ffdad6",
+                "on-secondary": "#3c0091",
+                "tertiary-fixed": "#62fae3",
+                "background": "#0b1326",
+                "surface-container-lowest": "#060e20",
+                "on-surface": "#dae2fd",
+                "on-secondary-container": "#c4abff",
+                "surface-container-highest": "#2d3449",
+                "secondary-fixed-dim": "#d0bcff",
+                "secondary": "#d0bcff",
+                "surface-dim": "#0b1326",
+                "primary": "#7bd0ff",
+                "outline": "#909097",
+                "tertiary": "#3cddc7",
+                "on-tertiary": "#003731",
+                "inverse-surface": "#dae2fd",
+                "surface-container": "#171f33",
+                "on-background": "#dae2fd",
+                "inverse-primary": "#00668a",
+                "on-tertiary-container": "#009182",
+                "primary-container": "#001a27",
+                "surface-container-high": "#222a3d",
+                "outline-variant": "#45464d"
+              },
+              fontFamily: {
+                "headline": ["Space Grotesk"],
+                "body": ["Inter"],
+                "label": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(45, 52, 73, 0.6);
+            backdrop-filter: blur(20px);
+        }
+        .quantum-wire {
+            background: repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(144, 144, 151, 0.2) 10px, rgba(144, 144, 151, 0.2) 20px);
+        }
+        .active-pulse {
+            box-shadow: 0 0 15px rgba(60, 221, 199, 0.4);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary/30">
+<!-- TopAppBar -->
+<header class="bg-slate-950/60 backdrop-blur-xl docked full-width top-0 z-50 flex justify-between items-center w-full px-6 h-16 fixed shadow-[0_10px_40px_rgba(218,226,253,0.06)]">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold text-sky-400 font-headline tracking-tight">QuantumBio Synth</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-label text-sm" href="#">Molecular Design</a>
+<a class="text-sky-400 border-b-2 border-sky-400 pb-1 font-label text-sm" href="#">Knowledge Graph</a>
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-label text-sm" href="#">Experiment Analysis</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">search</span>
+<input class="bg-slate-900/50 border-none rounded-lg pl-10 pr-4 py-1.5 text-sm focus:ring-1 focus:ring-sky-400 w-64" placeholder="Search protein nodes..." type="text"/>
+</div>
+<button class="material-symbols-outlined text-slate-400 hover:bg-slate-800/50 p-2 rounded-full transition-all">notifications</button>
+<button class="material-symbols-outlined text-slate-400 hover:bg-slate-800/50 p-2 rounded-full transition-all">settings</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-sky-400/30">
+<img class="w-full h-full object-cover" data-alt="Researcher Profile Avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2EJy8gAiCEVo4ZZ-TyBlE6LRRMubzISnwWTtSQrh4zT7B-h4eY6KzwS-lAyF5N6Rp9_e5C0PDCKtdkPCtR5-tq4ZgVERu73CYm6PaOru9MiBed77CGiF7RZ2Uo4jfHYmq6NGSGCHCa6DgVuP-tu2RWcNXfW50rf4Dy3uVm0ugUZrp2JsBGiG08fVidrMANSyLRnbC7fC7b6uvz7EUnyzMub9tydEpK7J8C186bCHKAlnacvQQiS1dlzVqmzPyVEk0K5DNnLiARw"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="bg-slate-900 h-screen w-64 left-0 top-0 fixed flex flex-col h-full py-6 px-4 z-40 pt-20">
+<div class="mb-8 px-2">
+<div class="text-lg font-bold text-sky-400 font-headline mb-1">Core Terminal</div>
+<div class="text-xs text-slate-500 font-label">Quantum Node 01</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 rounded transition-all group" href="#">
+<span class="material-symbols-outlined group-active:translate-x-1 duration-200" data-icon="dashboard">dashboard</span>
+<span class="font-label text-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 rounded transition-all group" href="#">
+<span class="material-symbols-outlined group-active:translate-x-1 duration-200" data-icon="biotech">biotech</span>
+<span class="font-label text-sm">Simulation</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 rounded transition-all group" href="#">
+<span class="material-symbols-outlined group-active:translate-x-1 duration-200" data-icon="dna">genetics</span>
+<span class="font-label text-sm">Genomics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 bg-slate-800 text-sky-400 border-r-4 border-sky-400 rounded-l transition-all group" href="#">
+<span class="material-symbols-outlined group-active:translate-x-1 duration-200" data-icon="menu_book">menu_book</span>
+<span class="font-label text-sm">Library</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 rounded transition-all group" href="#">
+<span class="material-symbols-outlined group-active:translate-x-1 duration-200" data-icon="history">history</span>
+<span class="font-label text-sm">Archive</span>
+</a>
+</nav>
+<div class="mt-auto pt-6 border-t border-slate-800/50 space-y-1">
+<button class="w-full bg-gradient-to-br from-primary to-on-primary-container text-on-primary font-bold py-2 rounded-md mb-6 text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary/10">
+<span class="material-symbols-outlined text-sm">add</span>
+                New Experiment
+            </button>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:text-slate-300 text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+                Support
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:text-slate-300 text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="sensors">sensors</span>
+                System Status
+            </a>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="pl-64 pt-16 h-screen overflow-hidden flex flex-col">
+<!-- View Header -->
+<div class="px-8 py-6 flex justify-between items-end">
+<div>
+<h1 class="font-headline text-3xl font-bold tracking-tight text-on-surface">Knowledge Graph Mapping</h1>
+<p class="text-on-surface-variant text-sm mt-1 uppercase tracking-widest font-label font-medium">Protein: BRAF V600E | Simulation: Quantum Phase Estimation</p>
+</div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container-high rounded text-xs text-tertiary-fixed-dim border border-tertiary/20">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
+                    Observing...
+                </div>
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container-high rounded text-xs text-secondary-fixed-dim border border-secondary/20">
+<span class="material-symbols-outlined text-xs">auto_fix_high</span>
+                    Resolving Probability...
+                </div>
+</div>
+</div>
+<!-- Split View Layout -->
+<div class="flex-1 grid grid-cols-12 gap-0 px-6 pb-6 overflow-hidden">
+<!-- Knowledge Graph Column -->
+<div class="col-span-7 bg-surface-container-low rounded-xl relative overflow-hidden flex flex-col m-2">
+<div class="p-4 border-b border-outline-variant/15 flex justify-between items-center bg-surface-container-high/40 backdrop-blur-sm">
+<span class="text-xs font-bold uppercase tracking-widest text-on-surface-variant font-label">Pathways Network Visualization</span>
+<div class="flex gap-2">
+<button class="material-symbols-outlined text-slate-500 text-lg hover:text-primary transition-colors">zoom_in</button>
+<button class="material-symbols-outlined text-slate-500 text-lg hover:text-primary transition-colors">filter_list</button>
+</div>
+</div>
+<div class="flex-1 relative bg-surface-container-lowest/50">
+<!-- Graph Visualization Placeholder -->
+<div class="absolute inset-0 flex items-center justify-center">
+<div class="w-full h-full opacity-40 mix-blend-screen" style="background-image: radial-gradient(circle at center, rgba(123, 208, 255, 0.1) 0%, transparent 70%);"></div>
+<!-- Symbolic Nodes -->
+<div class="absolute top-1/4 left-1/3 w-4 h-4 rounded-full bg-tertiary active-pulse"></div>
+<div class="absolute top-1/2 left-1/2 w-8 h-8 rounded-full bg-primary/20 border-2 border-primary active-pulse flex items-center justify-center">
+<span class="text-[10px] font-bold text-primary">BRAF</span>
+</div>
+<div class="absolute top-1/3 right-1/4 w-3 h-3 rounded-full bg-secondary-container border border-secondary shadow-[0_0_10px_rgba(208,188,255,0.4)]"></div>
+<div class="absolute bottom-1/4 left-1/4 w-3 h-3 rounded-full bg-slate-700"></div>
+<!-- Connection Lines -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+<line stroke="rgba(60, 221, 199, 0.3)" stroke-width="1" x1="33%" x2="50%" y1="25%" y2="50%"></line>
+<line stroke="rgba(123, 208, 255, 0.4)" stroke-width="2" x1="50%" x2="75%" y1="50%" y2="33%"></line>
+<line stroke="rgba(144, 144, 151, 0.2)" stroke-width="1" x1="50%" x2="25%" y1="50%" y2="75%"></line>
+<path d="M 50% 50% Q 65% 60% 75% 33%" fill="none" stroke="rgba(208, 188, 255, 0.2)" stroke-dasharray="4 2" stroke-width="1"></path>
+</svg>
+</div>
+<!-- Overlay Node Inspector -->
+<div class="absolute top-6 left-6 w-56 glass-panel rounded-lg border border-outline-variant/20 p-4">
+<div class="text-[10px] text-tertiary font-bold uppercase mb-1">Node Focus</div>
+<div class="text-sm font-bold text-on-surface font-headline mb-3">BRAF Kinase V600E</div>
+<div class="space-y-2">
+<div class="flex justify-between text-[10px]">
+<span class="text-on-surface-variant">Centrality Index</span>
+<span class="text-primary">0.942</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[94%]"></div>
+</div>
+<div class="flex justify-between text-[10px]">
+<span class="text-on-surface-variant">State Coherence</span>
+<span class="text-tertiary">High</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Quantum Gate Column -->
+<div class="col-span-5 flex flex-col gap-4 m-2">
+<!-- Circuit Panel -->
+<div class="flex-1 bg-surface-container-low rounded-xl flex flex-col overflow-hidden">
+<div class="p-4 border-b border-outline-variant/15 flex justify-between items-center bg-surface-container-high/40">
+<span class="text-xs font-bold uppercase tracking-widest text-on-surface-variant font-label">Quantum Logic Shell</span>
+<div class="flex gap-2 text-[10px] font-mono text-secondary">
+<span>REG_A[4]</span>
+</div>
+</div>
+<div class="flex-1 p-6 relative flex flex-col gap-8 justify-center">
+<!-- Circuit Wires -->
+<div class="h-0.5 w-full bg-outline-variant/30 relative">
+<div class="absolute left-0 -top-6 text-[10px] font-mono text-slate-500">q[0]</div>
+<!-- Hadamard Gate -->
+<div class="absolute left-[15%] top-1/2 -translate-y-1/2 w-10 h-10 bg-surface-container-highest border border-primary rounded-sm flex items-center justify-center shadow-lg">
+<span class="text-primary font-bold font-headline">H</span>
+</div>
+<!-- CNOT Connection -->
+<div class="absolute left-[45%] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary active-pulse"></div>
+</div>
+<div class="h-0.5 w-full bg-outline-variant/30 relative">
+<div class="absolute left-0 -top-6 text-[10px] font-mono text-slate-500">q[1]</div>
+<!-- CNOT Target -->
+<div class="absolute left-[45%] top-1/2 -translate-y-1/2 w-8 h-8 border-2 border-primary rounded-full flex items-center justify-center bg-surface-container-low">
+<div class="w-full h-[2px] bg-primary absolute"></div>
+<div class="h-full w-[2px] bg-primary absolute"></div>
+</div>
+<!-- X Gate -->
+<div class="absolute left-[70%] top-1/2 -translate-y-1/2 w-10 h-10 bg-surface-container-highest border border-tertiary rounded-sm flex items-center justify-center">
+<span class="text-tertiary font-bold font-headline">X</span>
+</div>
+</div>
+<div class="h-0.5 w-full bg-outline-variant/30 relative">
+<div class="absolute left-0 -top-6 text-[10px] font-mono text-slate-500">q[2]</div>
+<!-- Phase Gate -->
+<div class="absolute left-[30%] top-1/2 -translate-y-1/2 w-10 h-10 bg-surface-container-highest border border-secondary rounded-sm flex items-center justify-center">
+<span class="text-secondary font-bold font-headline">Rφ</span>
+</div>
+</div>
+<!-- Mapping Connection (Visual link between graph node and q-gate) -->
+<div class="absolute left-0 top-0 w-full h-full pointer-events-none overflow-visible">
+<div class="absolute top-[20%] -left-12 w-24 h-[2px] bg-gradient-to-r from-primary to-transparent blur-[1px]"></div>
+<div class="absolute top-[20%] -left-12 text-[9px] text-primary font-bold -translate-y-4">MAPPING_LINK: BRAF_NODE</div>
+</div>
+</div>
+<div class="p-4 bg-surface-container-highest/20 border-t border-outline-variant/15">
+<div class="flex items-center justify-between text-xs mb-2">
+<span class="text-on-surface-variant">Gate Depth</span>
+<span class="text-on-surface">14</span>
+</div>
+<div class="flex items-center justify-between text-xs">
+<span class="text-on-surface-variant">Error Mitigation</span>
+<span class="text-tertiary">Active (Zero-Noise Extrapolation)</span>
+</div>
+</div>
+</div>
+<!-- Probability Distribution Card -->
+<div class="h-40 bg-surface-container-low rounded-xl p-4 flex flex-col">
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant font-label mb-3">Measurement Probability | |ψ⟩</span>
+<div class="flex-1 flex items-end gap-2 px-2">
+<div class="flex-1 bg-surface-container-highest rounded-t-sm h-[20%] relative group">
+<div class="absolute inset-0 bg-primary opacity-20 transition-all group-hover:opacity-40"></div>
+<span class="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-mono">000</span>
+</div>
+<div class="flex-1 bg-surface-container-highest rounded-t-sm h-[45%] relative group">
+<div class="absolute inset-0 bg-primary opacity-20 transition-all group-hover:opacity-40"></div>
+<span class="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-mono">001</span>
+</div>
+<div class="flex-1 bg-surface-container-highest rounded-t-sm h-[85%] relative group">
+<div class="absolute inset-0 bg-primary opacity-60 active-pulse shadow-[0_0_10px_rgba(123,208,255,0.3)]"></div>
+<span class="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-mono text-primary font-bold">010</span>
+</div>
+<div class="flex-1 bg-surface-container-highest rounded-t-sm h-[15%] relative group">
+<div class="absolute inset-0 bg-primary opacity-20 transition-all group-hover:opacity-40"></div>
+<span class="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-mono">011</span>
+</div>
+<div class="flex-1 bg-surface-container-highest rounded-t-sm h-[30%] relative group">
+<div class="absolute inset-0 bg-primary opacity-20 transition-all group-hover:opacity-40"></div>
+<span class="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-mono">100</span>
+</div>
+<div class="flex-1 bg-surface-container-highest rounded-t-sm h-[10%] relative group">
+<div class="absolute inset-0 bg-primary opacity-20 transition-all group-hover:opacity-40"></div>
+<span class="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-mono">101</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Floating Status Bar -->
+<footer class="absolute bottom-6 right-6 flex items-center gap-6 glass-panel px-6 py-3 rounded-full border border-outline-variant/20 shadow-xl">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-tertiary"></div>
+<div class="flex flex-col">
+<span class="text-[9px] text-slate-500 uppercase font-bold leading-none">Simulation Status</span>
+<span class="text-xs font-bold text-on-surface">Sequencing...</span>
+</div>
+</div>
+<div class="h-8 w-px bg-outline-variant/30"></div>
+<div class="flex items-center gap-4">
+<div class="flex flex-col text-right">
+<span class="text-[9px] text-slate-500 uppercase font-bold leading-none">Confidence Score</span>
+<span class="text-xs font-bold text-primary">0.992 Sigma</span>
+</div>
+<button class="bg-primary/10 hover:bg-primary/20 text-primary p-2 rounded-full transition-all">
+<span class="material-symbols-outlined text-lg">play_arrow</span>
+</button>
+</div>
+</footer>
+</main>
+<!-- Background Decoration -->
+<div class="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
+<div class="absolute -top-[20%] -right-[10%] w-[60%] h-[60%] bg-primary/5 rounded-full blur-[120px]"></div>
+<div class="absolute -bottom-[10%] -left-[5%] w-[40%] h-[40%] bg-secondary-container/5 rounded-full blur-[100px]"></div>
+<div class="absolute top-[30%] left-[20%] w-[1px] h-full bg-gradient-to-b from-transparent via-outline-variant/10 to-transparent"></div>
+<div class="absolute top-[30%] left-[20%] h-[1px] w-full bg-gradient-to-r from-transparent via-outline-variant/10 to-transparent"></div>
+</div>
+</body></html>

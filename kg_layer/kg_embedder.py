@@ -133,9 +133,13 @@ class HetionetEmbedder:
         ids_path = os.path.join(self.work_dir, "entity_ids.json")
         return emb_path, ids_path
 
-    def load_saved_embeddings(self) -> bool:
+    def load_saved_embeddings(self, expected_dim: Optional[int] = None) -> bool:
         """
         Loads the embeddings and entity IDs from the work directory.
+
+        Args:
+            expected_dim: Expected embedding dimension. If provided and doesn't match,
+                         returns False to trigger retraining.
 
         Returns:
             True if the embeddings were loaded successfully, False otherwise.
@@ -152,6 +156,15 @@ class HetionetEmbedder:
                 logger.info(
                     f"Loaded saved embeddings: {self.entity_embeddings.shape} for {len(self.entity_to_id)} entities."
                 )
+                
+                # Check if embedding dimension matches expected
+                if expected_dim is not None and self.entity_embeddings.shape[1] != expected_dim:
+                    logger.warning(
+                        f"Saved embedding dimension ({self.entity_embeddings.shape[1]}) "
+                        f"doesn't match expected ({expected_dim}). Will retrain."
+                    )
+                    return False
+                    
                 return True
             except Exception as e:
                 logger.warning(f"Failed to load saved embeddings: {e}")

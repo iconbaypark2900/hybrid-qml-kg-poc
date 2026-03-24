@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>QuantumBio Synth - New Hypothesis</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-container": "#001a27",
+                        "surface-container-highest": "#2d3449",
+                        "on-tertiary-fixed": "#00201c",
+                        "inverse-surface": "#dae2fd",
+                        "inverse-primary": "#00668a",
+                        "tertiary-fixed": "#62fae3",
+                        "on-primary-container": "#008abb",
+                        "on-primary": "#00354a",
+                        "on-primary-fixed-variant": "#004c69",
+                        "surface-bright": "#31394d",
+                        "surface-dim": "#0b1326",
+                        "secondary-fixed-dim": "#d0bcff",
+                        "on-secondary-container": "#c4abff",
+                        "on-tertiary-fixed-variant": "#005047",
+                        "surface-tint": "#7bd0ff",
+                        "outline-variant": "#45464d",
+                        "background": "#0b1326",
+                        "on-secondary": "#3c0091",
+                        "primary-fixed": "#c4e7ff",
+                        "on-tertiary": "#003731",
+                        "on-error-container": "#ffdad6",
+                        "primary-fixed-dim": "#7bd0ff",
+                        "outline": "#909097",
+                        "tertiary-fixed-dim": "#3cddc7",
+                        "surface-container-lowest": "#060e20",
+                        "secondary-fixed": "#e9ddff",
+                        "secondary": "#d0bcff",
+                        "on-primary-fixed": "#001e2c",
+                        "on-tertiary-container": "#009182",
+                        "surface": "#0b1326",
+                        "on-surface-variant": "#c6c6cd",
+                        "surface-container-high": "#222a3d",
+                        "inverse-on-surface": "#283044",
+                        "on-secondary-fixed": "#23005c",
+                        "surface-variant": "#2d3449",
+                        "primary": "#7bd0ff",
+                        "on-background": "#dae2fd",
+                        "on-secondary-fixed-variant": "#5516be",
+                        "tertiary": "#3cddc7",
+                        "error": "#ffb4ab",
+                        "secondary-container": "#571bc1",
+                        "on-error": "#690005",
+                        "tertiary-container": "#001c18",
+                        "surface-container": "#171f33",
+                        "surface-container-low": "#131b2e",
+                        "on-surface": "#dae2fd",
+                        "error-container": "#93000a"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #7bd0ff;
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(123, 208, 255, 0.4);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary/30 min-h-screen">
+<!-- TopAppBar Shell -->
+<header class="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-xl shadow-[0_10px_40px_rgba(218,226,253,0.06)] flex justify-between items-center px-8 h-16 w-full">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold bg-gradient-to-br from-sky-400 to-blue-600 bg-clip-text text-transparent font-['Space_Grotesk'] tracking-tight">QuantumBio Synth</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-['Space_Grotesk'] font-bold tracking-tight" href="#">Molecular Design</a>
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-['Space_Grotesk'] font-bold tracking-tight" href="#">Knowledge Graph</a>
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-['Space_Grotesk'] font-bold tracking-tight" href="#">Experiment Analysis</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="bg-slate-800/50 p-1 px-3 rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-sky-400 text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-48 text-slate-300" placeholder="Search knowledge..." type="text"/>
+</div>
+<button class="material-symbols-outlined text-slate-400 hover:text-sky-400 transition-colors">account_circle</button>
+</div>
+</header>
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-slate-900 flex flex-col py-6 px-4 space-y-2 font-['Inter'] text-sm font-medium">
+<div class="mb-6 px-2">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-surface-container-high flex items-center justify-center border border-outline-variant/20 overflow-hidden">
+<img alt="Lab Icon" data-alt="Microscopic view of a biological cell structure with glowing nucleus and vibrant organelles" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAt9FrZI7WNhPl_zE3E_xlSZIOQuWFoMpb63vvY4pPWO_dB_Ze-YzGygsxPp7C1R7EJ8wQrkbEi1k5IMEXokgWcSEFZzatv5XVDjtFgZ5dbabgWrfK3XIj776FNXZCE4SvEfbe2A5UBqIFw_qq3c_bBmEyckmthHgGJCu6YAZFJAxh2FbaRIPdSR3-f18CCarAAjUGYC9ZgO6LOnlJC-BEwXr35jpRx_FNijl6c6P-2sPnBrlQz8IuLyFp870fROEE3QzxrUMz9vg"/>
+</div>
+<div>
+<div class="text-sky-400 font-bold">Lab Alpha-7</div>
+<div class="text-[10px] text-slate-500 uppercase tracking-widest">Active Session: 4.2h</div>
+</div>
+</div>
+</div>
+<div class="space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 transition-all" href="#">
+<span class="material-symbols-outlined">dashboard</span> Dashboard
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-sky-400 bg-slate-800/80 border-r-2 border-sky-400 transition-all" href="#">
+<span class="material-symbols-outlined">biotech</span> Simulation
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 transition-all" href="#">
+<span class="material-symbols-outlined">genetics</span> Genomics
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 transition-all" href="#">
+<span class="material-symbols-outlined">library_books</span> Library
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 transition-all" href="#">
+<span class="material-symbols-outlined">inventory_2</span> Archive
+            </a>
+</div>
+<div class="mt-auto space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 transition-all" href="#">
+<span class="material-symbols-outlined">settings</span> Settings
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 transition-all" href="#">
+<span class="material-symbols-outlined">help</span> Support
+            </a>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="ml-64 mt-16 p-12 bg-surface min-h-[calc(100vh-4rem)]">
+<div class="max-w-4xl mx-auto">
+<!-- Header Section -->
+<div class="mb-12">
+<div class="flex items-center gap-2 text-tertiary mb-2">
+<span class="material-symbols-outlined text-sm">add_circle</span>
+<span class="text-xs font-bold tracking-[0.2em] uppercase">Protocol: Hypothesis Injection</span>
+</div>
+<h1 class="text-4xl font-headline font-bold text-on-surface mb-4">Create New Hypothesis</h1>
+<p class="text-on-surface-variant max-w-2xl leading-relaxed">
+                    Define predictive models for quantum interaction in biological synthesis. Ensure all variables are calibrated to within 0.04% precision for valid simulation results.
+                </p>
+</div>
+<!-- Bento Form Grid -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Identity Module -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-low p-8 rounded-lg relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+<span class="material-symbols-outlined text-9xl">description</span>
+</div>
+<div class="space-y-6 relative z-10">
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold uppercase tracking-widest text-slate-500 font-label">Hypothesis Title</label>
+<input class="bg-surface-container-lowest border-none p-4 text-primary font-headline text-xl focus:ring-1 focus:ring-primary/40 rounded transition-all" placeholder="e.g., Protein Folding Stability under High-Entropy Perturbation" type="text"/>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold uppercase tracking-widest text-slate-500 font-label">Hypothesis Description</label>
+<textarea class="bg-surface-container-lowest border-none p-4 text-on-surface focus:ring-1 focus:ring-primary/40 rounded resize-none leading-relaxed" placeholder="Detail the causal relationship between quantum variables and molecular outcome..." rows="4"></textarea>
+</div>
+</div>
+</div>
+<!-- Quantum Variable Picker -->
+<div class="col-span-12 lg:col-span-4 bg-surface-container-low p-8 rounded-lg">
+<label class="text-xs font-bold uppercase tracking-widest text-slate-500 font-label block mb-6">Perturbation Focus</label>
+<div class="space-y-3">
+<label class="flex items-center justify-between p-3 rounded bg-surface-container-high border border-outline-variant/10 cursor-pointer group hover:bg-surface-container-highest transition-all">
+<span class="text-on-surface group-hover:text-primary transition-colors">Stability</span>
+<input class="rounded-sm bg-surface-container-lowest border-outline-variant text-primary focus:ring-offset-background focus:ring-primary" type="checkbox"/>
+</label>
+<label class="flex items-center justify-between p-3 rounded bg-surface-container-high border border-outline-variant/10 cursor-pointer group hover:bg-surface-container-highest transition-all">
+<span class="text-on-surface group-hover:text-primary transition-colors">Coherence</span>
+<input checked="" class="rounded-sm bg-surface-container-lowest border-outline-variant text-primary focus:ring-offset-background focus:ring-primary" type="checkbox"/>
+</label>
+<label class="flex items-center justify-between p-3 rounded bg-surface-container-high border border-outline-variant/10 cursor-pointer group hover:bg-surface-container-highest transition-all">
+<span class="text-on-surface group-hover:text-primary transition-colors">Entropy</span>
+<input class="rounded-sm bg-surface-container-lowest border-outline-variant text-primary focus:ring-offset-background focus:ring-primary" type="checkbox"/>
+</label>
+<label class="flex items-center justify-between p-3 rounded bg-surface-container-high border border-outline-variant/10 cursor-pointer group hover:bg-surface-container-highest transition-all">
+<span class="text-on-surface group-hover:text-primary transition-colors">Binding</span>
+<input class="rounded-sm bg-surface-container-lowest border-outline-variant text-primary focus:ring-offset-background focus:ring-primary" type="checkbox"/>
+</label>
+</div>
+</div>
+<!-- Magnitude & Delta -->
+<div class="col-span-12 lg:col-span-5 bg-surface-container-low p-8 rounded-lg flex flex-col justify-between">
+<div>
+<label class="text-xs font-bold uppercase tracking-widest text-slate-500 font-label block mb-2">Expected Delta</label>
+<div class="text-3xl font-headline font-bold text-tertiary mb-6">Δ 4.82%</div>
+<input class="w-full h-1 bg-surface-container-highest rounded-full appearance-none cursor-pointer" max="100" min="0" type="range" value="48"/>
+<div class="flex justify-between text-[10px] uppercase tracking-tighter text-slate-600 mt-2 font-bold">
+<span>Minimal Impact</span>
+<span>Critical Shift</span>
+</div>
+</div>
+<div class="mt-8 p-4 bg-tertiary-container/30 border-l-2 border-tertiary rounded-r">
+<p class="text-xs text-on-tertiary-container leading-relaxed">
+<span class="font-bold">Observation:</span> Values exceeding 8.0% Delta may trigger uncontrolled molecular dissociation.
+                        </p>
+</div>
+</div>
+<!-- Linked Entities -->
+<div class="col-span-12 lg:col-span-7 bg-surface-container-low p-8 rounded-lg">
+<label class="text-xs font-bold uppercase tracking-widest text-slate-500 font-label block mb-6">Related Molecular Entities</label>
+<div class="relative mb-4">
+<span class="material-symbols-outlined absolute left-3 top-3 text-slate-500">search</span>
+<input class="w-full bg-surface-container-lowest border-none pl-10 pr-4 py-3 rounded text-sm focus:ring-1 focus:ring-primary/40" placeholder="Search entity library..." type="text"/>
+</div>
+<div class="flex flex-wrap gap-2">
+<div class="bg-surface-container-high px-3 py-1.5 rounded-full flex items-center gap-2 border border-outline-variant/20 hover:border-primary/40 transition-all cursor-default group">
+<span class="text-xs text-on-surface-variant group-hover:text-on-surface">HEME-BETA_12</span>
+<button class="material-symbols-outlined text-xs hover:text-error">close</button>
+</div>
+<div class="bg-surface-container-high px-3 py-1.5 rounded-full flex items-center gap-2 border border-outline-variant/20 hover:border-primary/40 transition-all cursor-default group">
+<span class="text-xs text-on-surface-variant group-hover:text-on-surface">OX-REDUCTASE-K</span>
+<button class="material-symbols-outlined text-xs hover:text-error">close</button>
+</div>
+<div class="bg-surface-container-high px-3 py-1.5 rounded-full flex items-center gap-2 border border-outline-variant/20 hover:border-primary/40 transition-all cursor-default group">
+<span class="text-xs text-on-surface-variant group-hover:text-on-surface">SYN-G6_VARIANT</span>
+<button class="material-symbols-outlined text-xs hover:text-error">close</button>
+</div>
+<button class="text-xs text-primary font-bold px-3 py-1.5 border border-dashed border-primary/40 rounded-full hover:bg-primary/10 transition-colors">+ Add Link</button>
+</div>
+</div>
+<!-- Form Actions -->
+<div class="col-span-12 flex justify-end gap-4 pt-4">
+<button class="px-8 py-3 rounded text-slate-400 font-headline font-bold hover:text-slate-200 transition-colors tracking-tight">
+                        Discard
+                    </button>
+<button class="px-10 py-3 rounded bg-gradient-to-br from-primary to-on-primary-container text-on-primary font-headline font-bold shadow-[0_4px_20px_rgba(123,208,255,0.2)] hover:shadow-[0_8px_30px_rgba(123,208,255,0.3)] hover:-translate-y-0.5 active:scale-95 transition-all tracking-tight">
+                        Commit Hypothesis
+                    </button>
+</div>
+</div>
+</div>
+<!-- System Status Footer -->
+<div class="mt-20 border-t border-outline-variant/10 pt-8 flex justify-between items-center text-slate-500">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-tertiary"></div>
+<span class="text-[10px] uppercase tracking-widest font-bold">Quantum Core: Synchronized</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-slate-700"></div>
+<span class="text-[10px] uppercase tracking-widest font-bold">Latency: 1.2ms</span>
+</div>
+</div>
+<div class="text-[10px] font-mono opacity-40">
+                UUID: Q-BIO-HYP-992-00X
+            </div>
+</div>
+</main>
+<!-- Contextual Status (Floating) -->
+<div class="fixed bottom-8 right-8 bg-surface-container-highest/60 backdrop-blur-md px-4 py-2 rounded-lg border border-outline-variant/20 flex items-center gap-3">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-label">Status:</span>
+<span class="text-[10px] font-bold text-tertiary uppercase tracking-widest font-label">Observing...</span>
+</div>
+</body></html>

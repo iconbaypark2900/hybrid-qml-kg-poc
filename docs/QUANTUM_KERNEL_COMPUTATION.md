@@ -40,7 +40,7 @@ The code now logs progress:
 
 ### Option 2: Restart with Nyström (recommended)
 1. Kill the current process: `Ctrl+C`
-2. Restart: `./run_quantum_fixed.sh`
+2. Restart: `bash scripts/shell/run_quantum_fixed.sh`
 3. The new code will auto-enable Nyström and show progress
 
 ### Option 3: Manually Enable Nyström

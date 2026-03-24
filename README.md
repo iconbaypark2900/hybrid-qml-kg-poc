@@ -94,6 +94,8 @@ python scripts/run_optimized_pipeline.py --relation CtD \
   --tune_classical --qml_pre_pca_dim 24 --fast_mode
 ```
 
+For robust evaluation (K-fold CV, no fast_mode), add `--use_cv_evaluation --cv_folds 5`. For paper-ready runs, add `--run_multimodel_fusion --fusion_method bayesian_averaging` and omit `--fast_mode`. See [docs/reference/TEST_COMMANDS.md](docs/reference/TEST_COMMANDS.md).
+
 ### Launch the Dashboard
 
 ```bash
@@ -210,7 +212,12 @@ hybrid-qml-kg-poc/
 |   |-- run_optimized_pipeline.py    # Main pipeline entry point
 |   |-- launch_dashboard.sh          # Find free port and run Streamlit
 |   |-- optuna_pipeline_search.py    # Bayesian HPO
-|   +-- ...
+|   |-- implementations/             # Standalone drivers (ensembles, fusion, tuning)
+|   |-- shell/                       # Bash wrappers (quantum fixes, phased runs)
+|   +-- demos/                       # Small demos for the quantum test suite
+|-- tests/                       # Quantum improvements tests (see run_tests.py)
+|   +-- test_quantum_improvements_*.py
+|-- deployment/                  # Dockerfiles, compose (not docs; see docs/deployment/)
 |-- benchmarking/                # Performance evaluation
 |   |-- dashboard.py             # Streamlit dashboard
 |   +-- ...
@@ -231,9 +238,20 @@ hybrid-qml-kg-poc/
 |   |-- calibration.py           # Model calibration
 |   +-- reproducibility.py       # Seed control
 |-- notebooks/                   # Jupyter notebooks
-|-- docs/                        # Additional documentation
+|-- docs/                        # Documentation (see docs/README.md)
+|   |-- planning/               # Task lists, experiment logs
+|   |-- reports/                # Results analyses and writeups
+|   |-- reference/              # Commands, testing, usage
+|   |-- guides/                 # Cookbooks and directory guide
+|   |-- overview/               # Project explanation, implementation recap
+|   |-- improvements/           # Improvement iteration logs
+|   |-- deployment/             # Hugging Face, Docker install notes
+|   |-- kg_layer/               # KG embedding notes
+|   +-- quantum/                # Quantum layer notes
 |-- requirements.txt             # Dashboard dependencies
 |-- requirements-full.txt        # Full pipeline dependencies
+|-- run_tests.py                 # Quantum test suite (terminal / Streamlit)
+|-- app.py                       # Optional HF Spaces entry (runs benchmarking/dashboard.py)
 +-- README.md
 ```
 
@@ -259,10 +277,11 @@ hybrid-qml-kg-poc/
 
 | Document | Description |
 |----------|-------------|
+| `docs/README.md` | Index of all documentation under `docs/` |
 | `docs/TECHNICAL_PAPER.md` | Technical paper: hybrid QML-KG link prediction, methods, results, and discussion |
-| `NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` | Full experiment log, recommended commands, and optimization roadmap |
-| `IMPLEMENTATION_RECAP.md` | Summary of pipeline improvements and GPU/hardware readiness |
-| `DEPLOY_HUGGINGFACE.md` | Deploying the dashboard to Hugging Face Spaces and pushing updates |
+| `docs/planning/NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` | Full experiment log, recommended commands, and optimization roadmap |
+| `docs/overview/IMPLEMENTATION_RECAP.md` | Summary of pipeline improvements and GPU/hardware readiness |
+| `docs/deployment/DEPLOY_HUGGINGFACE.md` | Deploying the dashboard to Hugging Face Spaces and pushing updates |
 | `docs/WHY_QUANTUM_UNDERPERFORMS.md` | Root cause analysis of quantum-classical performance gap |
 | `docs/OPTIMIZATION_PLAN.md` | Detailed optimization roadmap |
 
@@ -273,8 +292,8 @@ hybrid-qml-kg-poc/
 - **Dashboard rewrite**: Replaced the former 10-page info-dump with a six-page narrative (The Problem, Our Approach, Results, What We Learned, Try It, Technical Reference). Added Mermaid diagrams for the Hetionet subgraph, pipeline architecture, and improvement journey; custom HTML cards with colored accent borders and stat highlights; dark gradient sidebar with pill-style navigation; and section labels for clearer hierarchy.
 - **Best-run defaults**: Dashboard and README default to the configuration that achieves PR-AUC 0.7987 (Pauli feature map, stacking ensemble, RotatE 128D, hard negatives, `--tune_classical`, `--qml_pre_pca_dim 24`). Generate demo results and Reproduce-command fallback use this configuration.
 - **Launch script**: `scripts/launch_dashboard.sh` finds the first available port (8501, 8502, …) and runs the Streamlit app, so multiple instances or a busy port do not block startup.
-- **Hugging Face Space**: The app is deployed at [QGG-HYBRID-PROJECT](https://huggingface.co/spaces/rocRevyAreGoals15/QGG-HYBRID-PROJECT). Push to the Space with `git push hf <your-branch>:main` (see `DEPLOY_HUGGINGFACE.md`).
-- **Documentation**: README updated with current results, pipeline features, project structure, and dashboard description. `NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` and `IMPLEMENTATION_RECAP.md` document the experiment log, recommended commands, and GPU/configuration options.
+- **Hugging Face Space**: The app is deployed at [QGG-HYBRID-PROJECT](https://huggingface.co/spaces/rocRevyAreGoals15/QGG-HYBRID-PROJECT). Push to the Space with `git push hf <your-branch>:main` (see `docs/deployment/DEPLOY_HUGGINGFACE.md`).
+- **Documentation**: README updated with current results, pipeline features, project structure, and dashboard description. `docs/planning/NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` and `docs/overview/IMPLEMENTATION_RECAP.md` document the experiment log, recommended commands, and GPU/configuration options.
 
 ---
 

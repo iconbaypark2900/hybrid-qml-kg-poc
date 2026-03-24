@@ -828,6 +828,14 @@ def main():
                        help="Ensemble combination method (default: weighted_average)")
     parser.add_argument("--ensemble_quantum_weight", type=float, default=0.5,
                        help="Weight for quantum model in weighted_average ensemble (0.0-1.0, classical gets 1-this)")
+    parser.add_argument("--run_fusion", action="store_true",
+                       help="Run multi-model fusion (RF, ET, LR, QSVC) after ensemble step")
+    parser.add_argument("--run_multimodel_fusion", action="store_true", dest="run_multimodel_fusion",
+                       help="Alias for --run_fusion. Run multi-model fusion (RF, ET, QSVC) after ensemble step")
+    parser.add_argument("--fusion_method", type=str, default="bayesian_averaging",
+                       choices=['weighted_average', 'optimized_weights', 'bayesian_averaging', 'rank_fusion',
+                                'confidence_weighted', 'neural_metalearner'],
+                       help="Fusion strategy for multi-model combination (default: bayesian_averaging)")
 
     parser.add_argument("--fast_mode", action="store_true", help="Fast mode (fewer models, less tuning)")
     parser.add_argument("--cheap_mode", action="store_true",
@@ -3266,6 +3274,103 @@ def main():
                 logger.warning(f"Cannot build ensemble: missing test scores from {', '.join(missing)} model(s)")
         except Exception as e:
             logger.error(f"Quantum-classical ensemble failed: {e}")
+            import traceback
+            traceback.print_exc()
+
+    # ========== STEP 6.9: MULTI-MODEL FUSION ==========
+    # Support both --run_fusion and --run_multimodel_fusion flags
+    run_fusion_flag = getattr(args, "run_fusion", False) or getattr(args, "run_multimodel_fusion", False)
+    if run_fusion_flag and classical_results:
+        logger.info("\n" + "=" * 80)
+        logger.info("STEP 6.9: MULTI-MODEL FUSION")
+        logger.info("=" * 80)
+
+        try:
+            from quantum_layer.multi_model_fusion import MultiModelFusion
+
+            def _sigmoid(scores: np.ndarray) -> np.ndarray:
+                """Convert decision_function scores to [0,1] probabilities."""
+                return 1.0 / (1.0 + np.exp(-np.clip(np.asarray(scores, dtype=float), -500, 500)))
+
+            fusion_train_predictions: Dict[str, np.ndarray] = {}
+            fusion_test_predictions: Dict[str, np.ndarray] = {}
+
+            # Classical models: require fitted model and successful result
+            fusion_candidates = ['RandomForest-Optimized', 'ExtraTrees-Optimized', 'LogisticRegression-L2']
+            for cname in fusion_candidates:
+                cres = classical_results.get(cname)
+                if not (cres and cres.get('status') == 'success' and cres.get('test_scores') is not None):
+                    continue
+                if 'models' not in dir() or cname not in models or models[cname] is None:
+                    continue
+                fitted = models[cname]
+                if not hasattr(fitted, 'predict_proba'):
+                    continue
+                try:
+                    train_proba = fitted.predict_proba(X_train_classical)[:, 1]
+                    test_scores = np.asarray(cres['test_scores'])
+                    if len(train_proba) == len(y_train) and len(test_scores) == len(y_test):
+                        fusion_train_predictions[cname] = train_proba
+                        fusion_test_predictions[cname] = test_scores
+                except Exception:
+                    continue
+
+            # Quantum model from predictions_latest.csv
+            pred_latest_path = os.path.join(args.results_dir, "predictions_latest.csv")
+            if os.path.exists(pred_latest_path):
+                try:
+                    pred_df = pd.read_csv(pred_latest_path)
+                    if 'split' in pred_df.columns and 'y_score' in pred_df.columns:
+                        train_pred = pred_df[pred_df['split'] == 'train']
+                        test_pred = pred_df[pred_df['split'] == 'test']
+                        if len(train_pred) > 0 and len(test_pred) > 0:
+                            q_train = _sigmoid(train_pred['y_score'].values)
+                            q_test = _sigmoid(test_pred['y_score'].values)
+                            if len(q_train) == len(y_train) and len(q_test) == len(y_test):
+                                qname = 'QSVC-Optimized'  # primary quantum model
+                                fusion_train_predictions[qname] = q_train
+                                fusion_test_predictions[qname] = q_test
+                except Exception:
+                    pass
+
+            if len(fusion_train_predictions) >= 2 and len(fusion_test_predictions) >= 2:
+                fusion_method = str(getattr(args, "fusion_method", "optimized_weights"))
+                logger.info(f"Fusion method: {fusion_method}, models: {list(fusion_train_predictions.keys())}")
+
+                t0 = time.time()
+                fusion = MultiModelFusion(
+                    fusion_method=fusion_method,
+                    random_state=args.random_state,
+                    use_cross_validation=False
+                )
+                fusion.fit(fusion_train_predictions, y_train)
+                fused_test_scores = fusion.predict(fusion_test_predictions)
+                fit_time = time.time() - t0
+
+                ensemble_preds = (fused_test_scores >= 0.5).astype(int)
+                ensemble_metrics = compute_metrics(y_test, ensemble_preds, fused_test_scores)
+
+                fusion_label = f"Ensemble-QC-fusion-{fusion_method}"
+                logger.info(f"  Ensemble-QC-fusion-{fusion_method} - Test PR-AUC: {ensemble_metrics.get('pr_auc', 0.0):.4f} (fit: {fit_time:.2f}s)")
+
+                if hasattr(fusion, 'optimized_weights') and fusion.optimized_weights:
+                    logger.info(f"  Optimized weights: {fusion.optimized_weights}")
+                elif hasattr(fusion, 'bma_weights') and fusion.bma_weights:
+                    logger.info(f"  BMA weights: {fusion.bma_weights}")
+
+                ensemble_results[fusion_label] = {
+                    'status': 'success',
+                    'test_metrics': ensemble_metrics,
+                    'fit_seconds': fit_time,
+                    'method': f'fusion-{fusion_method}',
+                    'fusion_models': list(fusion_train_predictions.keys()),
+                    'improvement_over_best': 0.0,
+                }
+            else:
+                logger.warning(f"Cannot run fusion: need at least 2 models with aligned predictions "
+                               f"(got {len(fusion_train_predictions)} train, {len(fusion_test_predictions)} test)")
+        except Exception as e:
+            logger.error(f"Multi-model fusion failed: {e}")
             import traceback
             traceback.print_exc()
 

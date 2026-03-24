@@ -105,6 +105,10 @@ class QuantumFeatureEngineer:
         if constant_mask.any():
             logger.warning(f"Removing {constant_mask.sum()} constant columns")
             embeddings = embeddings[:, ~constant_mask]
+            # Store mask for transform
+            self.constant_mask_ = ~constant_mask  # Invert: True for kept columns
+        else:
+            self.constant_mask_ = slice(None)  # Keep all columns
 
         # Check if we have any features left after removing constants
         if embeddings.shape[1] == 0:
@@ -198,17 +202,19 @@ class QuantumFeatureEngineer:
         Returns:
             QML features [N, num_qubits]
         """
-        # Apply feature standardization (if fitted)
+        # Remove constant columns (must match fit order)
+        if hasattr(self, 'constant_mask_'):
+            embeddings = embeddings[:, self.constant_mask_]
+
+        # Apply feature standardization (must match fit order - after constant removal)
         if self.feature_scaler is not None:
             embeddings = self.feature_scaler.transform(embeddings)
 
-        # Apply optional pre-PCA
+        # Apply optional pre-PCA (must match fit order - after scaling)
         if self.pre_pca is not None:
             embeddings = self.pre_pca.transform(embeddings)
 
-        # Apply feature selection
-        if self.variance_selector is not None:
-            embeddings = self.variance_selector.transform(embeddings)
+        # Apply feature selection (must match fit order - after pre_pca)
         if self.feature_selector is not None:
             embeddings = self.feature_selector.transform(embeddings)
 

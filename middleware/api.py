@@ -3,10 +3,11 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 import logging
 import os
 from .orchestrator import LinkPredictionOrchestrator
+from utils.latest_run import get_latest_run_snapshot
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -96,10 +97,30 @@ class RankedMechanismsResponse(BaseModel):
     error_message: Optional[str] = None
 
 
+class LatestRunResponse(BaseModel):
+    """Latest pipeline artifacts under ``results/`` (see ``utils/latest_run.py``)."""
+
+    status: str
+    results_dir: str
+    latest_csv: Optional[Dict[str, Any]] = None
+    latest_json: Optional[Dict[str, Any]] = None
+    message: Optional[str] = None
+
+
 @app.get("/", include_in_schema=False)
 async def root():
     """Redirect to docs."""
     return {"message": "Hybrid QML-KG API. Visit /docs for interactive documentation."}
+
+
+@app.get("/runs/latest", response_model=LatestRunResponse)
+async def get_runs_latest():
+    """
+    Latest run summary: ``latest_run.csv`` row plus newest ``optimized_results_*.json``
+    (by mtime), using the same resolution rules as the Streamlit benchmark dashboard.
+    """
+    payload = get_latest_run_snapshot()
+    return LatestRunResponse(**payload)
 
 
 @app.get("/status", response_model=StatusResponse)

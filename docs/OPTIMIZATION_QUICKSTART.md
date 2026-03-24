@@ -126,6 +126,10 @@ Experiment Options:
   --cv_folds INT         Cross-validation folds [default: 5]
   --random_state INT     Random seed [default: 42]
   --results_dir STR      Results directory [default: results]
+  --run_ensemble         Run quantum-classical ensemble
+  --ensemble_method STR  Ensemble method [weighted_average, voting, stacking]
+  --run_multimodel_fusion  Run multi-model fusion (RF, ET, QSVC)
+  --fusion_method STR    Fusion method [bayesian_averaging, optimized_weights, etc.]
 ```
 
 ## Understanding the Results
@@ -272,7 +276,73 @@ Use the baseline results to guide further hyperparameter optimization:
 
 ### 4. Ensemble Models
 
-Combine predictions from multiple models (TODO: implement in next version).
+#### Quantum-Classical Ensemble
+
+Combine quantum and classical model predictions using weighted averaging, voting, or stacking:
+
+```bash
+python scripts/run_optimized_pipeline.py --relation CtD --fast_mode \
+    --run_ensemble --ensemble_method weighted_average --ensemble_quantum_weight 0.5
+```
+
+**Ensemble methods:**
+- `weighted_average`: Weighted combination of quantum and classical predictions
+- `voting`: Simple average of predictions
+- `stacking`: Learn optimal combination via logistic regression meta-learner
+
+#### Multi-Model Fusion (Recommended)
+
+Fuse predictions from multiple models (RF, ET, QSVC, etc.) using advanced fusion techniques:
+
+```bash
+# Bayesian averaging (default, recommended)
+python scripts/run_optimized_pipeline.py --relation CtD --fast_mode \
+    --run_multimodel_fusion --fusion_method bayesian_averaging
+
+# Optimized weights (maximizes PR-AUC)
+python scripts/run_optimized_pipeline.py --relation CtD --fast_mode \
+    --run_multimodel_fusion --fusion_method optimized_weights
+
+# Rank-based fusion
+python scripts/run_optimized_pipeline.py --relation CtD --fast_mode \
+    --run_multimodel_fusion --fusion_method rank_fusion
+```
+
+**Fusion methods:**
+- `bayesian_averaging` (default): Bayesian Model Averaging based on likelihood - **recommended**
+- `optimized_weights`: Learn optimal weights by maximizing PR-AUC
+- `weighted_average`: Simple weighted combination (uniform or custom weights)
+- `rank_fusion`: Reciprocal Rank Fusion (RRF) for ranking combination
+- `confidence_weighted`: Weight by model confidence per sample
+- `neural_metalearner`: Neural network meta-learner (MLP)
+
+**Expected impact:** +0.01 to +0.03 PR-AUC over best individual model.
+
+**Programmatic usage:**
+
+```python
+from quantum_layer.multi_model_fusion import create_fusion_ensemble
+
+# Assume you have predictions from multiple models
+model_predictions = {
+    'quantum': quantum_pred_proba,
+    'random_forest': rf_pred_proba,
+    'extra_trees': et_pred_proba,
+    'gradient_boosting': gb_pred_proba
+}
+
+# Create fusion ensemble with optimized weights
+fusion, metrics = create_fusion_ensemble(
+    model_predictions,
+    y_train,
+    fusion_method='bayesian_averaging'  # or 'optimized_weights', 'rank_fusion', 'neural_metalearner'
+)
+
+# Get fused predictions for test set
+fused_pred = fusion.predict(model_predictions_test)
+```
+
+See `quantum_layer/multi_model_fusion.py` for implementation details.
 
 ## Comparing to Baseline
 

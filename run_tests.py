@@ -9,7 +9,14 @@ the quantum improvements in the hybrid QML-KG system.
 import sys
 import os
 import argparse
-from test_quantum_improvements_terminal import run_terminal_tests
+from pathlib import Path
+
+# Project root (parent of tests/)
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from tests.test_quantum_improvements_terminal import run_terminal_tests
 import subprocess
 import threading
 import time
@@ -17,7 +24,10 @@ import webbrowser
 
 def run_dashboard():
     """Run the Streamlit dashboard."""
-    subprocess.run([sys.executable, "-m", "streamlit", "run", "test_quantum_improvements_dashboard.py", "--server.port", "8501"])
+    subprocess.run(
+        [sys.executable, "-m", "streamlit", "run", "tests/test_quantum_improvements_dashboard.py", "--server.port", "8501"],
+        cwd=_ROOT,
+    )
 
 def main():
     parser = argparse.ArgumentParser(description="Quantum Improvements Testing Suite")
@@ -44,8 +54,18 @@ def main():
         browser_thread = threading.Thread(target=open_browser)
         browser_thread.start()
         
-        # Run Streamlit
-        os.system(f"streamlit run test_quantum_improvements_dashboard.py --server.port {args.port}")
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                "tests/test_quantum_improvements_dashboard.py",
+                "--server.port",
+                str(args.port),
+            ],
+            cwd=_ROOT,
+        )
 
 if __name__ == "__main__":
     main()

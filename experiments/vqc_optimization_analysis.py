@@ -447,7 +447,8 @@ def main():
         embedding_dim=args.embedding_dim,
         qml_dim=args.qml_dim
     )
-    if not embedder.load_saved_embeddings():
+    if not embedder.load_saved_embeddings(expected_dim=args.embedding_dim):
+        logger.info("Training new embeddings...")
         embedder.train_embeddings(task_edges)
         embedder.reduce_to_qml_dim()
     else:

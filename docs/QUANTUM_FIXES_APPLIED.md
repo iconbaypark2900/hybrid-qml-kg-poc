@@ -2,7 +2,7 @@
 
 ## Overview
 
-Based on the analysis in `WHY_QUANTUM_UNDERPERFORMS.md`, we've implemented fixes to address the key issues:
+Based on the analysis in `docs/WHY_QUANTUM_UNDERPERFORMS.md`, we've implemented fixes to address the key issues:
 
 1. **Severe Overfitting** (train=1.0, test=0.6081)
 2. **Information Loss** (95% discarded through reduction)
@@ -22,7 +22,7 @@ Based on the analysis in `WHY_QUANTUM_UNDERPERFORMS.md`, we've implemented fixes
 - This preserves more information while still being quantum-feasible
 
 **Scripts**:
-- `run_quantum_fixed.sh`: Uses `--qml_dim 24`
+- `scripts/shell/run_quantum_fixed.sh`: Uses `--qml_dim 24`
 - `scripts/fix_quantum_performance.py`: Tests 12D, 24D, and 32D configurations
 
 ---
@@ -37,7 +37,7 @@ Based on the analysis in `WHY_QUANTUM_UNDERPERFORMS.md`, we've implemented fixes
 - Go directly from 256D → 48D (via feature selection) → 24D (via PCA)
 
 **Scripts**:
-- `run_quantum_fixed.sh`: Uses `--qml_pre_pca_dim 0 --qml_feature_select_k_mult 6.0`
+- `scripts/shell/run_quantum_fixed.sh`: Uses `--qml_pre_pca_dim 0 --qml_feature_select_k_mult 6.0`
 
 ---
 
@@ -51,7 +51,7 @@ Based on the analysis in `WHY_QUANTUM_UNDERPERFORMS.md`, we've implemented fixes
 - Simpler models are less prone to memorization
 
 **Scripts**:
-- `run_quantum_fixed.sh`: Uses `--qml_feature_map_reps 1 --qml_entanglement linear`
+- `scripts/shell/run_quantum_fixed.sh`: Uses `--qml_feature_map_reps 1 --qml_entanglement linear`
 - Updated `quantum_layer/qml_trainer.py` to respect `args.entanglement` parameter
 
 ---
@@ -92,7 +92,7 @@ Based on the analysis in `WHY_QUANTUM_UNDERPERFORMS.md`, we've implemented fixes
 Test multiple fixed configurations to find the best one:
 
 ```bash
-./fix_quantum.sh
+bash scripts/shell/fix_quantum.sh
 ```
 
 This runs `scripts/fix_quantum_performance.py` which tests:
@@ -109,7 +109,7 @@ This runs `scripts/fix_quantum_performance.py` which tests:
 Run the complete pipeline with the recommended fixes:
 
 ```bash
-./run_quantum_fixed.sh
+bash scripts/shell/run_quantum_fixed.sh
 ```
 
 This uses:
@@ -178,10 +178,10 @@ If quantum models still underperform after these fixes:
    - Implements hybrid features
    - Tests multiple dimension/config combinations
 
-3. **`run_quantum_fixed.sh`**: 
+3. **`scripts/shell/run_quantum_fixed.sh`**: 
    - New script to run full pipeline with fixes
 
-4. **`fix_quantum.sh`**: 
+4. **`scripts/shell/fix_quantum.sh`**: 
    - Wrapper to run the fix testing script
 
 ---

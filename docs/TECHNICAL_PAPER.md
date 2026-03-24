@@ -215,7 +215,7 @@ Earlier analysis (see `docs/WHY_QUANTUM_UNDERPERFORMS.md`) highlighted:
 
 ### 6.4 GPU and Hardware Readiness
 
-The pipeline supports GPU-accelerated quantum simulation (e.g., cuStateVec) and IBM Quantum (Heron) via configuration files and flags (`--gpu`, `quantum_config_path`). All paths fall back to CPU when GPU or hardware is unavailable. See `IMPLEMENTATION_RECAP.md` for details.
+The pipeline supports GPU-accelerated quantum simulation (e.g., cuStateVec) and IBM Quantum (Heron) via configuration files and flags (`--gpu`, `quantum_config_path`). All paths fall back to CPU when GPU or hardware is unavailable. See `docs/overview/IMPLEMENTATION_RECAP.md` for details.
 
 ---
 
@@ -236,8 +236,8 @@ We implemented and evaluated a hybrid quantum-classical pipeline for Compound-tr
 ### Documentation (in-repo)
 
 - `README.md` — Quick start, architecture, reproduce command.
-- `NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` — Experiment log, recommended commands, optimization roadmap.
-- `IMPLEMENTATION_RECAP.md` — Pipeline flags, GPU/hardware setup, Optuna usage.
+- `docs/planning/NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` — Experiment log, recommended commands, optimization roadmap.
+- `docs/overview/IMPLEMENTATION_RECAP.md` — Pipeline flags, GPU/hardware setup, Optuna usage.
 - `docs/WHY_QUANTUM_UNDERPERFORMS.md` — Root-cause analysis of quantum–classical gap.
 
 ### Software
@@ -248,4 +248,4 @@ We implemented and evaluated a hybrid quantum-classical pipeline for Compound-tr
 
 ---
 
-*Document version: 2026-02. Corresponds to branch `roc/featuremap-dashboard-combined` and best-run configuration described in `NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md`.*
+*Document version: 2026-02. Corresponds to branch `roc/featuremap-dashboard-combined` and best-run configuration described in `docs/planning/NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md`.*

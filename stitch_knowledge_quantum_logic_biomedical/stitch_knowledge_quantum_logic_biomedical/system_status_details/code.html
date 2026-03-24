@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>QuantumBio Synth | System Status</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-container": "#001a27",
+                        "surface-container-highest": "#2d3449",
+                        "on-tertiary-fixed": "#00201c",
+                        "inverse-surface": "#dae2fd",
+                        "inverse-primary": "#00668a",
+                        "tertiary-fixed": "#62fae3",
+                        "on-primary-container": "#008abb",
+                        "on-primary": "#00354a",
+                        "on-primary-fixed-variant": "#004c69",
+                        "surface-bright": "#31394d",
+                        "surface-dim": "#0b1326",
+                        "secondary-fixed-dim": "#d0bcff",
+                        "on-secondary-container": "#c4abff",
+                        "on-tertiary-fixed-variant": "#005047",
+                        "surface-tint": "#7bd0ff",
+                        "outline-variant": "#45464d",
+                        "background": "#0b1326",
+                        "on-secondary": "#3c0091",
+                        "primary-fixed": "#c4e7ff",
+                        "on-tertiary": "#003731",
+                        "on-error-container": "#ffdad6",
+                        "primary-fixed-dim": "#7bd0ff",
+                        "outline": "#909097",
+                        "tertiary-fixed-dim": "#3cddc7",
+                        "surface-container-lowest": "#060e20",
+                        "secondary-fixed": "#e9ddff",
+                        "secondary": "#d0bcff",
+                        "on-primary-fixed": "#001e2c",
+                        "on-tertiary-container": "#009182",
+                        "surface": "#0b1326",
+                        "on-surface-variant": "#c6c6cd",
+                        "surface-container-high": "#222a3d",
+                        "inverse-on-surface": "#283044",
+                        "on-secondary-fixed": "#23005c",
+                        "surface-variant": "#2d3449",
+                        "primary": "#7bd0ff",
+                        "on-background": "#dae2fd",
+                        "on-secondary-fixed-variant": "#5516be",
+                        "tertiary": "#3cddc7",
+                        "error": "#ffb4ab",
+                        "secondary-container": "#571bc1",
+                        "on-error": "#690005",
+                        "tertiary-container": "#001c18",
+                        "surface-container": "#171f33",
+                        "surface-container-low": "#131b2e",
+                        "on-surface": "#dae2fd",
+                        "error-container": "#93000a"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0b1326;
+            color: #dae2fd;
+            font-family: 'Inter', sans-serif;
+        }
+        .glass-panel {
+            background: rgba(45, 52, 73, 0.6);
+            backdrop-filter: blur(20px);
+        }
+        .gradient-button {
+            background: linear-gradient(135deg, #7bd0ff 0%, #008abb 100%);
+        }
+        .pulse-animation {
+            box-shadow: 0 0 0 0 rgba(60, 221, 199, 0.7);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(60, 221, 199, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(60, 221, 199, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(60, 221, 199, 0); }
+        }
+    </style>
+</head>
+<body class="bg-surface-dim selection:bg-primary/30">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-xl shadow-[0_10px_40px_rgba(218,226,253,0.06)] flex justify-between items-center px-8 h-16 w-full">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold bg-gradient-to-br from-sky-400 to-blue-600 bg-clip-text text-transparent font-['Space_Grotesk'] tracking-tight">QuantumBio Synth</span>
+<nav class="hidden md:flex gap-6 items-center">
+<a class="font-['Space_Grotesk'] font-bold tracking-tight text-slate-400 hover:text-sky-300 transition-colors" href="#">Molecular Design</a>
+<a class="font-['Space_Grotesk'] font-bold tracking-tight text-slate-400 hover:text-sky-300 transition-colors" href="#">Knowledge Graph</a>
+<a class="font-['Space_Grotesk'] font-bold tracking-tight text-slate-400 hover:text-sky-300 transition-colors" href="#">Experiment Analysis</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<input class="bg-slate-800/50 border-none rounded-lg h-9 px-4 text-sm w-48 focus:ring-1 focus:ring-sky-400 transition-all" placeholder="Search parameters..." type="text"/>
+<span class="material-symbols-outlined absolute right-2 top-2 text-slate-400 text-sm">search</span>
+</div>
+<button class="text-sky-400 hover:bg-slate-800/50 p-2 rounded-full transition-all">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-slate-900 flex flex-col py-6 px-4 space-y-2 z-40">
+<div class="px-4 mb-6">
+<div class="flex items-center gap-3 mb-1">
+<div class="w-8 h-8 rounded-full overflow-hidden border border-sky-400/30">
+<img class="w-full h-full object-cover" data-alt="close-up of a high-tech microscopic lens with blue neon light reflections" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAZW8B8OWrIXIUpKqsM2l63NOMzXvnQac6YHIyJmj4z99_xQ74zPG1iIxk0QNqc_XDUHW4xlWE3_oO-PtsGrWEqFtJDY77obeh_zV_nvfiiUFVN86JKOMbKEBgE7vrTkbfDpIh3RuoNP3iEWXQDU-5dCTa3EYDZPMP16g1vpSx5XvQSWxD7jooo37l8cVqNaj7kXjgHw8bWMHS1emSF5URCQzoQ_mAnihnOM26exNdX6LgOu3NlF45Q8cgnks_BMsTtPxH8VI-5oQ"/>
+</div>
+<div>
+<h3 class="text-sky-400 font-bold text-sm font-['Inter']">Lab Alpha-7</h3>
+<p class="text-[10px] text-slate-500 font-medium">Active Session: 4.2h</p>
+</div>
+</div>
+</div>
+<nav class="space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 rounded text-sky-400 bg-slate-800/80 border-r-2 border-sky-400 transition-all font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 transition-all font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">biotech</span>
+<span>Simulation</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 transition-all font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">genetics</span>
+<span>Genomics</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 transition-all font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">library_books</span>
+<span>Library</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 transition-all font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span>Archive</span>
+</a>
+</nav>
+<div class="mt-auto pt-4 border-t border-slate-800 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 rounded text-slate-400 hover:bg-slate-800/40 transition-all font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-slate-400 hover:bg-slate-800/40 transition-all font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">help</span>
+<span>Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 mt-16 p-8 min-h-screen">
+<!-- Header Section -->
+<header class="mb-12">
+<div class="flex justify-between items-end">
+<div>
+<h1 class="text-4xl font-['Space_Grotesk'] font-bold text-on-surface mb-2">System Status Details</h1>
+<div class="flex items-center gap-2 text-tertiary">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+</span>
+<span class="text-xs uppercase tracking-widest font-semibold">Observing Real-time Flux</span>
+</div>
+</div>
+<div class="flex gap-4">
+<button class="px-6 py-2 border border-outline-variant/30 text-primary text-sm font-bold rounded-md hover:bg-surface-container-high transition-all">
+                        Run Diagnostics
+                    </button>
+<button class="gradient-button px-6 py-2 text-on-primary text-sm font-bold rounded-md hover:opacity-90 transition-all shadow-lg">
+                        Optimize All Nodes
+                    </button>
+</div>
+</div>
+</header>
+<!-- Bento Grid: Node Health -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+<!-- Node: Lab Alpha-7 -->
+<div class="bg-surface-container-low p-6 rounded-xl border-l-4 border-tertiary flex flex-col justify-between group hover:bg-surface-container transition-all">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-tertiary">science</span>
+<span class="text-[10px] font-bold text-tertiary bg-tertiary/10 px-2 py-0.5 rounded">ONLINE</span>
+</div>
+<div>
+<h4 class="font-['Space_Grotesk'] text-lg font-bold mb-1">Lab Alpha-7</h4>
+<p class="text-xs text-on-surface-variant leading-relaxed">Primary biological synthesis environment. Integrity verified.</p>
+</div>
+</div>
+<!-- Node: Synthetic Sequencing Unit -->
+<div class="bg-surface-container-low p-6 rounded-xl border-l-4 border-primary flex flex-col justify-between group hover:bg-surface-container transition-all">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-primary">biotech</span>
+<span class="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">OPERATIONAL</span>
+</div>
+<div>
+<h4 class="font-['Space_Grotesk'] text-lg font-bold mb-1">Synthetic Sequencing</h4>
+<p class="text-xs text-on-surface-variant leading-relaxed">DNA/RNA transcriptomics layer active. 99.8% precision.</p>
+</div>
+</div>
+<!-- Node: Quantum Node 01 -->
+<div class="bg-surface-container-low p-6 rounded-xl border-l-4 border-secondary flex flex-col justify-between group hover:bg-surface-container transition-all">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-secondary">memory</span>
+<span class="text-[10px] font-bold text-secondary bg-secondary/10 px-2 py-0.5 rounded">SYNCING</span>
+</div>
+<div>
+<h4 class="font-['Space_Grotesk'] text-lg font-bold mb-1">Quantum Node 01</h4>
+<p class="text-xs text-on-surface-variant leading-relaxed">Resolving probability states. Coherence at 0.89μs.</p>
+</div>
+</div>
+<!-- Node: Knowledge Engine v4.2 -->
+<div class="bg-surface-container-low p-6 rounded-xl border-l-4 border-error flex flex-col justify-between group hover:bg-surface-container transition-all">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-error">hub</span>
+<span class="text-[10px] font-bold text-error bg-error/10 px-2 py-0.5 rounded">HIGH LOAD</span>
+</div>
+<div>
+<h4 class="font-['Space_Grotesk'] text-lg font-bold mb-1">Knowledge Engine v4.2</h4>
+<p class="text-xs text-on-surface-variant leading-relaxed">Complex query execution in progress. Scaling resources.</p>
+</div>
+</div>
+</div>
+<!-- System Pulse Chart & Visual Data Section -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+<!-- System Pulse Line Chart -->
+<div class="lg:col-span-2 bg-surface-container-low rounded-xl overflow-hidden flex flex-col relative h-[400px]">
+<div class="p-6 pb-0 flex justify-between items-center">
+<div>
+<h3 class="font-['Space_Grotesk'] font-bold text-xl">System Pulse</h3>
+<p class="text-xs text-slate-500 font-medium">Real-time Latency (μs) Over 24h Cycle</p>
+</div>
+<div class="flex gap-2">
+<span class="flex items-center gap-1.5 text-[10px] font-bold text-primary">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+                            COMPUTE
+                        </span>
+<span class="flex items-center gap-1.5 text-[10px] font-bold text-tertiary">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+                            LATENCY
+                        </span>
+</div>
+</div>
+<!-- Chart Visualization Placeholder -->
+<div class="flex-grow flex items-end px-8 pb-12 pt-8 gap-1">
+<div class="h-[20%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[35%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[25%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[45%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[60%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[55%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[75%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[85%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[95%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[80%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[65%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[40%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[30%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[20%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[45%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[55%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[70%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[50%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[40%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[35%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[25%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[15%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[25%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[45%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+<div class="h-[50%] w-full bg-slate-800/30 rounded-t-sm hover:bg-primary/40 transition-all"></div>
+</div>
+<div class="absolute bottom-6 left-6 right-6 flex justify-between text-[10px] text-slate-500 font-bold border-t border-slate-800 pt-2">
+<span>00:00</span>
+<span>04:00</span>
+<span>08:00</span>
+<span>12:00</span>
+<span>16:00</span>
+<span>20:00</span>
+<span>23:59</span>
+</div>
+</div>
+<!-- Knowledge Core Visualization Card -->
+<div class="glass-panel rounded-xl overflow-hidden relative group">
+<img class="w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-[2000ms]" data-alt="abstract rendering of a quantum data web with neon lines connecting nodes on a dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDOis_m0mtCev1q2C4NG9i5ZwdguNYMwIw1gpAKQ8to9_qRglJETe-Myuad7e4Sej96EKhpapIX6eCYE3linKaxYmiX4t_x7QXr9KMeRUWJP94roojCI7_0yvF6NocRcehyIYWuj1OsUyCTFGFnrzieHQ62JHQAj1N2fz8h55cmoiMvw20fs62OeBIK4Ki5noO2CuwUkja1evNbER45w9Fx18-9NxiahnZ7BrmXPDKGIPAR7yXe8Qgr_m-E2YuSzrmqCyMs6W7kbQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-dim via-transparent to-transparent"></div>
+<div class="absolute bottom-0 p-6">
+<h3 class="font-['Space_Grotesk'] font-bold text-2xl text-on-surface mb-2">Knowledge Core</h3>
+<p class="text-sm text-on-surface-variant mb-4">Neural mapping of synthetic genomic structures. High complexity resolved.</p>
+<div class="flex items-center gap-2">
+<span class="text-xs font-bold text-tertiary">98.4% Density</span>
+<span class="text-slate-500 text-[10px]">•</span>
+<span class="text-xs font-bold text-primary">v4.2 Stable</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Recent Protocol Logs Table -->
+<section class="bg-surface-container-low rounded-xl overflow-hidden mb-12">
+<div class="p-6 flex justify-between items-center border-b border-outline-variant/10">
+<h3 class="font-['Space_Grotesk'] font-bold text-xl">Recent Protocol Logs</h3>
+<div class="flex gap-2">
+<button class="bg-surface-container-high px-3 py-1 rounded text-[10px] font-bold text-on-surface-variant hover:text-primary">ALL LOGS</button>
+<button class="bg-surface-container-high px-3 py-1 rounded text-[10px] font-bold text-on-surface-variant hover:text-error">CRITICAL</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead class="bg-surface-container-high text-[10px] uppercase tracking-widest text-on-surface-variant">
+<tr>
+<th class="px-6 py-4 font-bold">Timestamp</th>
+<th class="px-6 py-4 font-bold">Node Identity</th>
+<th class="px-6 py-4 font-bold">Protocol Action</th>
+<th class="px-6 py-4 font-bold">Severity</th>
+<th class="px-6 py-4 font-bold">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/5">
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="px-6 py-4 text-xs font-mono text-slate-500">2024.05.24 14:32:01</td>
+<td class="px-6 py-4 text-sm font-semibold text-on-surface">Syn-Seq Unit</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">Transcriptome mapping complete</td>
+<td class="px-6 py-4">
+<span class="bg-tertiary/10 text-tertiary text-[10px] font-bold px-2 py-0.5 rounded">SUCCESS</span>
+</td>
+<td class="px-6 py-4">
+<span class="material-symbols-outlined text-tertiary text-sm">check_circle</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="px-6 py-4 text-xs font-mono text-slate-500">2024.05.24 14:31:45</td>
+<td class="px-6 py-4 text-sm font-semibold text-on-surface">Knowledge Engine</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">Buffer exhaustion nearing threshold</td>
+<td class="px-6 py-4">
+<span class="bg-secondary/10 text-secondary text-[10px] font-bold px-2 py-0.5 rounded">WARNING</span>
+</td>
+<td class="px-6 py-4">
+<span class="material-symbols-outlined text-secondary text-sm">warning</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="px-6 py-4 text-xs font-mono text-slate-500">2024.05.24 14:30:12</td>
+<td class="px-6 py-4 text-sm font-semibold text-on-surface">Quantum Node 01</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">Gate calibration routine initiated</td>
+<td class="px-6 py-4">
+<span class="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded">INFO</span>
+</td>
+<td class="px-6 py-4">
+<span class="material-symbols-outlined text-primary text-sm">info</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="px-6 py-4 text-xs font-mono text-slate-500">2024.05.24 14:28:59</td>
+<td class="px-6 py-4 text-sm font-semibold text-on-surface">Lab Alpha-7</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">Environmental parity maintained</td>
+<td class="px-6 py-4">
+<span class="bg-tertiary/10 text-tertiary text-[10px] font-bold px-2 py-0.5 rounded">SUCCESS</span>
+</td>
+<td class="px-6 py-4">
+<span class="material-symbols-outlined text-tertiary text-sm">check_circle</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="px-6 py-4 text-xs font-mono text-slate-500">2024.05.24 14:27:30</td>
+<td class="px-6 py-4 text-sm font-semibold text-on-surface">System Core</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">Global snapshot archived</td>
+<td class="px-6 py-4">
+<span class="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded">INFO</span>
+</td>
+<td class="px-6 py-4">
+<span class="material-symbols-outlined text-primary text-sm">cloud_done</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-4 bg-surface-container flex justify-center">
+<button class="text-[10px] font-bold tracking-widest text-on-surface-variant hover:text-on-surface transition-all flex items-center gap-2">
+                    LOAD MORE SEQUENCES <span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+</div>
+</section>
+<!-- Status Footer -->
+<footer class="flex justify-between items-center text-slate-500 pb-12">
+<div class="text-[10px] font-medium tracking-tight">
+                © 2024 QuantumBio Synth | Biological Computation Layer v9.4.1
+            </div>
+<div class="flex gap-6 text-[10px] font-bold uppercase tracking-widest">
+<a class="hover:text-primary transition-colors" href="#">Privacy Protcols</a>
+<a class="hover:text-primary transition-colors" href="#">Security Audit</a>
+<a class="hover:text-primary transition-colors" href="#">Lab Manifest</a>
+</div>
+</footer>
+</main>
+<!-- Contextual Status Overlay -->
+<div class="fixed bottom-6 right-6 z-50">
+<div class="glass-panel px-4 py-2 rounded-lg border border-outline-variant/20 shadow-xl flex items-center gap-3">
+<span class="text-[10px] font-bold tracking-tighter text-on-surface-variant uppercase">Resolving Probability...</span>
+<div class="flex gap-0.5">
+<div class="w-1 h-3 bg-tertiary/40 rounded-full"></div>
+<div class="w-1 h-3 bg-tertiary/70 rounded-full animate-pulse"></div>
+<div class="w-1 h-3 bg-tertiary rounded-full"></div>
+</div>
+</div>
+</div>
+</body></html>

@@ -311,7 +311,7 @@ RESULTS_DIR = _get_results_dir()
 LATEST_RUN = RESULTS_DIR / "latest_run.csv"
 HISTORY_FILE = RESULTS_DIR / "experiment_history.csv"
 
-# ---------- Best-run defaults (from NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md) ----------
+# ---------- Best-run defaults (from docs/planning/NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md) ----------
 BEST_RUN_COMMAND = (
     "python scripts/run_optimized_pipeline.py --relation CtD \\\n"
     "  --full_graph_embeddings --embedding_method RotatE --embedding_dim 128 \\\n"
@@ -1407,8 +1407,8 @@ elif page == "Technical Reference":
         st.markdown("""
 | Document | Description |
 |----------|-------------|
-| `NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` | Full experiment log, recommended commands, optimization roadmap |
-| `IMPLEMENTATION_RECAP.md` | Pipeline improvements and GPU/hardware readiness summary |
+| `docs/planning/NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` | Full experiment log, recommended commands, optimization roadmap |
+| `docs/overview/IMPLEMENTATION_RECAP.md` | Pipeline improvements and GPU/hardware readiness summary |
 | `docs/WHY_QUANTUM_UNDERPERFORMS.md` | Root cause analysis of the quantum-classical gap |
 | `docs/OPTIMIZATION_PLAN.md` | Detailed optimization roadmap |
 """)

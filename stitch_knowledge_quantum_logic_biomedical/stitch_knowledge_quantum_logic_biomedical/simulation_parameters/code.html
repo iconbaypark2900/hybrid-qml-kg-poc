@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>QuantumBio Synth - Simulation Parameters</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary-container": "#009182",
+                        "tertiary-fixed-dim": "#3cddc7",
+                        "surface-container": "#171f33",
+                        "on-secondary-container": "#c4abff",
+                        "on-tertiary-fixed-variant": "#005047",
+                        "tertiary-container": "#001c18",
+                        "surface-container-high": "#222a3d",
+                        "secondary-fixed": "#e9ddff",
+                        "error-container": "#93000a",
+                        "on-surface-variant": "#c6c6cd",
+                        "tertiary": "#3cddc7",
+                        "surface": "#0b1326",
+                        "secondary": "#d0bcff",
+                        "outline": "#909097",
+                        "on-error-container": "#ffdad6",
+                        "background": "#0b1326",
+                        "secondary-container": "#571bc1",
+                        "primary": "#7bd0ff",
+                        "surface-container-lowest": "#060e20",
+                        "surface-container-low": "#131b2e",
+                        "primary-fixed": "#c4e7ff",
+                        "on-tertiary": "#003731",
+                        "on-error": "#690005",
+                        "on-background": "#dae2fd",
+                        "on-primary-container": "#008abb",
+                        "primary-fixed-dim": "#7bd0ff",
+                        "on-secondary-fixed": "#23005c",
+                        "inverse-on-surface": "#283044",
+                        "primary-container": "#001a27",
+                        "surface-variant": "#2d3449",
+                        "surface-tint": "#7bd0ff",
+                        "surface-container-highest": "#2d3449",
+                        "error": "#ffb4ab",
+                        "on-primary": "#00354a",
+                        "on-secondary": "#3c0091",
+                        "on-primary-fixed-variant": "#004c69",
+                        "surface-dim": "#0b1326",
+                        "secondary-fixed-dim": "#d0bcff",
+                        "on-tertiary-fixed": "#00201c",
+                        "on-primary-fixed": "#001e2c",
+                        "inverse-primary": "#00668a",
+                        "on-secondary-fixed-variant": "#5516be",
+                        "outline-variant": "#45464d",
+                        "tertiary-fixed": "#62fae3",
+                        "inverse-surface": "#dae2fd",
+                        "surface-bright": "#31394d",
+                        "on-surface": "#dae2fd"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0b1326;
+            color: #dae2fd;
+        }
+        .glass-panel {
+            background: rgba(45, 52, 73, 0.6);
+            backdrop-filter: blur(20px);
+        }
+        .primary-gradient {
+            background: linear-gradient(135deg, #7bd0ff 0%, #008abb 100%);
+        }
+    </style>
+</head>
+<body class="font-body selection:bg-primary/30">
+<!-- SideNavBar -->
+<aside class="h-screen w-64 left-0 top-0 fixed bg-slate-900 flex flex-col py-6 px-4 z-40">
+<div class="text-lg font-bold text-sky-400 mb-8 font-headline">Core Terminal</div>
+<div class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 rounded transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="text-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 bg-slate-800 text-sky-400 border-r-4 border-sky-400 font-medium transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="biotech">biotech</span>
+<span class="text-sm">Simulation</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 rounded transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="dna">genetics</span>
+<span class="text-sm">Genomics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 rounded transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+<span class="text-sm">Library</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 rounded transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="text-sm">Archive</span>
+</a>
+</div>
+<div class="mt-auto space-y-4">
+<button class="w-full py-2 px-4 rounded bg-slate-800 text-sky-400 text-sm font-medium border border-sky-400/20 hover:bg-slate-700 transition-colors">
+                New Experiment
+            </button>
+<div class="pt-4 border-t border-slate-800 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:text-slate-300 text-sm" href="#">
+<span class="material-symbols-outlined text-sm" data-icon="help_outline">help_outline</span>
+<span>Support</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:text-slate-300 text-sm" href="#">
+<span class="material-symbols-outlined text-sm" data-icon="sensors">sensors</span>
+<span>System Status</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 min-h-screen relative flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-slate-950/60 backdrop-blur-xl flex justify-between items-center w-full px-6 h-16 sticky top-0 z-50 shadow-[0_10px_40px_rgba(218,226,253,0.06)]">
+<div class="flex items-center gap-8">
+<div class="text-xl font-bold text-sky-400 font-headline tracking-tight">QuantumBio Synth</div>
+<nav class="hidden md:flex gap-6">
+<a class="text-slate-400 hover:text-sky-300 transition-colors text-sm font-medium" href="#">Molecular Design</a>
+<a class="text-slate-400 hover:text-sky-300 transition-colors text-sm font-medium" href="#">Knowledge Graph</a>
+<a class="text-slate-400 hover:text-sky-300 transition-colors text-sm font-medium" href="#">Experiment Analysis</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined text-slate-400" data-icon="settings">settings</span>
+</div>
+<div class="h-8 w-8 rounded-lg bg-surface-container-highest overflow-hidden border border-outline-variant/20">
+<img class="w-full h-full object-cover" data-alt="Close-up portrait of a professional male laboratory researcher in a high-tech facility with soft blue lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRSVtOpZI_UflAJpVfHbZoieG8YRgj9xNwmEyjYn_kfT0LRGnaeJEY_Gru9LE-sFy2pEQeEtQ_WaCCdtS10G37m3CGgseONzKjGeTVgrCMoMlyXFSGQBy5Mr5dmpxHtfZW4IZBDTDxsUEOFsjks_gIYDBDNsG5F5probDxP0SdRts3xZ_4zQeTO1Fqk8TFmehkDvx3uIMApwBtrXidSox7qSCBdtdyoGPV-NznlYKWVpKYCzVIQxETS64toSM9_UH3SoGj0CJ-xg"/>
+</div>
+<button class="primary-gradient text-on-primary-container px-4 py-1.5 rounded-md text-sm font-bold shadow-lg">Quick Save</button>
+</div>
+</header>
+<!-- Simulation Interface -->
+<div class="p-8 max-w-7xl w-full mx-auto space-y-8">
+<!-- Header Section -->
+<div class="flex justify-between items-end">
+<div>
+<h1 class="font-headline text-3xl font-bold text-on-surface">Simulation Parameters</h1>
+<p class="text-on-surface-variant text-sm mt-1">Configure real-time quantum state parameters for synthetic biology sequencing.</p>
+</div>
+<div class="flex items-center gap-2 text-tertiary text-xs font-medium bg-tertiary/10 px-3 py-1 rounded-full border border-tertiary/20">
+<span class="material-symbols-outlined text-xs" data-icon="circle" style="font-variation-settings: 'FILL' 1;">circle</span>
+                    Observing Qubit Stability...
+                </div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Qubit Visualizer (Large) -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-low rounded-xl p-6 border border-outline-variant/10 relative overflow-hidden">
+<div class="flex justify-between items-start mb-6">
+<h2 class="text-sm font-bold font-headline uppercase tracking-widest text-primary">Active Qubit Configuration</h2>
+<div class="flex gap-4">
+<div class="text-right">
+<div class="text-[10px] text-outline uppercase tracking-tighter">Coherence Time</div>
+<div class="text-sm font-mono text-tertiary">142.8 μs</div>
+</div>
+<div class="text-right">
+<div class="text-[10px] text-outline uppercase tracking-tighter">Fidelity</div>
+<div class="text-sm font-mono text-primary">99.982%</div>
+</div>
+</div>
+</div>
+<div class="h-64 flex items-center justify-center relative">
+<!-- Simulated Quantum Circuit Visualization -->
+<div class="absolute inset-0 flex items-center justify-center opacity-20">
+<div class="w-96 h-96 border border-primary/30 rounded-full animate-pulse"></div>
+<div class="absolute w-72 h-72 border border-secondary/30 rounded-full"></div>
+</div>
+<div class="grid grid-cols-4 gap-8 relative z-10">
+<div class="w-16 h-16 rounded bg-surface-container-highest border border-tertiary/40 flex flex-col items-center justify-center shadow-[0_0_15px_rgba(60,221,199,0.2)]">
+<span class="text-[10px] text-tertiary font-mono mb-1">Q0</span>
+<div class="w-2 h-2 rounded-full bg-tertiary animate-ping"></div>
+</div>
+<div class="w-16 h-16 rounded bg-surface-container-highest border border-outline-variant/40 flex flex-col items-center justify-center">
+<span class="text-[10px] text-outline font-mono mb-1">Q1</span>
+<div class="w-2 h-2 rounded-full bg-primary/40"></div>
+</div>
+<div class="w-16 h-16 rounded bg-surface-container-highest border border-tertiary/40 flex flex-col items-center justify-center shadow-[0_0_15px_rgba(60,221,199,0.2)]">
+<span class="text-[10px] text-tertiary font-mono mb-1">Q2</span>
+<div class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></div>
+</div>
+<div class="w-16 h-16 rounded bg-surface-container-highest border border-outline-variant/40 flex flex-col items-center justify-center">
+<span class="text-[10px] text-outline font-mono mb-1">Q3</span>
+<div class="w-2 h-2 rounded-full bg-secondary/40"></div>
+</div>
+</div>
+</div>
+<div class="mt-4 flex justify-between items-center text-[10px] font-mono text-outline">
+<span>NODE_ID: SYNTH-ALPHA-09</span>
+<div class="flex gap-2">
+<span class="text-tertiary">● STABLE</span>
+<span>CPU_SYNC: 0.002ms</span>
+</div>
+</div>
+</div>
+<!-- Resource Allocation (Compact) -->
+<div class="col-span-12 lg:col-span-4 bg-surface-container-low rounded-xl p-6 border border-outline-variant/10">
+<h2 class="text-sm font-bold font-headline uppercase tracking-widest text-primary mb-6">Resource Allocation</h2>
+<div class="space-y-6">
+<div>
+<div class="flex justify-between text-xs mb-2">
+<span class="text-on-surface-variant">GPU Compute (A100 Cluster)</span>
+<span class="text-primary font-mono">72%</span>
+</div>
+<div class="h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[72%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-xs mb-2">
+<span class="text-on-surface-variant">QPU Entanglement Nodes</span>
+<span class="text-secondary font-mono">41%</span>
+</div>
+<div class="h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-[41%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-xs mb-2">
+<span class="text-on-surface-variant">Mem-Storage Latency</span>
+<span class="text-tertiary font-mono">12ms</span>
+</div>
+<div class="h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary w-[15%]"></div>
+</div>
+</div>
+</div>
+<div class="mt-10 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/10">
+<div class="text-[10px] uppercase text-outline mb-2">Active Stream Status</div>
+<div class="text-xl font-headline font-bold text-on-surface">IDLE</div>
+<div class="text-[10px] text-secondary mt-1">Ready for initialization...</div>
+</div>
+</div>
+<!-- Environmental Controls -->
+<div class="col-span-12 lg:col-span-5 bg-surface-container-low rounded-xl p-6 border border-outline-variant/10">
+<h2 class="text-sm font-bold font-headline uppercase tracking-widest text-primary mb-6">Environmental Noise Controls</h2>
+<div class="space-y-6">
+<div>
+<label class="flex justify-between text-xs text-on-surface-variant mb-4">
+<span>Thermal Noise (mK)</span>
+<span class="font-mono text-primary">15.4 mK</span>
+</label>
+<input class="w-full h-1 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary" type="range"/>
+</div>
+<div>
+<label class="flex justify-between text-xs text-on-surface-variant mb-4">
+<span>Magnetic Interference (μT)</span>
+<span class="font-mono text-primary">0.02 μT</span>
+</label>
+<input class="w-full h-1 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary" type="range"/>
+</div>
+<div class="pt-4">
+<span class="text-xs text-on-surface-variant block mb-3">Simulation Resolution</span>
+<div class="grid grid-cols-3 gap-2">
+<button class="py-2 text-[10px] font-bold uppercase rounded border border-outline-variant/30 text-outline hover:border-primary transition-colors">Low</button>
+<button class="py-2 text-[10px] font-bold uppercase rounded border-2 border-primary bg-primary/10 text-primary">Standard</button>
+<button class="py-2 text-[10px] font-bold uppercase rounded border border-outline-variant/30 text-outline hover:border-primary transition-colors">Hi-Fi</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Batch Queue -->
+<div class="col-span-12 lg:col-span-7 bg-surface-container-low rounded-xl p-6 border border-outline-variant/10">
+<div class="flex justify-between items-center mb-6">
+<h2 class="text-sm font-bold font-headline uppercase tracking-widest text-primary">Batch Queue</h2>
+<button class="text-[10px] text-secondary font-bold flex items-center gap-1 hover:underline">
+<span class="material-symbols-outlined text-xs" data-icon="refresh">refresh</span> CLEAR QUEUE
+                        </button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="text-[10px] text-outline uppercase tracking-wider border-b border-outline-variant/10">
+<th class="pb-3 font-medium">Job ID</th>
+<th class="pb-3 font-medium">Protein Structure</th>
+<th class="pb-3 font-medium">Priority</th>
+<th class="pb-3 font-medium">Status</th>
+<th class="pb-3 font-medium">ETA</th>
+</tr>
+</thead>
+<tbody class="text-xs">
+<tr class="border-b border-outline-variant/5 hover:bg-surface-container-lowest transition-colors">
+<td class="py-4 font-mono text-on-surface">#QS-9921</td>
+<td class="py-4">Hemoglobin-V2-Sim</td>
+<td class="py-4"><span class="px-2 py-0.5 rounded bg-error/10 text-error border border-error/20">Critical</span></td>
+<td class="py-4 text-on-surface-variant">Pending</td>
+<td class="py-4 text-outline">04:22s</td>
+</tr>
+<tr class="border-b border-outline-variant/5 hover:bg-surface-container-lowest transition-colors">
+<td class="py-4 font-mono text-on-surface">#QS-9922</td>
+<td class="py-4">Neuro-Peptide-04</td>
+<td class="py-4"><span class="px-2 py-0.5 rounded bg-surface-container-highest text-outline border border-outline-variant/20">Normal</span></td>
+<td class="py-4 text-on-surface-variant">Queued</td>
+<td class="py-4 text-outline">12:15s</td>
+</tr>
+<tr class="hover:bg-surface-container-lowest transition-colors">
+<td class="py-4 font-mono text-on-surface">#QS-9925</td>
+<td class="py-4">Viral-Cap-Alpha</td>
+<td class="py-4"><span class="px-2 py-0.5 rounded bg-tertiary/10 text-tertiary border border-tertiary/20">High</span></td>
+<td class="py-4 text-on-surface-variant">Pending</td>
+<td class="py-4 text-outline">18:40s</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Footer Action Bar -->
+<div class="glass-panel p-6 rounded-xl border border-primary/20 flex flex-col md:flex-row justify-between items-center gap-6 mt-12">
+<div class="flex gap-10">
+<div>
+<div class="text-[10px] text-outline uppercase mb-1">Estimated Duration</div>
+<div class="text-lg font-headline font-bold text-on-surface">14h 22m 10s</div>
+</div>
+<div>
+<div class="text-[10px] text-outline uppercase mb-1">Energy Flux</div>
+<div class="text-lg font-headline font-bold text-tertiary">0.0042 eV</div>
+</div>
+</div>
+<div class="flex items-center gap-4 w-full md:w-auto">
+<button class="flex-1 md:flex-none px-6 py-3 rounded-md border border-outline-variant/40 text-sm font-bold text-on-surface hover:bg-surface-container-highest transition-colors">
+                        Dry Run Analysis
+                    </button>
+<button class="flex-1 md:flex-none primary-gradient px-10 py-3 rounded-md text-sm font-extrabold text-on-primary-container shadow-[0_0_30px_rgba(123,208,255,0.3)] flex items-center justify-center gap-2">
+                        Initialize Quantum Stream
+                        <span class="material-symbols-outlined text-sm" data-icon="bolt">bolt</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Floating Status Indicator (Asymmetric Detail) -->
+<div class="fixed bottom-6 right-6 flex flex-col items-end pointer-events-none opacity-50">
+<div class="text-[8px] font-mono uppercase tracking-[0.2em] text-outline mb-1">System Entropy</div>
+<div class="flex gap-0.5">
+<div class="w-1 h-3 bg-tertiary"></div>
+<div class="w-1 h-3 bg-tertiary"></div>
+<div class="w-1 h-3 bg-tertiary/60"></div>
+<div class="w-1 h-3 bg-outline/20"></div>
+<div class="w-1 h-3 bg-outline/10"></div>
+</div>
+</div>
+</main>
+</body></html>

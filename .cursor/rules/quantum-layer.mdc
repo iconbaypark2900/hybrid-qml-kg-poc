@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+
+File: .cursor/rules/quantum-layer.mdc
+description: e.g. "Quantum layer: backends, configs, QSVC/VQC; use when editing quantum_layer/ or config/quantum_*.yaml."
+globs: quantum_layer/**/*.py and/or config/quantum_config*.yaml.
+alwaysApply: false.
+Body – fill using:
+Backends: quantum_layer/quantum_executor.py; behavior driven by --quantum_config_path and --gpu. Config keys: quantum.execution_mode (e.g. simulator, gpu_simulator, heron), quantum.simulator, quantum.heron, quantum.gpu_simulator.
+Config files: config/quantum_config.yaml (default, heron), config/quantum_config_ideal.yaml (simulator), config/quantum_config_gpu.yaml (GPU sim), config/quantum_config_noisy.yaml, config/quantum_config_dgx.yaml, config/quantum_config_gmktec.yaml. IBM token via env e.g. IBM_Q_TOKEN or .env.
+Models: QSVC and VQC in quantum_layer/; pipeline uses QMLTrainer(results_dir=args.results_dir, ...).

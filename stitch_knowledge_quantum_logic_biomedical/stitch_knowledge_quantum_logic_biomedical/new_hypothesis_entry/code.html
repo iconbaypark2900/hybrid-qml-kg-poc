@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>QuantumBio Synth - New Hypothesis Entry</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&amp;family=Space+Grotesk:wght@300..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary-container": "#009182",
+                        "tertiary-fixed-dim": "#3cddc7",
+                        "surface-container": "#171f33",
+                        "on-secondary-container": "#c4abff",
+                        "on-tertiary-fixed-variant": "#005047",
+                        "tertiary-container": "#001c18",
+                        "surface-container-high": "#222a3d",
+                        "secondary-fixed": "#e9ddff",
+                        "error-container": "#93000a",
+                        "on-surface-variant": "#c6c6cd",
+                        "tertiary": "#3cddc7",
+                        "surface": "#0b1326",
+                        "secondary": "#d0bcff",
+                        "outline": "#909097",
+                        "on-error-container": "#ffdad6",
+                        "background": "#0b1326",
+                        "secondary-container": "#571bc1",
+                        "primary": "#7bd0ff",
+                        "surface-container-lowest": "#060e20",
+                        "surface-container-low": "#131b2e",
+                        "primary-fixed": "#c4e7ff",
+                        "on-tertiary": "#003731",
+                        "on-error": "#690005",
+                        "on-background": "#dae2fd",
+                        "on-primary-container": "#008abb",
+                        "primary-fixed-dim": "#7bd0ff",
+                        "on-secondary-fixed": "#23005c",
+                        "inverse-on-surface": "#283044",
+                        "primary-container": "#001a27",
+                        "surface-variant": "#2d3449",
+                        "surface-tint": "#7bd0ff",
+                        "surface-container-highest": "#2d3449",
+                        "error": "#ffb4ab",
+                        "on-primary": "#00354a",
+                        "on-secondary": "#3c0091",
+                        "on-primary-fixed-variant": "#004c69",
+                        "surface-dim": "#0b1326",
+                        "secondary-fixed-dim": "#d0bcff",
+                        "on-tertiary-fixed": "#00201c",
+                        "on-primary-fixed": "#001e2c",
+                        "inverse-primary": "#00668a",
+                        "on-secondary-fixed-variant": "#5516be",
+                        "outline-variant": "#45464d",
+                        "tertiary-fixed": "#62fae3",
+                        "inverse-surface": "#dae2fd",
+                        "surface-bright": "#31394d",
+                        "on-surface": "#dae2fd"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .glass-panel {
+            background: rgba(45, 52, 73, 0.6);
+            backdrop-filter: blur(20px);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 12px;
+            width: 12px;
+            border-radius: 2px;
+            background: #7bd0ff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(123, 208, 255, 0.4);
+        }
+        .ghost-border {
+            outline: 1px solid rgba(144, 144, 151, 0.15);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30 antialiased">
+<!-- SideNavBar (Shared Component) -->
+<nav class="hidden md:flex flex-col h-screen w-64 left-0 top-0 fixed bg-slate-900 font-['Inter'] text-sm antialiased py-6 px-4 z-40">
+<div class="text-lg font-bold text-sky-400 mb-8 font-headline">Core Terminal</div>
+<div class="flex flex-col space-y-2 flex-grow">
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all rounded" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 bg-slate-800 text-sky-400 border-r-4 border-sky-400 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="biotech">biotech</span>
+<span>Simulation</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all rounded" href="#">
+<span class="material-symbols-outlined" data-icon="dna">genetics</span>
+<span>Genomics</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all rounded" href="#">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+<span>Library</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all rounded" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span>Archive</span>
+</a>
+</div>
+<button class="mb-8 w-full py-3 bg-gradient-to-br from-primary to-on-primary-container text-on-primary font-bold rounded-md shadow-lg active:scale-95 duration-150">
+            New Experiment
+        </button>
+<div class="flex flex-col space-y-2 border-t border-slate-800/30 pt-4">
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all rounded" href="#">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+<span>Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all rounded" href="#">
+<span class="material-symbols-outlined" data-icon="sensors">sensors</span>
+<span>System Status</span>
+</a>
+</div>
+</nav>
+<!-- TopAppBar (Shared Component) -->
+<header class="fixed top-0 z-50 flex justify-between items-center w-full px-6 h-16 bg-slate-950/60 backdrop-blur-xl shadow-[0_10px_40px_rgba(218,226,253,0.06)] md:pl-72">
+<div class="text-xl font-bold text-sky-400 font-headline tracking-tight">QuantumBio Synth</div>
+<div class="hidden lg:flex items-center gap-8">
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-['Space_Grotesk'] tracking-tight" href="#">Molecular Design</a>
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-['Space_Grotesk'] tracking-tight" href="#">Knowledge Graph</a>
+<a class="text-sky-400 border-b-2 border-sky-400 pb-1 font-['Space_Grotesk'] tracking-tight" href="#">Experiment Analysis</a>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden sm:flex items-center bg-slate-800/50 px-3 py-1.5 rounded-md ghost-border">
+<span class="material-symbols-outlined text-slate-400 text-sm mr-2" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm text-on-surface w-32 placeholder:text-slate-500" placeholder="Search parameters..." type="text"/>
+</div>
+<button class="material-symbols-outlined text-slate-400 hover:text-sky-400 transition-colors" data-icon="notifications">notifications</button>
+<button class="material-symbols-outlined text-slate-400 hover:text-sky-400 transition-colors" data-icon="settings">settings</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-sky-400/30">
+<img alt="Researcher Profile" class="w-full h-full object-cover" data-alt="portrait of a focused female scientist in laboratory gear with blue ambient lighting reflecting technical environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBwa1StlS3ZtIesQ10YMx6bIvRbwNXEQ200ou0chnio6Xza5GWZ40f-jXvKkl4cpOSwVcvSrZYA2dYpfpEoN2v9qSOnCExUsO9VxpEAQzEVg9CtOZMoYTnpxvbXoXXP-FPtJmIfcl40QtDpAnoWRz2LHaX2DZw0QtFoADmSy0fl5V3cuF6XAOHGT28FmwSzEHjdiF4UpMSC4TnUcbUyOo1r6G_FcBoaEy5a-XANJ91_3Jyxt1KLqO9je3xrCA6Wx8I_LF8_CXbSmw"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="pt-24 pb-12 px-6 md:ml-64 min-h-screen">
+<div class="max-w-6xl mx-auto">
+<!-- Header Section -->
+<div class="mb-12">
+<div class="flex items-center gap-2 text-primary mb-2">
+<span class="material-symbols-outlined text-sm" data-icon="arrow_back">arrow_back</span>
+<span class="text-xs font-bold tracking-widest uppercase">Experiment Overview</span>
+</div>
+<h1 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-2">New Hypothesis Entry</h1>
+<p class="text-on-surface-variant max-w-2xl">Define clinical-biological perturbations and quantum variables. Systems will resolve probabilities upon commitment.</p>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Left Column: Form Inputs (8 cols) -->
+<div class="lg:col-span-8 space-y-6">
+<!-- Title & Variable Block -->
+<div class="bg-surface-container-low p-8 rounded-lg shadow-sm ghost-border">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<div class="space-y-2">
+<label class="block text-xs font-bold text-slate-500 uppercase tracking-widest">Hypothesis Title</label>
+<input class="w-full bg-surface-container-lowest border-0 border-b-2 border-slate-800 focus:border-primary transition-all px-0 py-3 text-lg font-headline text-on-surface placeholder:text-slate-700" placeholder="e.g., Entropy Suppression in Spike Protease" type="text"/>
+</div>
+<div class="space-y-2">
+<label class="block text-xs font-bold text-slate-500 uppercase tracking-widest">Quantum Variable to Perturb</label>
+<div class="relative">
+<select class="w-full bg-surface-container-lowest border-0 border-b-2 border-slate-800 focus:border-primary transition-all px-0 py-3 appearance-none text-on-surface cursor-pointer">
+<option>Stability</option>
+<option>Entropy</option>
+<option>Binding Affinity</option>
+<option>Conformational Flux</option>
+</select>
+<span class="material-symbols-outlined absolute right-0 top-3 pointer-events-none text-slate-500" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Prediction Slider & Tags Block -->
+<div class="bg-surface-container-low p-8 rounded-lg shadow-sm ghost-border">
+<div class="space-y-10">
+<!-- Expected Delta Slider -->
+<div class="space-y-4">
+<div class="flex justify-between items-end">
+<label class="block text-xs font-bold text-slate-500 uppercase tracking-widest">Expected Delta (ΔG)</label>
+<span class="text-2xl font-headline font-bold text-primary">-4.2 <span class="text-sm font-normal text-slate-500 uppercase">kcal/mol</span></span>
+</div>
+<input class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer" max="10" min="-10" step="0.1" type="range" value="-4.2"/>
+<div class="flex justify-between text-[10px] text-slate-600 font-mono">
+<span>-10.0 KCAL</span>
+<span>0.0 KCAL</span>
+<span>+10.0 KCAL</span>
+</div>
+</div>
+<!-- Related Entities -->
+<div class="space-y-4">
+<label class="block text-xs font-bold text-slate-500 uppercase tracking-widest">Related Molecular Entities</label>
+<div class="flex flex-wrap gap-2 mb-4">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 bg-surface-container-highest rounded-full text-xs text-sky-300 border border-sky-400/20">
+                                        SARS-CoV-2-S <button class="material-symbols-outlined text-[14px]" data-icon="close">close</button>
+</span>
+<span class="inline-flex items-center gap-1.5 px-3 py-1 bg-surface-container-highest rounded-full text-xs text-sky-300 border border-sky-400/20">
+                                        ACE2-Receptor <button class="material-symbols-outlined text-[14px]" data-icon="close">close</button>
+</span>
+<span class="inline-flex items-center gap-1.5 px-3 py-2 bg-surface-container-low rounded-full text-xs text-slate-500 border border-slate-700 border-dashed hover:border-primary hover:text-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[14px]" data-icon="add">add</span> Add Entity
+                                    </span>
+</div>
+</div>
+</div>
+</div>
+<!-- Evidence Base -->
+<div class="bg-surface-container-low p-8 rounded-lg shadow-sm ghost-border">
+<div class="space-y-4">
+<label class="block text-xs font-bold text-slate-500 uppercase tracking-widest">Evidence Base &amp; Rationale</label>
+<textarea class="w-full bg-surface-container-lowest border-0 rounded p-4 text-sm text-on-surface focus:ring-1 focus:ring-primary/40 placeholder:text-slate-700" placeholder="Document preliminary data, genomic citations, or quantum resonance signatures justifying this perturbation..." rows="6"></textarea>
+</div>
+</div>
+</div>
+<!-- Right Column: Visual Preview & Actions (4 cols) -->
+<div class="lg:col-span-4 space-y-6">
+<!-- Dynamic Chart Preview -->
+<div class="glass-panel p-6 rounded-lg ghost-border min-h-[400px] flex flex-col">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Primary Prediction Shift</h3>
+<span class="px-2 py-0.5 bg-tertiary/10 text-tertiary text-[10px] font-bold rounded">LIVE RESOLVER</span>
+</div>
+<!-- Visual representation of a "quantum chart" placeholder -->
+<div class="flex-grow flex items-center justify-center relative overflow-hidden group">
+<!-- Background Grid -->
+<div class="absolute inset-0 opacity-10 flex">
+<div class="w-full h-full border-[0.5px] border-slate-500 grid grid-cols-6 grid-rows-8">
+<div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div>
+<div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div>
+<div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div>
+<div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div><div class="border-[0.5px] border-slate-500"></div>
+</div>
+</div>
+<!-- Central Visualization Placeholder -->
+<div class="relative z-10 w-full aspect-square flex items-center justify-center">
+<div class="absolute w-48 h-48 border border-primary/20 rounded-full"></div>
+<div class="absolute w-32 h-32 border border-secondary/30 rounded-full animate-pulse"></div>
+<div class="w-full h-[2px] bg-gradient-to-r from-transparent via-tertiary to-transparent opacity-40 rotate-45"></div>
+<div class="w-full h-[2px] bg-gradient-to-r from-transparent via-primary to-transparent opacity-20 -rotate-12"></div>
+<div class="absolute bottom-4 left-4 text-[10px] font-mono text-slate-500">
+                                    ID: HYP_992_SEQ<br/>
+                                    PROB: 0.8821
+                                </div>
+</div>
+</div>
+<div class="mt-6 pt-6 border-t border-slate-800">
+<div class="flex items-center gap-3 text-tertiary mb-1">
+<span class="material-symbols-outlined text-sm" data-icon="auto_awesome">auto_awesome</span>
+<span class="text-xs font-bold uppercase tracking-tight">Biological Vitality Metric</span>
+</div>
+<p class="text-[11px] text-slate-400">Current configuration suggests a high probability of conformational lock in Node 04.</p>
+</div>
+</div>
+<!-- Actions -->
+<div class="space-y-3">
+<button class="w-full py-4 bg-gradient-to-br from-primary to-on-primary-container text-on-primary font-bold rounded-md shadow-[0_10px_30px_rgba(0,138,187,0.3)] active:scale-95 duration-150 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+                            Commit Hypothesis
+                        </button>
+<button class="w-full py-4 bg-transparent border border-outline/20 text-slate-400 font-bold rounded-md hover:bg-slate-800 transition-colors active:scale-95 duration-150">
+                            Discard
+                        </button>
+</div>
+<!-- Status Footnote -->
+<div class="text-right">
+<span class="text-[10px] font-mono text-slate-600 uppercase tracking-widest">Resolving Probability...</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 w-full bg-slate-900 flex justify-around items-center h-16 px-4 z-50">
+<a class="flex flex-col items-center text-slate-500" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="text-[10px]">Home</span>
+</a>
+<a class="flex flex-col items-center text-sky-400" href="#">
+<span class="material-symbols-outlined" data-icon="biotech">biotech</span>
+<span class="text-[10px]">Sim</span>
+</a>
+<a class="flex flex-col items-center text-slate-500" href="#">
+<span class="material-symbols-outlined" data-icon="dna">genetics</span>
+<span class="text-[10px]">Gene</span>
+</a>
+<a class="flex flex-col items-center text-slate-500" href="#">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+<span class="text-[10px]">Lib</span>
+</a>
+<a class="flex flex-col items-center text-slate-500" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="text-[10px]">Profile</span>
+</a>
+</nav>
+</body></html>

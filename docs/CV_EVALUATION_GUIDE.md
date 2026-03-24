@@ -362,9 +362,9 @@ python scripts/run_optimized_pipeline.py \
 
 ## 📚 Related Documentation
 
-- **IMPROVEMENTS_SUMMARY.md**: Overall progress tracking
-- **FULL_GRAPH_EMBEDDINGS_GUIDE.md**: Using full-graph embeddings with CV
-- **QUICK_START_COMMANDS.md**: Command reference
+- **`docs/improvements/IMPROVEMENTS_SUMMARY.md`**: Overall progress tracking
+- **`docs/guides/FULL_GRAPH_EMBEDDINGS_GUIDE.md`**: Using full-graph embeddings with CV
+- **`docs/reference/QUICK_START_COMMANDS.md`**: Command reference
 
 ---
 

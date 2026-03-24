@@ -387,9 +387,9 @@ for fold_idx, (train_idx, test_idx) in enumerate(cv_folds):
 
 ## 🔗 Related Documentation
 
-- **IMPROVEMENTS_SUMMARY.md**: Overall progress tracking
+- **`docs/improvements/IMPROVEMENTS_SUMMARY.md`**: Overall progress tracking
 - **CV_EVALUATION_GUIDE.md**: K-Fold cross-validation
-- **FULL_GRAPH_EMBEDDINGS_GUIDE.md**: Embedding training strategies
+- **`docs/guides/FULL_GRAPH_EMBEDDINGS_GUIDE.md`**: Embedding training strategies
 
 ---
 

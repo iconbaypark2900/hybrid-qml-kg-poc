@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-tertiary-container": "#009182",
+              "tertiary-fixed-dim": "#3cddc7",
+              "surface-container": "#171f33",
+              "on-secondary-container": "#c4abff",
+              "on-tertiary-fixed-variant": "#005047",
+              "tertiary-container": "#001c18",
+              "surface-container-high": "#222a3d",
+              "secondary-fixed": "#e9ddff",
+              "error-container": "#93000a",
+              "on-surface-variant": "#c6c6cd",
+              "tertiary": "#3cddc7",
+              "surface": "#0b1326",
+              "secondary": "#d0bcff",
+              "outline": "#909097",
+              "on-error-container": "#ffdad6",
+              "background": "#0b1326",
+              "secondary-container": "#571bc1",
+              "primary": "#7bd0ff",
+              "surface-container-lowest": "#060e20",
+              "surface-container-low": "#131b2e",
+              "primary-fixed": "#c4e7ff",
+              "on-tertiary": "#003731",
+              "on-error": "#690005",
+              "on-background": "#dae2fd",
+              "on-primary-container": "#008abb",
+              "primary-fixed-dim": "#7bd0ff",
+              "on-secondary-fixed": "#23005c",
+              "inverse-on-surface": "#283044",
+              "primary-container": "#001a27",
+              "surface-variant": "#2d3449",
+              "surface-tint": "#7bd0ff",
+              "surface-container-highest": "#2d3449",
+              "error": "#ffb4ab",
+              "on-primary": "#00354a",
+              "on-secondary": "#3c0091",
+              "on-primary-fixed-variant": "#004c69",
+              "surface-dim": "#0b1326",
+              "secondary-fixed-dim": "#d0bcff",
+              "on-tertiary-fixed": "#00201c",
+              "on-primary-fixed": "#001e2c",
+              "inverse-primary": "#00668a",
+              "on-secondary-fixed-variant": "#5516be",
+              "outline-variant": "#45464d",
+              "tertiary-fixed": "#62fae3",
+              "inverse-surface": "#dae2fd",
+              "surface-bright": "#31394d",
+              "on-surface": "#dae2fd"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .glass-panel {
+            background: rgba(45, 52, 73, 0.6);
+            backdrop-filter: blur(20px);
+        }
+        .node-pulse {
+            box-shadow: 0 0 10px 2px rgba(60, 221, 199, 0.4);
+        }
+        .gradient-primary {
+            background: linear-gradient(135deg, #7bd0ff 0%, #008abb 100%);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body overflow-hidden">
+<!-- TopAppBar -->
+<header class="bg-slate-950/60 backdrop-blur-xl docked full-width top-0 z-50 shadow-[0_10px_40px_rgba(218,226,253,0.06)] flex justify-between items-center w-full px-6 h-16 fixed">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold text-sky-400 font-headline tracking-tight">QuantumBio Synth</span>
+<nav class="hidden md:flex gap-6 items-center">
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-['Space_Grotesk'] tracking-tight" href="#">Molecular Design</a>
+<a class="text-sky-400 border-b-2 border-sky-400 pb-1 font-['Space_Grotesk'] tracking-tight" href="#">Knowledge Graph</a>
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-['Space_Grotesk'] tracking-tight" href="#">Experiment Analysis</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+<input class="bg-slate-900/50 border-none rounded-lg pl-10 pr-4 py-1.5 text-sm focus:ring-1 focus:ring-sky-400 w-64" placeholder="Search entity..." type="text"/>
+</div>
+<button class="material-symbols-outlined text-slate-400 hover:bg-slate-800/50 p-2 rounded-lg transition-all">notifications</button>
+<button class="material-symbols-outlined text-slate-400 hover:bg-slate-800/50 p-2 rounded-lg transition-all">settings</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-sky-400/30">
+<img alt="Researcher Profile" class="w-full h-full object-cover" data-alt="professional medical researcher headshot in high-tech laboratory environment with clinical lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIuCRjzf4g2K8aLD448edawkRrlAbD0Tk8p1vClk3Rqvzv27KbPZYbcTDcvobBAfBpvwiAMqHv94MmuMeRH0IrGxydEcoUd_c8pf1vXGMU3LLjXKKY5KCMcyIx9-9vE817G8YldcuRyR0BXSLLP64mQcxLN3tBoKubf4jxDpk4uL88tJBGmpWhb5P-G2BCQZdI1F_sFsn55ILlVhc2kNtO4aQTlb1SDE6AinwzJws8CYbuPJHMOQOXP4KoJDAkeHnmCppObF4p0A"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar (Suppressed for immersive view, but keeping structure if needed for context) -->
+<aside class="bg-slate-900 h-screen w-64 left-0 top-0 fixed flex flex-col py-6 px-4 z-40 translate-x-[-100%] transition-transform">
+<div class="text-lg font-bold text-sky-400 mb-8 font-headline">Core Terminal</div>
+<nav class="flex-1 space-y-2">
+<div class="flex items-center gap-3 p-3 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 rounded-lg cursor-pointer">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</div>
+<div class="flex items-center gap-3 p-3 bg-slate-800 text-sky-400 border-r-4 border-sky-400 rounded-lg cursor-pointer">
+<span class="material-symbols-outlined" data-icon="biotech">biotech</span>
+<span>Simulation</span>
+</div>
+</nav>
+</aside>
+<!-- Main Canvas: Knowledge Graph -->
+<main class="relative w-full h-screen pt-16 bg-surface overflow-hidden">
+<!-- 3D Network Visualization Layer (Mockup using SVG/CSS for visualization depth) -->
+<div class="absolute inset-0 z-0 bg-[radial-gradient(circle_at_50%_50%,#131b2e_0%,#0b1326_100%)]">
+<!-- Simulated Connections -->
+<svg class="absolute inset-0 w-full h-full opacity-20 pointer-events-none">
+<defs>
+<lineargradient id="edgeGradient" x1="0%" x2="100%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#7bd0ff" stop-opacity="0.5"></stop>
+<stop offset="100%" stop-color="#3cddc7" stop-opacity="0.1"></stop>
+</lineargradient>
+</defs>
+<path d="M 400 300 L 700 450" fill="none" stroke="url(#edgeGradient)" stroke-width="1.5"></path>
+<path d="M 700 450 L 900 250" fill="none" stroke="url(#edgeGradient)" stroke-width="1"></path>
+<path d="M 400 300 L 300 600" fill="none" stroke="url(#edgeGradient)" stroke-dasharray="4 2" stroke-width="2"></path>
+<path d="M 900 250 L 1100 500" fill="none" stroke="url(#edgeGradient)" stroke-width="1"></path>
+<circle cx="400" cy="300" fill="none" r="150" stroke="#7bd0ff" stroke-opacity="0.05"></circle>
+</svg>
+<!-- Holographic Nodes -->
+<div class="absolute top-[30%] left-[25%] group cursor-pointer">
+<div class="w-12 h-12 rounded-full border-2 border-primary/50 flex items-center justify-center glass-panel node-pulse">
+<span class="material-symbols-outlined text-primary text-2xl" data-icon="hub">hub</span>
+</div>
+<div class="absolute top-14 left-1/2 -translate-x-1/2 text-center whitespace-nowrap">
+<p class="text-primary font-headline text-sm font-bold tracking-widest">BRAF KINASE</p>
+<p class="text-slate-500 text-[10px] uppercase tracking-tighter">Protein Hub</p>
+</div>
+</div>
+<div class="absolute top-[45%] left-[45%] group cursor-pointer">
+<div class="w-8 h-8 rounded-full border border-tertiary/40 flex items-center justify-center glass-panel">
+<span class="material-symbols-outlined text-tertiary text-lg" data-icon="dna">genetics</span>
+</div>
+<div class="absolute top-10 left-1/2 -translate-x-1/2 text-center whitespace-nowrap">
+<p class="text-tertiary font-headline text-[10px] font-bold">V600E MUTATION</p>
+</div>
+</div>
+<div class="absolute top-[20%] left-[60%] group cursor-pointer">
+<div class="w-10 h-10 rounded-full border border-secondary/40 flex items-center justify-center glass-panel">
+<span class="material-symbols-outlined text-secondary text-xl" data-icon="medication">medication</span>
+</div>
+<div class="absolute top-12 left-1/2 -translate-x-1/2 text-center whitespace-nowrap">
+<p class="text-secondary font-headline text-[11px] font-bold">DABRAFENIB</p>
+<p class="text-slate-500 text-[9px] uppercase">Small Molecule</p>
+</div>
+</div>
+<div class="absolute top-[55%] left-[65%] group cursor-pointer opacity-60">
+<div class="w-6 h-6 rounded-full border border-outline/20 flex items-center justify-center glass-panel">
+<span class="material-symbols-outlined text-outline text-sm" data-icon="cell_tower">cell_tower</span>
+</div>
+<div class="absolute top-8 left-1/2 -translate-x-1/2 text-center whitespace-nowrap">
+<p class="text-outline font-headline text-[9px]">MAPK PATHWAY</p>
+</div>
+</div>
+</div>
+<!-- Floating UI Layer: Top Controls -->
+<div class="absolute top-6 left-6 z-20 flex flex-col gap-4">
+<!-- Pathfinding Tool -->
+<div class="glass-panel p-4 rounded-xl border border-outline-variant/15 w-80 shadow-2xl">
+<div class="flex items-center justify-between mb-3">
+<span class="text-[11px] font-bold uppercase tracking-widest text-primary/80">Pathfinding Engine</span>
+<span class="material-symbols-outlined text-primary text-sm">route</span>
+</div>
+<div class="space-y-2">
+<div class="relative">
+<input class="w-full bg-surface-container-lowest/50 border-none rounded text-xs py-2 pl-8 text-on-surface" type="text" value="BRAF Kinase"/>
+<span class="material-symbols-outlined absolute left-2 top-2 text-xs text-primary">trip_origin</span>
+</div>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest/50 border-none rounded text-xs py-2 pl-8 text-on-surface-variant" placeholder="Target entity..." type="text"/>
+<span class="material-symbols-outlined absolute left-2 top-2 text-xs text-tertiary">location_on</span>
+</div>
+</div>
+<button class="w-full mt-3 py-2 gradient-primary text-on-primary font-bold text-xs rounded-md shadow-lg shadow-primary/20">Resolve Connectivity</button>
+</div>
+<!-- Relationship Filters -->
+<div class="glass-panel p-4 rounded-xl border border-outline-variant/15 w-80">
+<span class="text-[11px] font-bold uppercase tracking-widest text-slate-400 block mb-3">Edge Weighting</span>
+<div class="grid grid-cols-2 gap-2">
+<label class="flex items-center gap-2 cursor-pointer bg-surface-container-low/40 p-2 rounded hover:bg-surface-container-high/60 transition-colors">
+<input checked="" class="form-checkbox bg-transparent border-primary text-primary rounded-sm focus:ring-0" type="checkbox"/>
+<span class="text-[10px] text-on-surface">Agonist</span>
+</label>
+<label class="flex items-center gap-2 cursor-pointer bg-surface-container-low/40 p-2 rounded hover:bg-surface-container-high/60 transition-colors">
+<input checked="" class="form-checkbox bg-transparent border-secondary text-secondary rounded-sm focus:ring-0" type="checkbox"/>
+<span class="text-[10px] text-on-surface">Antagonist</span>
+</label>
+<label class="flex items-center gap-2 cursor-pointer bg-surface-container-low/40 p-2 rounded hover:bg-surface-container-high/60 transition-colors">
+<input class="form-checkbox bg-transparent border-error text-error rounded-sm focus:ring-0" type="checkbox"/>
+<span class="text-[10px] text-on-surface">Inhibitor</span>
+</label>
+<label class="flex items-center gap-2 cursor-pointer bg-surface-container-low/40 p-2 rounded hover:bg-surface-container-high/60 transition-colors">
+<input class="form-checkbox bg-transparent border-tertiary text-tertiary rounded-sm focus:ring-0" type="checkbox"/>
+<span class="text-[10px] text-on-surface">Catalytic</span>
+</label>
+</div>
+</div>
+</div>
+<!-- Floating UI Layer: Right Sidebar (Node Inspector) -->
+<div class="absolute top-6 right-6 bottom-6 z-20 w-96 glass-panel rounded-2xl border border-outline-variant/15 flex flex-col shadow-2xl overflow-hidden">
+<!-- Header -->
+<div class="p-6 bg-surface-container-high/40 border-b border-outline-variant/15">
+<div class="flex justify-between items-start mb-4">
+<div>
+<span class="inline-block px-2 py-0.5 bg-primary/10 text-primary text-[9px] font-bold uppercase rounded border border-primary/20 mb-1">Target Identified</span>
+<h2 class="text-2xl font-headline font-bold text-on-surface">BRAF Kinase</h2>
+</div>
+<button class="material-symbols-outlined text-slate-400 hover:text-white">close</button>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<div class="bg-surface-container-lowest/40 p-2 rounded">
+<p class="text-[9px] text-slate-500 uppercase">Degree</p>
+<p class="text-sm font-bold text-primary">142</p>
+</div>
+<div class="bg-surface-container-lowest/40 p-2 rounded">
+<p class="text-[9px] text-slate-500 uppercase">Stability</p>
+<p class="text-sm font-bold text-tertiary">0.98</p>
+</div>
+<div class="bg-surface-container-lowest/40 p-2 rounded">
+<p class="text-[9px] text-slate-500 uppercase">Type</p>
+<p class="text-sm font-bold text-secondary">Enzyme</p>
+</div>
+</div>
+</div>
+<!-- Content Area -->
+<div class="flex-1 overflow-y-auto p-6 space-y-6">
+<!-- Genomic Context -->
+<section>
+<h3 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">genetics</span> Associated Genes
+                    </h3>
+<div class="space-y-2">
+<div class="flex items-center justify-between p-2 bg-surface-container-low/30 rounded border border-outline-variant/10">
+<span class="text-sm font-headline">RAF1</span>
+<span class="text-[10px] text-tertiary">Strong Linkage</span>
+</div>
+<div class="flex items-center justify-between p-2 bg-surface-container-low/30 rounded border border-outline-variant/10">
+<span class="text-sm font-headline">MEK1</span>
+<span class="text-[10px] text-primary">Downstream</span>
+</div>
+<div class="flex items-center justify-between p-2 bg-surface-container-low/30 rounded border border-outline-variant/10">
+<span class="text-sm font-headline">KRAS</span>
+<span class="text-[10px] text-secondary">Co-Mutation</span>
+</div>
+</div>
+</section>
+<!-- Drug Affinities -->
+<section>
+<h3 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">biotech</span> Drug Affinities
+                    </h3>
+<div class="h-32 w-full bg-surface-container-lowest/30 rounded relative overflow-hidden group">
+<img class="w-full h-full object-cover opacity-30 grayscale group-hover:grayscale-0 transition-all duration-500" data-alt="microscopic view of chemical crystalline structure with vibrant blue and violet refractions" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD59iAxEuEYhcjvZrZvU8u5cZydakkHtzAq8X7sxGICy_10K76JM_OglVcDnXPYGbHNT2PVLhCfX8tmMHBkGIZ7hhTVYwmiXBsx0QP7gAsIuIhsgir6c-TSkzOVIrLL-ZaJkvqDv_zcp2t5O9MB4N4re3VIkZ0y8KcmZA-ZNQs9qMptiwXGDKP5Ljkp4tbkvWwIbJNtSYEL4kGqCvDD7GHS6LGJiAwU2vbTEsDlAFy7OvGp7u8qhhYMpXcDZ-vrr_8S0lTkth6lRQ"/>
+<div class="absolute inset-0 p-4 flex flex-col justify-end">
+<div class="flex justify-between items-end">
+<div>
+<p class="text-xs text-on-surface font-bold">Vemurafenib (PLX4032)</p>
+<p class="text-[10px] text-slate-400">IC50: 31 nM</p>
+</div>
+<span class="material-symbols-outlined text-tertiary" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Interaction Status -->
+<div class="mt-auto pt-4 border-t border-outline-variant/15 flex items-center justify-between">
+<span class="text-[10px] text-slate-500 font-label italic">Sequencing node dynamics...</span>
+<div class="flex gap-1">
+<span class="w-1 h-1 rounded-full bg-tertiary animate-pulse"></span>
+<span class="w-1 h-1 rounded-full bg-tertiary animate-pulse delay-75"></span>
+<span class="w-1 h-1 rounded-full bg-tertiary animate-pulse delay-150"></span>
+</div>
+</div>
+</div>
+<!-- Actions Footer -->
+<div class="p-6 bg-slate-900/80 grid grid-cols-2 gap-4">
+<button class="flex items-center justify-center gap-2 py-3 px-4 border border-primary/30 text-primary font-bold text-xs rounded hover:bg-primary/10 transition-colors uppercase tracking-widest">
+<span class="material-symbols-outlined text-sm">download</span> Export
+                </button>
+<button class="flex items-center justify-center gap-2 py-3 px-4 gradient-primary text-on-primary font-bold text-xs rounded shadow-lg shadow-primary/20 uppercase tracking-widest">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">bookmark</span> Quick Save
+                </button>
+</div>
+</div>
+<!-- Canvas Controls (Bottom Left) -->
+<div class="absolute bottom-6 left-6 z-20 flex gap-2">
+<button class="w-10 h-10 glass-panel border border-outline-variant/15 flex items-center justify-center rounded-lg text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">add</span>
+</button>
+<button class="w-10 h-10 glass-panel border border-outline-variant/15 flex items-center justify-center rounded-lg text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">remove</span>
+</button>
+<button class="w-10 h-10 glass-panel border border-outline-variant/15 flex items-center justify-center rounded-lg text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">center_focus_weak</span>
+</button>
+<div class="h-10 w-px bg-outline-variant/20 mx-2"></div>
+<button class="h-10 px-4 glass-panel border border-outline-variant/15 flex items-center gap-2 rounded-lg text-slate-400 hover:text-primary transition-colors font-bold text-xs uppercase tracking-widest">
+<span class="material-symbols-outlined text-sm">3d_rotation</span> 3D Mode
+            </button>
+</div>
+<!-- System HUD (Bottom Center) -->
+<div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-6 px-6 py-2 glass-panel rounded-full border border-outline-variant/10 text-[10px] text-slate-400 tracking-[0.2em] uppercase">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                RENDER: QUANTUM-LATENCY 4ms
+            </div>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                ENTITIES: 12,482
+            </div>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                ACTIVE QUERY: BRAF_OMEGA_CLUSTER
+            </div>
+</div>
+</main>
+</body></html>

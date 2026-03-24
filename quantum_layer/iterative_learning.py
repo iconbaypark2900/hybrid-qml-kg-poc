@@ -395,45 +395,90 @@ class QuantumGuidedEmbedding:
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_val: np.ndarray,
-        y_val: np.ndarray
+        y_val: np.ndarray,
+        train_df: Optional['pd.DataFrame'] = None
     ) -> Dict:
         """
         Run full iterative refinement loop.
+        
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            X_val: Validation features
+            y_val: Validation labels
+            train_df: Training DataFrame with source/target columns (optional but recommended)
+                     Required for extracting hard pairs for embedding refinement
+        
+        Returns:
+            Dictionary with refinement_history and final_embeddings
         """
         import pandas as pd
-        
+
         history = []
-        
+
         for iter_num in range(self.refinement_iters):
             logger.info(f"\n=== Refinement Iteration {iter_num + 1}/{self.refinement_iters} ===")
-            
+
             # Identify hard examples
             hard_indices = self.identify_hard_examples(X_train, y_train)
-            
+
             if len(hard_indices) == 0:
                 logger.info("No more hard examples. Stopping early.")
                 break
-            
-            # Extract hard pairs (assuming X contains pair information)
-            # This is simplified - you'd need to track source/target indices
-            hard_pairs = []  # TODO: extract from X_train[hard_indices]
+
+            # Extract hard pairs from train_df using hard_indices
+            hard_pairs = []
+            if train_df is not None and len(train_df) > 0:
+                # Get source/target column names (handle both string IDs and integer IDs)
+                cols = train_df.columns
+                cols_lower = [c.lower() for c in cols]
+                
+                # Prefer 'source'/'target' (string entity IDs) over 'source_id'/'target_id' (integer IDs)
+                src_col = None
+                tgt_col = None
+                
+                if 'source' in cols_lower:
+                    src_col = cols[cols_lower.index('source')]
+                elif 'source_id' in cols_lower:
+                    src_col = cols[cols_lower.index('source_id')]
+                
+                if 'target' in cols_lower:
+                    tgt_col = cols[cols_lower.index('target')]
+                elif 'target_id' in cols_lower:
+                    tgt_col = cols[cols_lower.index('target_id')]
+                
+                if src_col and tgt_col:
+                    hard_df = train_df.iloc[hard_indices]
+                    # Extract as list of (source, target) tuples
+                    hard_pairs = list(zip(hard_df[src_col].values, hard_df[tgt_col].values))
+                    logger.info(f"Extracted {len(hard_pairs)} hard pairs for refinement")
+                else:
+                    logger.warning(f"Could not find source/target columns in train_df. Available: {list(cols)}")
+            else:
+                logger.warning("train_df not provided - cannot extract hard pairs for refinement")
+
             y_hard = y_train[hard_indices]
-            
-            # Refine embeddings
-            # self.refine_for_hard_examples(hard_pairs, y_hard)  # Commented - needs pair extraction
-            
+
+            # Refine embeddings if we have hard pairs
+            if len(hard_pairs) > 0:
+                logger.info(f"Refining embeddings for {len(hard_pairs)} hard examples...")
+                self.refine_for_hard_examples(hard_pairs, y_hard)
+            else:
+                logger.info("Skipping refinement - no hard pairs extracted")
+
             # Evaluate on validation set
             y_val_proba = self.quantum_model.predict_proba(X_val)
             val_pr_auc = average_precision_score(y_val, y_val_proba)
-            
+
             logger.info(f"Validation PR-AUC: {val_pr_auc:.4f}")
-            
+
             history.append({
                 'iteration': iter_num,
                 'num_hard_examples': len(hard_indices),
+                'num_hard_pairs_extracted': len(hard_pairs),
                 'val_pr_auc': float(val_pr_auc)
             })
-        
+
         return {
             'refinement_history': history,
             'final_embeddings': self.classical_embedder.embeddings

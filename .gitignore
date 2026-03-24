@@ -1,4 +1,6 @@
-# Python
+# Hybrid QML-KG PoC — see README for layout
+
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
@@ -16,30 +18,52 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
+pip-wheel-metadata/
+__pypackages__/
 
-# Virtual environments
+# --- Virtual environments ---
 .venv/
 venv/
 ENV/
 env/
 .env
 .env.working
+.env.local
+.python-version
 
-# Jupyter Notebook
+# --- Test / coverage / static analysis ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.cover
+nosetests.xml
+.dmypy.json
+dmypy.json
+
+# --- Jupyter ---
 .ipynb_checkpoints
 
-# IDE
+# --- IDE / editors ---
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+*.code-workspace
+.ropeproject
 
-# OS
+# --- OS ---
 .DS_Store
 .DS_Store?
 ._*
@@ -48,18 +72,29 @@ env/
 ehthumbs.db
 Thumbs.db
 
-# Project specific
+# --- Cursor / local agents (commit .cursor/rules/ if you want them shared) ---
+.cursor/debug.log
+.cursor/plans/
+.claude/
+
+# --- Secrets & cloud ---
+qiskitrc
+ibm_quantum_credentials.json
+*.pem
+
+# --- Project artifacts (large / reproducible) ---
 *.log
 *.tmp
+*.bak
+*.orig
 temp/
 tmp/
 cache/
 
-# IBM Quantum credentials
-qiskitrc
-ibm_quantum_credentials.json
+# Pipeline outputs, predictions, Optuna DBs, experiment history
+results/
 
-# Model files and data
+# Heavy inputs & trained artifacts (adjust if you track sample data)
 *.pkl
 *.joblib
 *.h5
@@ -68,7 +103,13 @@ models/
 data/
 datasets/
 
-# Quantum circuit outputs
+# Debug traces (NDJSON, etc.)
+debug_logs/
+
+# --- ML / experiment trackers (created by tooling when used) ---
+wandb/
+mlruns/
+
+# --- Quantum ---
 *.qasm
 circuits/
-results/

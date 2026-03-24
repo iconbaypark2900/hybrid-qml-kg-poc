@@ -1,6 +1,6 @@
 # Full requirements for Hugging Face Spaces: dashboard + run benchmarks in-Space.
 # Heavier build (~15–25 min); use "CPU basic" or "CPU up to 2" if build OOMs.
-# See DEPLOY_HUGGINGFACE.md.
+# See docs/deployment/DEPLOY_HUGGINGFACE.md.
 
 # Dashboard (same as slim)
 streamlit>=1.32.0

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>QuantumBio Synth - Experiment Analysis</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-error": "#690005",
+              "on-secondary-fixed-variant": "#5516be",
+              "on-secondary-fixed": "#23005c",
+              "error-container": "#93000a",
+              "on-primary-fixed-variant": "#004c69",
+              "on-tertiary-fixed-variant": "#005047",
+              "surface-variant": "#2d3449",
+              "secondary-container": "#571bc1",
+              "surface-container-low": "#131b2e",
+              "error": "#ffb4ab",
+              "on-primary-container": "#008abb",
+              "tertiary-container": "#001c18",
+              "surface-bright": "#31394d",
+              "on-primary-fixed": "#001e2c",
+              "on-surface-variant": "#c6c6cd",
+              "on-primary": "#00354a",
+              "tertiary-fixed-dim": "#3cddc7",
+              "inverse-on-surface": "#283044",
+              "secondary-fixed": "#e9ddff",
+              "surface": "#0b1326",
+              "on-tertiary-fixed": "#00201c",
+              "primary-fixed": "#c4e7ff",
+              "primary-fixed-dim": "#7bd0ff",
+              "surface-tint": "#7bd0ff",
+              "on-error-container": "#ffdad6",
+              "on-secondary": "#3c0091",
+              "tertiary-fixed": "#62fae3",
+              "background": "#0b1326",
+              "surface-container-lowest": "#060e20",
+              "on-surface": "#dae2fd",
+              "on-secondary-container": "#c4abff",
+              "surface-container-highest": "#2d3449",
+              "secondary-fixed-dim": "#d0bcff",
+              "secondary": "#d0bcff",
+              "surface-dim": "#0b1326",
+              "primary": "#7bd0ff",
+              "outline": "#909097",
+              "tertiary": "#3cddc7",
+              "on-tertiary": "#003731",
+              "inverse-surface": "#dae2fd",
+              "surface-container": "#171f33",
+              "on-background": "#dae2fd",
+              "inverse-primary": "#00668a",
+              "on-tertiary-container": "#009182",
+              "primary-container": "#001a27",
+              "surface-container-high": "#222a3d",
+              "outline-variant": "#45464d"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        background-color: #0b1326;
+        color: #dae2fd;
+        font-family: 'Inter', sans-serif;
+      }
+      .glass-panel {
+        background: rgba(45, 52, 73, 0.6);
+        backdrop-filter: blur(20px);
+      }
+      .gradient-button {
+        background: linear-gradient(135deg, #7bd0ff 0%, #008abb 100%);
+      }
+    </style>
+</head>
+<body class="flex min-h-screen">
+<!-- SideNavBar -->
+<aside class="h-screen w-64 left-0 top-0 fixed bg-slate-900 flex flex-col py-6 px-4 z-40 hidden md:flex">
+<div class="text-lg font-bold text-sky-400 mb-8 font-headline">Core Terminal</div>
+<div class="flex flex-col gap-1 flex-grow">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all font-body text-sm antialiased group" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all font-body text-sm antialiased group" href="#">
+<span class="material-symbols-outlined" data-icon="biotech">biotech</span>
+<span>Simulation</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all font-body text-sm antialiased group" href="#">
+<span class="material-symbols-outlined" data-icon="dna">genetics</span>
+<span>Genomics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all font-body text-sm antialiased group" href="#">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+<span>Library</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-all font-body text-sm antialiased group" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span>Archive</span>
+</a>
+</div>
+<div class="mt-auto flex flex-col gap-4 border-t border-slate-800/30 pt-6">
+<button class="gradient-button text-primary-container font-bold py-2 rounded-md transition-transform active:scale-95">
+                New Experiment
+            </button>
+<div class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-3 py-1 text-slate-500 hover:text-sky-300 text-xs" href="#">
+<span class="material-symbols-outlined text-sm" data-icon="help_outline">help_outline</span>
+<span>Support</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1 text-slate-500 hover:text-sky-300 text-xs" href="#">
+<span class="material-symbols-outlined text-sm" data-icon="sensors">sensors</span>
+<span>System Status</span>
+</a>
+</div>
+</div>
+</aside>
+<div class="flex flex-col flex-1 md:ml-64">
+<!-- TopAppBar -->
+<header class="bg-slate-950/60 backdrop-blur-xl flex justify-between items-center w-full px-6 h-16 fixed top-0 z-50 shadow-[0_10px_40px_rgba(218,226,253,0.06)]">
+<div class="flex items-center gap-8">
+<div class="text-xl font-bold text-sky-400 font-headline tracking-tight">QuantumBio Synth</div>
+<nav class="hidden lg:flex items-center gap-6">
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-body text-sm" href="#">Molecular Design</a>
+<a class="text-slate-400 hover:text-sky-300 transition-colors font-body text-sm" href="#">Knowledge Graph</a>
+<a class="text-sky-400 border-b-2 border-sky-400 pb-1 font-body text-sm" href="#">Experiment Analysis</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-3 text-slate-400">
+<button class="hover:bg-slate-800/50 p-2 rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="hover:bg-slate-800/50 p-2 rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+</div>
+<div class="h-8 w-px bg-slate-800 mx-2"></div>
+<div class="flex items-center gap-3">
+<button class="bg-slate-800 text-sky-400 text-sm px-4 py-1.5 rounded-md hover:bg-slate-700 transition-colors active:scale-95">Quick Save</button>
+<img class="w-8 h-8 rounded-full border border-sky-400/30 object-cover" data-alt="Researcher Profile Avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOeqLbTIDFiedF00Rov5fA59IjcT04fQgTIS1-6LgMgrag6UmB7Zuh0Y5Jgh8UyrTPrX4Z1nucAvXSaB_hBYZXMusVyQJr4cr0Y8zvhWwGVH_Zuv74Yo-GSlSJEbBAdq78xy3PtdETpsfW5qv8mMB8cOHtE739ip3x1knkHrpTiUDy3GpaNzcWbuCrwcpNDTNwNe4B6ztq0uWI6Lb_Mke13AzPXYiXzTLEPDkOacwkr6wER3mzmX7xDEl0KdPWxBVo2ebVBGHeHw"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="mt-16 p-8 flex flex-col gap-8 max-w-7xl mx-auto w-full">
+<!-- Hero Header Section -->
+<section class="flex flex-col md:flex-row justify-between items-end gap-6 border-b border-outline-variant/15 pb-8">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2 text-tertiary text-sm font-label font-medium">
+<span class="material-symbols-outlined text-sm" data-icon="biotech">biotech</span>
+<span>ANALYSIS SESSION: RX-992-BETA</span>
+</div>
+<h1 class="text-4xl md:text-5xl font-headline font-bold text-on-surface">Simulation Outcome Report</h1>
+<p class="text-on-surface-variant max-w-2xl leading-relaxed">Detailed probabilistic resolution of the protein-ligand interaction within a high-density quantum compute environment. Run 1,402 completed.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2.5 rounded-md border border-outline/20 text-primary hover:bg-surface-container-high transition-all font-medium text-sm">Export Raw Data</button>
+<button class="gradient-button px-6 py-2.5 rounded-md text-primary-container font-bold transition-transform active:scale-95 text-sm">View Node Topology</button>
+</div>
+</section>
+<!-- AI Insight Box (High Priority) -->
+<section class="glass-panel p-6 rounded-lg border border-primary/20 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-7xl" data-icon="psychology">psychology</span>
+</div>
+<div class="flex items-start gap-4 relative z-10">
+<div class="bg-primary/10 p-3 rounded-lg text-primary">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-primary text-xs font-bold tracking-widest font-headline">AI INSIGHT</span>
+<p class="text-xl font-headline text-on-surface italic">"The current molecular candidate shows high binding affinity but low bioavailability."</p>
+<div class="mt-4 flex flex-wrap gap-4 text-sm text-on-surface-variant">
+<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-tertiary"></span> Affinity: 0.982</span>
+<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-error"></span> Bio-Absorb: 0.142</span>
+<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-secondary"></span> Quantum Entanglement: Stable</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Main Data Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+<!-- Performance Charts Column -->
+<div class="lg:col-span-2 flex flex-col gap-8">
+<!-- Chart Module 1: Success Rates -->
+<div class="bg-surface-container-low p-6 rounded-lg flex flex-col gap-6">
+<div class="flex justify-between items-center">
+<h3 class="text-lg font-headline font-bold">Success Rate vs. Theoretical Limits</h3>
+<span class="text-xs text-outline font-label">UNIT: PROBABILITY Δ</span>
+</div>
+<!-- Visual Mock-up of a high-end data chart -->
+<div class="h-64 flex items-end gap-2 px-2 relative">
+<!-- Theoretical Limit Line -->
+<div class="absolute top-1/4 left-0 w-full border-t border-dashed border-tertiary/40 flex items-center justify-end px-2">
+<span class="text-[10px] text-tertiary font-label -translate-y-3">THEORETICAL CEILING</span>
+</div>
+<!-- Bars -->
+<div class="flex-1 bg-surface-container-highest h-[40%] relative group rounded-t-sm">
+<div class="absolute inset-0 bg-primary opacity-20 group-hover:opacity-40 transition-opacity"></div>
+<div class="absolute bottom-full left-0 w-full text-center pb-2 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Iter_01</div>
+</div>
+<div class="flex-1 bg-surface-container-highest h-[65%] relative group rounded-t-sm">
+<div class="absolute inset-0 bg-primary opacity-30 group-hover:opacity-50 transition-opacity"></div>
+</div>
+<div class="flex-1 bg-surface-container-highest h-[55%] relative group rounded-t-sm">
+<div class="absolute inset-0 bg-primary opacity-25 group-hover:opacity-45 transition-opacity"></div>
+</div>
+<div class="flex-1 bg-surface-container-highest h-[82%] relative group rounded-t-sm border-x border-t border-tertiary/50">
+<div class="absolute inset-0 bg-tertiary opacity-40 group-hover:opacity-60 transition-opacity"></div>
+<div class="absolute -top-6 left-0 w-full text-center text-[10px] text-tertiary font-bold">LATEST</div>
+</div>
+<div class="flex-1 bg-surface-container-highest h-[70%] relative group rounded-t-sm">
+<div class="absolute inset-0 bg-primary opacity-35 group-hover:opacity-55 transition-opacity"></div>
+</div>
+<div class="flex-1 bg-surface-container-highest h-[45%] relative group rounded-t-sm">
+<div class="absolute inset-0 bg-primary opacity-20 group-hover:opacity-40 transition-opacity"></div>
+</div>
+<div class="flex-1 bg-surface-container-highest h-[30%] relative group rounded-t-sm">
+<div class="absolute inset-0 bg-primary opacity-15 group-hover:opacity-35 transition-opacity"></div>
+</div>
+</div>
+<div class="flex justify-between text-[10px] text-outline font-label px-2">
+<span>0.0s OFFSET</span>
+<span>GENOMIC CONVERGENCE PROGRESS</span>
+<span>+4.2ms OFFSET</span>
+</div>
+</div>
+<!-- Detailed Technical Report (Text-Heavy) -->
+<div class="bg-surface-container-low p-6 rounded-lg flex flex-col gap-4">
+<h3 class="text-lg font-headline font-bold">Analysis Decomposition</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="flex flex-col gap-3">
+<h4 class="text-sm font-bold text-sky-400 uppercase tracking-wider">Molecular Mechanics</h4>
+<p class="text-sm text-on-surface-variant leading-relaxed">
+                                    The ligand exhibits a non-standard rotational energy profile around the C-14 axis. Quantum tunneling effects were observed in the hydrogen bonding network of the active site, resulting in a temporary state of hypersensitivity. This suggests that the current folding model under-represents the impact of thermal noise on sub-nanosecond timescales.
+                                </p>
+</div>
+<div class="flex flex-col gap-3">
+<h4 class="text-sm font-bold text-secondary-fixed-dim uppercase tracking-wider">Binding Kinetics</h4>
+<p class="text-sm text-on-surface-variant leading-relaxed">
+                                    Association rates (K<sub>on</sub>) exceeded expectations by 14%, primarily due to the localized charge density of the tertiary amine group. However, dissociation (K<sub>off</sub>) remains problematic, indicating a potential 'molecular trap' scenario that could lead to unintended off-target toxicity in vivo.
+                                </p>
+</div>
+</div>
+<div class="mt-4 p-4 bg-surface-container-lowest rounded border-l-2 border-tertiary/40">
+<span class="text-xs font-bold text-tertiary mb-1 block">METRIC CROSS-VALIDATION</span>
+<p class="text-xs text-on-surface/70 font-mono">
+                                [SYS_LOG] Validation against Dataset Alpha-7: 94.3% correlation. Discrepancy detected in lipid solubility projections. Recommend recalibration of polar surface area algorithms.
+                            </p>
+</div>
+</div>
+</div>
+<!-- Right Sidebar Column -->
+<div class="flex flex-col gap-8">
+<!-- Recommended Next Steps Checklist -->
+<div class="bg-surface-container p-6 rounded-lg border border-outline-variant/20 shadow-xl">
+<h3 class="text-lg font-headline font-bold mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-sky-400" data-icon="task_alt">task_alt</span>
+                            Recommended Next Steps
+                        </h3>
+<div class="flex flex-col gap-4">
+<label class="flex items-start gap-4 group cursor-pointer">
+<div class="mt-1 w-5 h-5 rounded border border-outline/30 flex items-center justify-center group-hover:border-primary transition-colors bg-surface-container-highest">
+<div class="w-2 h-2 bg-primary rounded-sm hidden group-hover:block opacity-40"></div>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-on-surface">Run simulation with variant Beta-4</span>
+<span class="text-[10px] text-outline">Est. Time: 12m | GPU Cluster 4</span>
+</div>
+</label>
+<label class="flex items-start gap-4 group cursor-pointer">
+<div class="mt-1 w-5 h-5 rounded border border-outline/30 flex items-center justify-center group-hover:border-primary transition-colors bg-surface-container-highest">
+<div class="w-2 h-2 bg-primary rounded-sm hidden group-hover:block opacity-40"></div>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-on-surface">Cross-reference with PubMed dataset #402</span>
+<span class="text-[10px] text-outline">Semantic matching enabled</span>
+</div>
+</label>
+<label class="flex items-start gap-4 group cursor-pointer">
+<div class="mt-1 w-5 h-5 rounded border border-outline/30 flex items-center justify-center group-hover:border-primary transition-colors bg-surface-container-highest">
+<div class="w-2 h-2 bg-primary rounded-sm hidden group-hover:block opacity-40"></div>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-on-surface">Adjust quantum gate depth for higher precision</span>
+<span class="text-[10px] text-outline">Required for sub-atomic resolution</span>
+</div>
+</label>
+<label class="flex items-start gap-4 group cursor-pointer">
+<div class="mt-1 w-5 h-5 rounded border border-outline/30 flex items-center justify-center group-hover:border-primary transition-colors bg-surface-container-highest">
+<div class="w-2 h-2 bg-primary rounded-sm hidden group-hover:block opacity-40"></div>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-on-surface">Initiate toxicity screening pre-fetch</span>
+<span class="text-[10px] text-outline">External API dependency</span>
+</div>
+</label>
+</div>
+<button class="w-full mt-8 py-3 bg-surface-container-highest hover:bg-surface-bright transition-colors rounded text-primary text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98]">
+<span class="material-symbols-outlined text-sm" data-icon="play_arrow">play_arrow</span>
+                            EXECUTE SEQUENTIAL PIPELINE
+                        </button>
+</div>
+<!-- Experiment Metadata Stats -->
+<div class="bg-surface-container-low p-6 rounded-lg flex flex-col gap-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-sm text-outline" data-icon="info">info</span>
+<h4 class="text-xs font-bold text-outline uppercase tracking-widest">Metadata Summary</h4>
+</div>
+<div class="flex justify-between items-center py-2 border-b border-outline-variant/10">
+<span class="text-xs text-on-surface-variant">Qubit Coherence</span>
+<span class="text-xs font-mono text-tertiary">99.982%</span>
+</div>
+<div class="flex justify-between items-center py-2 border-b border-outline-variant/10">
+<span class="text-xs text-on-surface-variant">Search Space Size</span>
+<span class="text-xs font-mono">1.2e+18</span>
+</div>
+<div class="flex justify-between items-center py-2 border-b border-outline-variant/10">
+<span class="text-xs text-on-surface-variant">Compute Cost (Nodes)</span>
+<span class="text-xs font-mono">4,102</span>
+</div>
+<div class="flex justify-between items-center py-2">
+<span class="text-xs text-on-surface-variant">Validation Hash</span>
+<span class="text-[10px] font-mono text-outline">0x7B...D0FF</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer-style Action Area -->
+<section class="mt-8 flex flex-col md:flex-row gap-4 items-center justify-between glass-panel p-4 rounded-xl">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary" data-icon="verified_user">verified_user</span>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-bold">Session Finalized</span>
+<span class="text-xs text-outline">Last sync: 2 minutes ago via Satellite Node 01</span>
+</div>
+</div>
+<div class="flex gap-4">
+<button class="px-4 py-2 text-sm font-medium hover:text-primary transition-colors">Archive Session</button>
+<button class="gradient-button px-8 py-2 rounded font-bold text-primary-container text-sm">PROCEED TO NEXT ITERATION</button>
+</div>
+</section>
+</main>
+</div>
+<!-- Mobile Navigation (Responsive Pivot) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full bg-slate-900 flex justify-around items-center py-3 z-50 border-t border-slate-800">
+<button class="flex flex-col items-center gap-1 text-slate-500 hover:text-sky-400">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="text-[10px]">Dashboard</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-sky-400">
+<span class="material-symbols-outlined" data-icon="biotech">biotech</span>
+<span class="text-[10px]">Analysis</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-slate-500">
+<span class="material-symbols-outlined" data-icon="dna">genetics</span>
+<span class="text-[10px]">Genomics</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-slate-500">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+<span class="text-[10px]">Library</span>
+</button>
+</nav>
+</body></html>

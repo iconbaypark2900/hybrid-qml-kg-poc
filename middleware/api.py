@@ -869,6 +869,14 @@ def _load_hetionet():
         name_map = dict(zip(ndf["id"], ndf["name"]))
         kind_map = dict(zip(ndf["id"], ndf["kind"]))
 
+    # Auto-download edges if missing (uses kg_loader's multi-mirror logic)
+    if not os.path.exists(edges_sif):
+        try:
+            from kg_layer.kg_loader import download_hetionet_if_missing
+            edges_sif = download_hetionet_if_missing(data_dir)
+        except Exception as _dl_err:
+            logger.warning(f"Could not auto-download Hetionet edges: {_dl_err}")
+
     edf = None
     if os.path.exists(edges_sif):
         edf = pd.read_csv(edges_sif, sep="\t")

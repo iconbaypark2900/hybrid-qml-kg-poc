@@ -97,12 +97,31 @@ results/
 
 # Heavy inputs & trained artifacts (adjust if you track sample data)
 *.pkl
-*.joblib
 *.h5
 *.hdf5
-models/
-data/
 datasets/
+
+# Ignore data dir contents by default; commit only small tracked assets
+data/*
+!data/hetionet-v1.0-nodes.tsv
+!data/hetionet_nodes_metadata.csv
+!data/entity_embeddings.npy
+!data/entity_ids.json
+!data/complex_128d_entity_embeddings.npy
+!data/complex_128d_entity_ids.json
+!data/complex_256d_entity_embeddings.npy
+!data/complex_256d_entity_ids.json
+!data/rotate_128d_entity_embeddings.npy
+!data/rotate_128d_entity_ids.json
+!data/rotate_256d_entity_embeddings.npy
+!data/rotate_256d_entity_ids.json
+!data/rotate_512d_entity_embeddings.npy
+!data/rotate_512d_entity_ids.json
+
+# Allow trained model artifacts needed by the API
+models/*
+!models/classical_logisticregression.joblib
+!models/scaler.joblib
 
 # Debug traces (NDJSON, etc.)
 debug_logs/

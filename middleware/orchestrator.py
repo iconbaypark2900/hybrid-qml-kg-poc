@@ -46,12 +46,14 @@ class LinkPredictionOrchestrator:
         # Initialize embedder (read-only mode)
         self.embedder = HetionetEmbedder()
         if not self.embedder.load_saved_embeddings():
-            raise RuntimeError("Embeddings not found. Run kg_embedder.py first.")
-        
+            logger.warning("Embeddings not found — orchestrator running in degraded mode.")
+            self.embedder = None
+
         # Load classical model
         self.classical_predictor = ClassicalLinkPredictor()
         if not self.classical_predictor.load_model():
-            raise RuntimeError("Classical model not found. Run classical_baseline/train_baseline.py first.")
+            logger.warning("Classical model not found — orchestrator running in degraded mode.")
+            self.classical_predictor = None
         
         # Load quantum model (if requested)
         self.quantum_predictor = None

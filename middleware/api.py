@@ -166,12 +166,15 @@ async def get_status():
             entity_count=0
         )
     
+    classical_ready = orchestrator.classical_predictor is not None
+    embedder_ready = orchestrator.embedder is not None
+    entity_count = len(orchestrator.embedder.entity_to_id) if embedder_ready and orchestrator.embedder.entity_to_id else 0
     return StatusResponse(
-        status="healthy",
-        orchestrator_ready=True,
-        classical_model_loaded=True,  # Simplified - you could check actual model
-        quantum_model_loaded=False,   # Disabled in orchestrator for now
-        entity_count=len(orchestrator.embedder.entity_to_id) if orchestrator.embedder else 0
+        status="healthy" if (classical_ready and embedder_ready) else "degraded",
+        orchestrator_ready=classical_ready and embedder_ready,
+        classical_model_loaded=classical_ready,
+        quantum_model_loaded=False,
+        entity_count=entity_count,
     )
 
 

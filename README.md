@@ -1,8 +1,7 @@
 ---
 title: Hybrid QML-KG Dashboard
-app_file: benchmarking/dashboard.py
-sdk: streamlit
-sdk_version: "1.32.0"
+sdk: docker
+app_port: 7860
 ---
 
 # Hybrid Quantum-Classical Knowledge Graph Link Prediction

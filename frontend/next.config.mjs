@@ -4,6 +4,17 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ["three", "d3", "chart.js"],
   },
+  async rewrites() {
+    return {
+      // After Next.js pages are checked, fall through to the FastAPI backend
+      fallback: [
+        {
+          source: "/:path*",
+          destination: "http://localhost:8000/:path*",
+        },
+      ],
+    };
+  },
 };
 
 export default nextConfig;

@@ -1,20 +1,31 @@
-FROM node:20-alpine AS base
+FROM python:3.11-slim
 
-RUN npm install -g pnpm
+# Install Node.js 20 + pnpm
+RUN apt-get update && apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g pnpm && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
+# --- Python dependencies ---
+COPY requirements-huggingface.txt ./
+RUN pip install --no-cache-dir fastapi uvicorn[standard] && \
+    pip install --no-cache-dir -r requirements-huggingface.txt
 
-RUN pnpm install --frozen-lockfile
+# --- Next.js build ---
+COPY frontend/package.json frontend/pnpm-lock.yaml ./frontend/
+RUN cd frontend && pnpm install --frozen-lockfile
 
-COPY frontend/ .
+COPY frontend/ ./frontend/
+# NEXT_PUBLIC_API_URL="" → calls go to same origin, Next.js rewrites proxy to FastAPI
+RUN cd frontend && NEXT_PUBLIC_API_URL="" pnpm build
 
-RUN pnpm build
+# --- Copy full project (Python source) ---
+COPY . .
 
 EXPOSE 7860
 
-ENV PORT=7860
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["node_modules/.bin/next", "start", "-p", "7860"]
+# Start FastAPI on 8000 (internal), Next.js on 7860 (public)
+CMD ["sh", "-c", "uvicorn middleware.api:app --host 0.0.0.0 --port 8000 & cd frontend && node_modules/.bin/next start -p 7860"]

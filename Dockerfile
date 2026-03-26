@@ -17,4 +17,4 @@ EXPOSE 7860
 ENV PORT=7860
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["pnpm", "start", "--", "-p", "7860"]
+CMD ["node_modules/.bin/next", "start", "-p", "7860"]

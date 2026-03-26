@@ -1,6 +1,6 @@
 # Frontend & UI/UX upgrade
 
-This folder documents how the **Next.js** UI (planned), **FastAPI** backend (`middleware/api.py`), **data pipelines** (`scripts/run_optimized_pipeline.py` and related), and **Stitch mockups** fit together.
+This folder documents the **Next.js** UI (`frontend/`), **FastAPI** backend (`middleware/api.py`), **data pipelines** (`scripts/run_optimized_pipeline.py` and related), and **Stitch mockups**.
 
 | Document | Purpose |
 |----------|---------|
@@ -10,13 +10,15 @@ This folder documents how the **Next.js** UI (planned), **FastAPI** backend (`mi
 | [PIPELINE_UI_FLOW.md](PIPELINE_UI_FLOW.md) | User journeys: which screens consume which pipeline outputs |
 | [../planning/FRONTEND_ROLLOUT_PLAN.md](../planning/FRONTEND_ROLLOUT_PLAN.md) | Phased rollout: workstreams, checkpoints, tests, definition of done |
 
-**Related:** system-level design remains in [../ARCHITECTURE.md](../ARCHITECTURE.md). The Streamlit app at `benchmarking/dashboard.py` is the current dashboard until the Next.js app reaches parity.
+**Related:** system-level design remains in [../ARCHITECTURE.md](../ARCHITECTURE.md). The Streamlit app at `benchmarking/dashboard.py` is kept for internal/legacy use.
 
-## Quick start (when `frontend/` exists)
+## Quick start
 
-1. **API:** from repo root, `uvicorn middleware.api:app --reload --host 0.0.0.0 --port 8000`
-2. **Next.js:** `cd frontend && pnpm dev` (or `npm run dev`) with `NEXT_PUBLIC_API_URL=http://localhost:8000`
-3. **Pipeline (CLI):** `python scripts/run_optimized_pipeline.py` — see [.cursor/rules/pipeline-scripts.mdc](../../.cursor/rules/pipeline-scripts.mdc) and [../reference/COMMAND_REFERENCE.md](../reference/COMMAND_REFERENCE.md)
+1. **Install:** `cd frontend && pnpm install`
+2. **One command (recommended):** from repo root, `./scripts/dev_stack.sh` — starts FastAPI on `http://127.0.0.1:8765` and Next.js with `NEXT_PUBLIC_API_URL` set to match (see script for `API_PORT` / `FRONTEND_PORT`).
+3. **Manual:** **API:** from repo root, `uvicorn middleware.api:app --reload --host 127.0.0.1 --port 8765` (or `8000`). **Next.js:** `cd frontend && pnpm dev` — set `NEXT_PUBLIC_API_URL` in `.env.local` to the same host/port as the API (`frontend/.env.example` uses `8765`).
+4. **Production build:** `cd frontend && pnpm build && pnpm start`
+5. **Pipeline (CLI):** `python scripts/run_optimized_pipeline.py` — see [.cursor/rules/pipeline-scripts.mdc](../../.cursor/rules/pipeline-scripts.mdc) and [../reference/COMMAND_REFERENCE.md](../reference/COMMAND_REFERENCE.md)
 
 ## Mockup bundle location
 

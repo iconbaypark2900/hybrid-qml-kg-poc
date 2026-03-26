@@ -97,17 +97,150 @@ curl -s http://localhost:8000/status | jq .
 
 ---
 
+## `GET /runs/latest`
+
+**Response** (`LatestRunResponse`)
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `status` | string | `"ok"` or `"no_results"` |
+| `results_dir` | string | Resolved results directory path |
+| `latest_csv` | object \| null | Parsed row from `latest_run.csv` |
+| `latest_json` | object \| null | Parsed newest `optimized_results_*.json` (includes `ranking`, config, etc.) |
+| `message` | string \| null | Human-readable context |
+
+---
+
+## `POST /jobs/pipeline`
+
+**Request** (`JobCreateRequest`)
+
+| Field | Type | Default | Notes |
+|-------|------|---------|--------|
+| `relation` | string | `"CtD"` | |
+| `embedding_method` | string | `"ComplEx"` | |
+| `embedding_dim` | integer | `64` | |
+| `embedding_epochs` | integer | `100` | |
+| `qml_dim` | integer | `12` | |
+| `qml_feature_map` | string | `"ZZ"` | |
+| `qml_feature_map_reps` | integer | `2` | |
+| `fast_mode` | boolean | `true` | |
+| `skip_quantum` | boolean | `false` | |
+| `run_ensemble` | boolean | `false` | |
+| `ensemble_method` | string | `"weighted_average"` | |
+| `tune_classical` | boolean | `false` | |
+| `results_dir` | string | `"results"` | |
+| `quantum_config_path` | string | `"config/quantum_config.yaml"` | |
+
+**Response** (`JobResponse`) — same schema as `GET /jobs/{id}`.
+
+---
+
+## `GET /jobs/{id}`
+
+**Response** (`JobResponse`)
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `id` | string | 12-char hex |
+| `status` | string | `queued`, `running`, `success`, `failed` |
+| `created_at` | float | Unix epoch |
+| `started_at` | float \| null | |
+| `finished_at` | float \| null | |
+| `exit_code` | integer \| null | |
+| `error` | string \| null | |
+| `log_tail` | string[] \| null | Last ~200 lines of stdout |
+
+---
+
+## `GET /jobs`
+
+**Response:** JSON array of `JobResponse` (most recent first).
+
+---
+
+## `GET /analysis/summary`
+
+**Response** (`AnalysisSummaryResponse`)
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `status` | string | `"ok"` or `"no_results"` |
+| `best_model` | string \| null | |
+| `best_pr_auc` | float \| null | |
+| `model_count` | integer | |
+| `classical_count` | integer | |
+| `quantum_count` | integer | |
+| `ensemble_count` | integer | |
+| `ranking` | array \| null | Same structure as `LatestRunResponse.latest_json.ranking` |
+| `relation` | string \| null | |
+| `run_timestamp` | string \| null | |
+| `message` | string \| null | |
+
+---
+
+## `GET /exports`
+
+**Response** (`ExportListResponse`)
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `status` | string | |
+| `files` | array | `ExportFileInfo[]` |
+
+**ExportFileInfo**
+
+| Field | Type |
+|-------|------|
+| `name` | string |
+| `size_bytes` | integer |
+| `modified` | float |
+
+---
+
+## `GET /exports/{filename}`
+
+Binary download (path traversal protected, allowlisted extensions: `.json`, `.csv`, `.txt`, `.log`).
+
+---
+
+## `GET /kg/stats`
+
+**Response** (`KGStatsResponse`)
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `status` | string | `"ok"` or `"unavailable"` |
+| `entity_count` | integer | |
+| `edge_count` | integer | |
+| `relation_types` | string[] | |
+| `embedding_dim` | integer \| null | |
+| `qml_dim` | integer \| null | |
+| `sample_entities` | string[] | First 20 |
+| `sample_edges` | object[] | First 10, keys: `source`, `metaedge`, `target` |
+
+---
+
+## `GET /quantum/config`
+
+**Response** (`QuantumConfigResponse`)
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `status` | string | |
+| `execution_mode` | string \| null | `simulator`, `heron`, etc. |
+| `backend` | string \| null | e.g. `ibm_torino` |
+| `shots` | integer \| null | |
+| `quantum_model_loaded` | boolean | |
+| `config` | object \| null | Raw YAML as JSON |
+
+---
+
 ## Planned (not in `api.py` yet)
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /runs/latest` | Latest pipeline summary from `results/` |
 | `GET /runs/{id}` | Specific run metadata |
-| `POST /jobs/pipeline` | Start `run_optimized_pipeline.py` as async job |
-| `GET /jobs/{id}` | Job status / logs pointer |
-| `GET /exports` or signed URLs | Safe download of `results/` artifacts |
-
-When implemented, extend this file and [MOCKUP_MAP.md](MOCKUP_MAP.md).
 
 ## See also
 

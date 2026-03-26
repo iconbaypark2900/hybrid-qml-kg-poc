@@ -9,8 +9,8 @@ flowchart LR
     P2[ranked-mechanisms]
     P3[status]
   end
-  subgraph async [Planned]
-    J[jobs pipeline]
+  subgraph async [Async]
+    J["jobs pipeline (planned)"]
     R[runs latest]
   end
   subgraph artifacts [results]
@@ -43,7 +43,7 @@ Exact filenames may vary; see [../reference/EXPECTED_OUTPUTS.md](../reference/EX
 2. User submits parameters aligned with `run_optimized_pipeline.py` flags.
 3. Backend enqueues a **job** (not implemented yet) → subprocess or worker runs the pipeline.
 4. UI polls **job status** → on success, redirects or refreshes **Experiment overview** (`/experiments`).
-5. Overview reads **latest** `optimized_results_*.json` and/or dedicated `GET /runs/latest` (planned).
+5. Overview reads **latest** `optimized_results_*.json` via `GET /runs/latest` (implemented).
 
 **Today:** runs are started via CLI only; the UI must either shell out through a new API or document CLI-only until the job API exists.
 

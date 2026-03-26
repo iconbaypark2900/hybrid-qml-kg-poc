@@ -11,7 +11,7 @@ WORKDIR /app
 
 # --- Python dependencies ---
 COPY requirements-huggingface.txt ./
-RUN pip install --no-cache-dir fastapi uvicorn[standard] && \
+RUN pip install --no-cache-dir fastapi uvicorn[standard] qiskit-algorithms>=0.3 && \
     pip install --no-cache-dir -r requirements-huggingface.txt
 
 # --- Next.js build ---

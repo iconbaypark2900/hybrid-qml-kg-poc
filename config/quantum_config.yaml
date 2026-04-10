@@ -13,5 +13,6 @@ quantum:
     use_dynamical_decoupling: true
 
   ibm_quantum:
-    token: ${IBM_Q_TOKEN}     # pulled from .env
-    instance: ibm-q/open/main # put your hub/group/project here if different
+    token: ${IBM_Q_TOKEN}              # or set IBM_QUANTUM_TOKEN in .env (executor accepts both)
+    channel: ibm_quantum_platform      # override with IBM_QUANTUM_CHANNEL if needed
+    instance: ${IBM_QUANTUM_INSTANCE}  # optional: CRN from Instances page (Open Plan); omit via empty .env

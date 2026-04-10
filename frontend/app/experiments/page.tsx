@@ -58,7 +58,7 @@ export default function ExperimentsPage() {
             <code className="text-on-surface">{getApiBaseUrl()}</code>
           </p>
         </div>
-      ) : data?.status === "no_results" ? (
+      ) : data?.status === "no_results" || data?.status === "empty" ? (
         <div className="rounded-lg border border-outline-variant/15 bg-surface-container-high/60 p-5">
           <p className="text-sm text-on-surface-variant">
             No pipeline results yet. Run the pipeline from the repo root:
@@ -149,8 +149,20 @@ function RunSummary({ data }: { data: LatestRunResponse }) {
 }
 
 function LatestCsvSummary({ csv }: { csv: Record<string, unknown> }) {
-  const entries = Object.entries(csv).filter(
-    ([, v]) => v !== null && v !== undefined && v !== "",
+  const row = csv.row;
+  const flat =
+    row !== null &&
+    row !== undefined &&
+    typeof row === "object" &&
+    !Array.isArray(row)
+      ? (row as Record<string, unknown>)
+      : csv;
+  const entries = Object.entries(flat).filter(
+    ([k, v]) =>
+      k !== "row" &&
+      v !== null &&
+      v !== undefined &&
+      v !== "",
   );
   if (entries.length === 0) return null;
 

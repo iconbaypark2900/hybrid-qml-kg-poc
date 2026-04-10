@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Any, Dict
 import logging
 import os
@@ -10,6 +10,10 @@ import numpy as np
 from .orchestrator import LinkPredictionOrchestrator
 from utils.latest_run import get_latest_run_snapshot
 from .job_manager import job_manager
+from utils.ibm_runtime_verify import (
+    sanitize_quantum_config_for_client,
+    verify_ibm_quantum_runtime,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -304,6 +308,41 @@ class QuantumConfigResponse(BaseModel):
     config: Optional[Dict[str, Any]] = None
 
 
+class QuantumRuntimeVerifyRequest(BaseModel):
+    """
+    Ephemeral IBM Quantum credentials (BYOK). Not persisted; used only for this request.
+    Always use HTTPS in production. Never log this payload.
+    """
+
+    api_token: str = Field(
+        ...,
+        min_length=8,
+        max_length=512,
+        description="IBM Quantum API token from https://quantum.ibm.com/",
+    )
+    instance_crn: Optional[str] = Field(
+        None,
+        max_length=512,
+        description="Optional instance CRN (Open Plan / cloud instance) from Instances page.",
+    )
+    channel: str = Field(
+        "ibm_quantum_platform",
+        max_length=64,
+        description="Qiskit Runtime channel (default: ibm_quantum_platform).",
+    )
+
+
+class QuantumRuntimeVerifyResponse(BaseModel):
+    """Non-sensitive result of a runtime connectivity check."""
+
+    status: str
+    message: str
+    backend_count: int = 0
+    hardware_backend_names: List[str] = []
+    simulator_count: int = 0
+    instances_count: Optional[int] = None
+
+
 @app.get("/kg/stats", response_model=KGStatsResponse)
 async def kg_stats():
     """Knowledge graph statistics from the loaded embedder."""
@@ -370,8 +409,27 @@ async def quantum_config():
         backend=backend,
         shots=shots,
         quantum_model_loaded=quantum_loaded,
-        config=config_data,
+        config=sanitize_quantum_config_for_client(config_data),
     )
+
+
+@app.post(
+    "/quantum/runtime/verify",
+    response_model=QuantumRuntimeVerifyResponse,
+    summary="Verify IBM Quantum credentials (BYOK, ephemeral)",
+)
+async def quantum_runtime_verify(body: QuantumRuntimeVerifyRequest):
+    """
+    Test connectivity to IBM Quantum Runtime with user-supplied token and optional instance CRN.
+    Credentials are **not** stored; they exist only in memory for this call. Use HTTPS in production.
+    """
+    # Never log ``body`` — contains secrets.
+    result = verify_ibm_quantum_runtime(
+        body.api_token,
+        instance_crn=body.instance_crn,
+        channel=body.channel.strip() if body.channel else "ibm_quantum_platform",
+    )
+    return QuantumRuntimeVerifyResponse(**result)
 
 
 class AnalysisSummaryResponse(BaseModel):

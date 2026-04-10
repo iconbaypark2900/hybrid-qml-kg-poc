@@ -368,6 +368,8 @@ QUICK_RUN_COMMAND = (
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from utils.ibm_runtime_verify import verify_ibm_quantum_runtime  # noqa: E402
+
 # Load latest results (ttl=60 so Overview/Results charts update after new runs without requiring Refresh)
 @st.cache_data(ttl=60)
 def load_latest_results():
@@ -802,6 +804,37 @@ if st.sidebar.button("Refresh data", use_container_width=True):
     st.cache_data.clear()
     st.cache_resource.clear()
     st.rerun()
+
+with st.sidebar.expander("IBM Quantum (BYOK test)", expanded=False):
+    st.caption(
+        "API token from quantum.ibm.com — used only in-memory for the check; not stored."
+    )
+    _byok_t = st.text_input("API token", type="password", key="ibm_byok_token")
+    _byok_crn = st.text_input(
+        "Instance CRN (optional)",
+        type="default",
+        key="ibm_byok_crn",
+        placeholder="crn:v1:bluemix:...",
+    )
+    if st.button("Verify Runtime connection", key="ibm_byok_verify", use_container_width=True):
+        if not (_byok_t or "").strip():
+            st.warning("Enter your API token.")
+        else:
+            with st.spinner("Connecting to IBM Quantum Runtime…"):
+                _vr = verify_ibm_quantum_runtime(
+                    _byok_t.strip(),
+                    instance_crn=(_byok_crn or "").strip() or None,
+                )
+            if _vr.get("status") == "ok":
+                st.success(_vr.get("message", "OK"))
+                st.metric("Total backends", _vr.get("backend_count", 0))
+                if _vr.get("hardware_backend_names"):
+                    st.caption(
+                        "Sample hardware: "
+                        + ", ".join(_vr["hardware_backend_names"][:8])
+                    )
+            else:
+                st.error((_vr.get("message") or "Failed")[:800])
 
 # ============================================================================
 # PAGE 1: THE PROBLEM

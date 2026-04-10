@@ -153,6 +153,37 @@ export function fetchQuantumConfig(): Promise<QuantumConfigResponse> {
   return apiFetch<QuantumConfigResponse>("/quantum/config");
 }
 
+// ---------- /quantum/runtime/verify (BYOK — ephemeral, never stored server-side) ----------
+
+export interface QuantumRuntimeVerifyRequest {
+  api_token: string;
+  instance_crn?: string;
+  channel?: string;
+}
+
+export interface QuantumRuntimeVerifyResponse {
+  status: string;
+  message: string;
+  backend_count: number;
+  hardware_backend_names: string[];
+  simulator_count: number;
+  instances_count: number | null;
+}
+
+export function verifyQuantumRuntime(
+  req: QuantumRuntimeVerifyRequest,
+): Promise<QuantumRuntimeVerifyResponse> {
+  return apiFetch<QuantumRuntimeVerifyResponse>("/quantum/runtime/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_token: req.api_token,
+      instance_crn: req.instance_crn?.trim() || undefined,
+      channel: req.channel?.trim() || "ibm_quantum_platform",
+    }),
+  });
+}
+
 // ---------- /analysis ----------
 
 export interface AnalysisSummaryResponse {

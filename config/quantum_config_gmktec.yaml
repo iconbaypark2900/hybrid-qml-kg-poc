@@ -16,4 +16,5 @@ quantum:
 
   ibm_quantum:
     token: ${IBM_Q_TOKEN}
-    instance: ibm-q/open/main
+    channel: ibm_quantum_platform
+    instance: ${IBM_QUANTUM_INSTANCE}

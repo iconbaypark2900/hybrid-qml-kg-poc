@@ -113,6 +113,8 @@ The dashboard uses a **six-page narrative flow**: The Problem, Our Approach, Res
 uvicorn middleware.api:app --reload
 ```
 
+**IBM Quantum (BYOK):** `POST /quantum/runtime/verify` accepts an API token and optional instance CRN for a **one-time** connectivity check; the server does **not** persist credentials. The Next.js **Quantum logic** page and the Streamlit sidebar **IBM Quantum (BYOK test)** expander use this flow. Deploy the API behind **HTTPS** in production.
+
 ---
 
 ## Pipeline Configuration
@@ -261,7 +263,7 @@ hybrid-qml-kg-poc/
 - Python 3.9+
 - 8 GB RAM minimum (16 GB recommended for 16-qubit runs)
 - Optional: NVIDIA GPU with CUDA for accelerated quantum simulation
-- Optional: IBM Quantum account for hardware execution
+- Optional: IBM Quantum account for hardware execution. Copy `.env.example` to `.env`, set `IBM_Q_TOKEN` (dashboard API token), and optionally `IBM_QUANTUM_INSTANCE` (CRN from **Instances**). Verify with `python scripts/test/test_token.py` from the repo root; optionally run `python scripts/setup_ibm_quantum_credentials.py` to persist credentials for `QiskitRuntimeService()`.
 
 ### Dependency Groups
 

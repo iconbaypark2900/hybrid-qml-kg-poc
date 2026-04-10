@@ -82,7 +82,35 @@ class QuantumExecutor:
             return obj
         
         return substitute_env_vars(config)
-    
+
+    @staticmethod
+    def _resolve_ibm_runtime_identity(ibm_cfg: Dict[str, Any]) -> Tuple[str, str, Optional[str]]:
+        """
+        Resolve token, channel, and optional instance (CRN or hub/group/project).
+        Env vars take precedence: IBM_Q_TOKEN/IBM_QUANTUM_TOKEN, IBM_QUANTUM_CHANNEL, IBM_QUANTUM_INSTANCE.
+        Unset optional placeholders like ${IBM_QUANTUM_INSTANCE} become None.
+        """
+        token = os.environ.get("IBM_Q_TOKEN") or os.environ.get("IBM_QUANTUM_TOKEN")
+        if not token:
+            token = ibm_cfg.get("token")
+        if isinstance(token, str):
+            token = token.strip().strip('"').strip("'").strip("{").strip("}")
+        channel = os.environ.get("IBM_QUANTUM_CHANNEL", "").strip()
+        if not channel:
+            channel = ibm_cfg.get("channel", "ibm_quantum_platform")
+        if isinstance(channel, str) and channel.startswith("${"):
+            channel = "ibm_quantum_platform"
+        instance = os.environ.get("IBM_QUANTUM_INSTANCE", "").strip()
+        if not instance:
+            raw = ibm_cfg.get("instance")
+            if isinstance(raw, str):
+                raw = raw.strip()
+                if raw and not (raw.startswith("${") and raw.endswith("}")):
+                    instance = raw
+        if not instance:
+            instance = None
+        return token or "", channel, instance
+
     def _initialize_service(self):
         """Initialize IBM Quantum Runtime service if needed."""
         if self.execution_mode == "heron" or self.execution_mode == "auto":
@@ -93,21 +121,18 @@ class QuantumExecutor:
                     self.execution_mode = "simulator"
                 return
             try:
-                token = self.config['quantum']['ibm_quantum']['token']
-                instance = self.config['quantum']['ibm_quantum'].get('instance')
-                channel = self.config['quantum']['ibm_quantum'].get('channel', 'ibm_quantum_platform')
-                
-                # Additional cleaning of token
-                if isinstance(token, str):
-                    token = token.strip().strip('"').strip("'").strip('{').strip('}')
+                ibm_cfg = self.config.get("quantum", {}).get("ibm_quantum", {})
+                token, channel, instance = self._resolve_ibm_runtime_identity(ibm_cfg)
                 
                 if token and token != "your_actual_token_here":
-                    # Use IBM Quantum Platform (simpler)
-                    self.service = QiskitRuntimeService(
-                        channel="ibm_quantum_platform",
-                        token=token
-                    )
-                    logger.info("✅ Connected to IBM Quantum Platform")
+                    kwargs: Dict[str, Any] = {"channel": channel, "token": token}
+                    if instance:
+                        kwargs["instance"] = instance
+                    self.service = QiskitRuntimeService(**kwargs)
+                    if instance:
+                        logger.info("✅ Connected to IBM Quantum (%s, instance set)", channel)
+                    else:
+                        logger.info("✅ Connected to IBM Quantum (%s)", channel)
                 else:
                     logger.warning("⚠️  IBM Quantum token not configured. Heron mode unavailable.")
                     if self.execution_mode == "heron":

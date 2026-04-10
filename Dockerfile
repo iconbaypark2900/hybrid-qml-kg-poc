@@ -27,5 +27,5 @@ COPY . .
 
 EXPOSE 7860
 
-# Start FastAPI on 8765 (internal, matches dev_stack.sh convention), Next.js on 7860 (public)
-CMD ["sh", "-c", "uvicorn middleware.api:app --host 127.0.0.1 --port 8765 & cd frontend && node_modules/.bin/next start -p 7860"]
+# Start FastAPI on 8000 (internal, matches dev_stack.sh / .env.example), Next.js on 7860 (public)
+CMD ["sh", "-c", "uvicorn middleware.api:app --host 127.0.0.1 --port 8000 & cd frontend && node_modules/.bin/next start -p 7860"]

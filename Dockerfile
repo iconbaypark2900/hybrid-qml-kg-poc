@@ -9,6 +9,20 @@ RUN apt-get update && apt-get install -y curl && \
 
 WORKDIR /app
 
+# --- Environment: Python path + IBM Quantum runtime (mirrors .env.example) ---
+# PYTHONPATH ensures project modules resolve inside the container (consistent
+# with deployment/Dockerfile.cli and deployment/Dockerfile.featuremap).
+# IBM Quantum vars default to empty so they can be injected at runtime via
+# `docker run -e` or docker-compose without baking secrets into the image.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    IBM_Q_TOKEN="" \
+    IBM_QUANTUM_TOKEN="" \
+    IBM_QUANTUM_INSTANCE="" \
+    IBM_QUANTUM_CHANNEL=ibm_quantum_platform \
+    IBM_BACKEND=""
+
 # --- Python dependencies ---
 COPY requirements-huggingface.txt ./
 RUN pip install --no-cache-dir fastapi uvicorn[standard] qiskit-algorithms>=0.3 && \

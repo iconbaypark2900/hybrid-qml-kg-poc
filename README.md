@@ -28,6 +28,16 @@ The best result uses full-graph RotatE embeddings (128D, 200 epochs), hard negat
 
 ## Architecture
 
+### High-level workflow (plain language)
+
+1. **Build a training set** — positive examples are known drug–disease treatments; negatives are pairs not known to be treatments.
+2. **Embed nodes** — each drug and disease gets a numeric fingerprint (**embedding**).
+3. **Pairwise features** — combine the two embeddings for each pair (concat, difference, etc.).
+4. **Train models** — classical models (e.g. logistic regression, forests) plus quantum models (**QSVC**, **VQC**).
+5. **Predict new links** — score unseen pairs for **drug repurposing**.
+
+See the **Results** table at the top of this README for headline PR-AUC numbers; the **Experiment Log** below has variant-by-variant detail.
+
 ```
 Hetionet (CtD)
     |

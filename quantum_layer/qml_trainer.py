@@ -37,9 +37,17 @@ class QMLTrainer:
         config_path: Optional[str] = None,
         config: Optional[Dict] = None
     ):
-        self.results_dir = results_dir
-        self.random_state = random_state
-        os.makedirs(results_dir, exist_ok=True)
+        # Load config if not provided
+        if config is None:
+            if config_path is None:
+                config_path = "config/quantum_layer_config.yaml"
+            config = load_quantum_config(config_path)
+
+        # Use provided parameters or fall back to config
+        self.results_dir = results_dir if results_dir is not None else config["training"]["results_dir"]
+        self.random_state = random_state if random_state is not None else config["model"]["random_state"]
+        self.config = config
+        os.makedirs(self.results_dir, exist_ok=True)
 
     def count_trainable_parameters(self, model) -> int:
         """
@@ -142,9 +150,11 @@ class QMLTrainer:
         Args:
             train_df, test_df: DataFrames with 'source', 'target', 'label'
             embedder: Trained HetionetEmbedder instance
-            qml_config: Dict with QMLLinkPredictor kwargs
-            classical_model_type: Baseline model type
-            quantum_config_path: Path to quantum configuration file
+            qml_config: Dict with QMLLinkPredictor kwargs (overrides config)
+            classical_model_type: Baseline model type (overrides config)
+            quantum_config_path: Path to quantum configuration file (overrides config)
+            config_path: Path to quantum layer config YAML file (default: "config/quantum_layer_config.yaml")
+            config: Configuration dictionary (if provided, config_path is ignored)
 
         Returns:
             Dict with 'classical' and 'quantum' metric dictionaries
@@ -199,10 +209,10 @@ class QMLTrainer:
         logger.info("Preparing features for training...")
         # Classical uses full 128-D features, quantum uses reduced qml_dim features
         X_train_classical = embedder.prepare_link_features(train_df)
-        X_train_qml = embedder.prepare_link_features_qml(train_df)
+        X_train_qml = embedder.prepare_link_features_qml(train_df, mode=qml_features_mode)
         y_train = train_df["label"].values
         X_test_classical = embedder.prepare_link_features(test_df)
-        X_test_qml = embedder.prepare_link_features_qml(test_df)
+        X_test_qml = embedder.prepare_link_features_qml(test_df, mode=qml_features_mode)
         y_test = test_df["label"].values
 
         # Remove any invalid samples (check both classical and qml features)
@@ -210,6 +220,13 @@ class QMLTrainer:
         valid_test = ~np.isnan(X_test_classical).any(axis=1) & ~np.isnan(X_test_qml).any(axis=1)
         X_train_classical, X_train_qml, y_train = X_train_classical[valid_train], X_train_qml[valid_train], y_train[valid_train]
         X_test_classical, X_test_qml, y_test = X_test_classical[valid_test], X_test_qml[valid_test], y_test[valid_test]
+        # Keep aligned dataframes for logging predictions with endpoints
+        try:
+            train_df_valid = train_df.iloc[np.where(valid_train)[0]].copy()
+            test_df_valid = test_df.iloc[np.where(valid_test)[0]].copy()
+        except Exception:
+            train_df_valid = train_df.copy()
+            test_df_valid = test_df.copy()
 
         logger.info(f"Final train set: {X_train_classical.shape[0]} samples (classical: {X_train_classical.shape[1]}D, qml: {X_train_qml.shape[1]}D)")
         logger.info(f"Final test set: {X_test_classical.shape[0]} samples (classical: {X_test_classical.shape[1]}D, qml: {X_test_qml.shape[1]}D)")
@@ -281,8 +298,17 @@ class QMLTrainer:
         if qml_config.get("model_type", "QSVC") == "QSVC":
             # Import qsvc_with_precomputed_kernel from this module
             from .qml_trainer import qsvc_with_precomputed_kernel
+            # Create args-like object from qml_config
+            args_dict = {
+                **qml_config,
+                "qml_dim": qml_config.get("num_qubits", config["model"]["num_qubits"]),
+                "feature_map": qml_config.get("feature_map_type", config["feature_map"]["feature_map_type"]),
+                "feature_map_reps": qml_config.get("feature_map_reps", config["feature_map"]["feature_map_reps"]),
+                "quantum_config": quantum_config_path
+            }
+            args = type('Args', (), args_dict)()
             # For logging, use logger - use QML features for quantum model
-            svc, K_train, K_test = qsvc_with_precomputed_kernel(X_train_qml, y_train, X_test_qml, y_test, type('Args', (), {**qml_config, "quantum_config": quantum_config_path}), logger)
+            svc, K_train, K_test, kernel_obs = qsvc_with_precomputed_kernel(X_train_qml, y_train, X_test_qml, y_test, args, logger)
             # Compute metrics using svc, y_train/y_test, K_train/K_test
             def _metrics_precomputed(K, y, split, svc):
                 y_pred = svc.predict(K)
@@ -299,7 +325,10 @@ class QMLTrainer:
                 )
                 logger.info(f"{split} Metrics:")
                 for k, v in m.items():
-                    logger.info(f"  {k}: {v:.4f}")
+                    if isinstance(v, (int, float)):
+                        logger.info(f"  {k}: {v:.4f}")
+                    else:
+                        logger.info(f"  {k}: {v}")
                 try:
                     from sklearn.metrics import classification_report
                     rpt = classification_report(y, y_pred)
@@ -322,14 +351,49 @@ class QMLTrainer:
             with open(out_json, "w") as f:
                 json.dump(payload, f, indent=2)
             pred_csv = os.path.join(self.results_dir, f"predictions_QSVC_{ts}.csv")
-            pd.DataFrame(
-                {
-                    "split": ["train"] * len(y_train) + ["test"] * len(y_test),
-                    "y_true": np.concatenate([y_train, y_test]),
-                    "y_pred": np.concatenate([yhat_tr, yhat_te]),
-                    "y_score": np.concatenate([yscore_tr, yscore_te]),
-                }
-            ).to_csv(pred_csv, index=False)
+            # Include endpoints for "Findings" (compound/disease pairs)
+            pred_rows = []
+            try:
+                id_to_entity = getattr(embedder, "id_to_entity", {}) or {}
+                def _map_ent(x):
+                    try:
+                        return id_to_entity.get(int(x), None)
+                    except Exception:
+                        return None
+
+                tr = train_df_valid.copy()
+                te = test_df_valid.copy()
+                tr["split"] = "train"
+                te["split"] = "test"
+                tr["y_true"] = y_train
+                te["y_true"] = y_test
+                tr["y_pred"] = yhat_tr
+                te["y_pred"] = yhat_te
+                tr["y_score"] = yscore_tr
+                te["y_score"] = yscore_te
+
+                for dfp in (tr, te):
+                    if "source_id" in dfp.columns:
+                        dfp["source"] = dfp["source_id"].apply(_map_ent)
+                    if "target_id" in dfp.columns:
+                        dfp["target"] = dfp["target_id"].apply(_map_ent)
+
+                out_df = pd.concat([tr, te], ignore_index=True)
+                cols = []
+                for c in ["split", "source_id", "target_id", "source", "target", "label", "y_true", "y_pred", "y_score"]:
+                    if c in out_df.columns:
+                        cols.append(c)
+                out_df[cols].to_csv(pred_csv, index=False)
+            except Exception:
+                # Fallback to metrics-only predictions
+                pd.DataFrame(
+                    {
+                        "split": ["train"] * len(y_train) + ["test"] * len(y_test),
+                        "y_true": np.concatenate([y_train, y_test]),
+                        "y_pred": np.concatenate([yhat_tr, yhat_te]),
+                        "y_score": np.concatenate([yscore_tr, yscore_te]),
+                    }
+                ).to_csv(pred_csv, index=False)
             # convenient "latest"
             latest_json = os.path.join(self.results_dir, "quantum_metrics_latest.json")
             latest_pred = os.path.join(self.results_dir, "predictions_latest.csv")
@@ -342,10 +406,15 @@ class QMLTrainer:
             logger.info(f"Wrote metrics → {out_json}")
             logger.info(f"Wrote predictions → {pred_csv}")
             # Return results in the same format as the rest of the pipeline
-            return {
+            results = {
                 "classical": classical_metrics,
                 "quantum": test_metrics
             }
+            # attach observables for logging
+            if isinstance(kernel_obs, dict):
+                results["observables"] = kernel_obs
+            self.save_results(results, qml_config, quantum_config_path)
+            return results
 
         # --- End QSVC precomputed kernel path ---
 
@@ -377,7 +446,61 @@ class QMLTrainer:
         self.save_results(results, qml_config, quantum_config_path)
         return results
 
-    def save_results(self, results: Dict, qml_config: Dict) -> None:
+    def _get_execution_metadata(self, quantum_config_path: Optional[str]) -> Dict[str, Optional[str]]:
+        """Extract execution metadata from the quantum config."""
+        if not quantum_config_path:
+            return {}
+
+        try:
+            with open(quantum_config_path, "r") as f:
+                quantum_config = yaml.safe_load(f)
+        except Exception as e:
+            logger.warning(f"Could not load quantum config for metadata: {e}")
+            return {}
+
+        # Substitute environment variables
+        def substitute_env_vars(obj):
+            if isinstance(obj, str) and obj.startswith('${') and obj.endswith('}'):
+                var_name = obj[2:-1]
+                value = os.getenv(var_name, obj)
+                if isinstance(value, str):
+                    value = value.strip().strip('"').strip("'").strip('{').strip('}')
+                return value
+            if isinstance(obj, dict):
+                return {k: substitute_env_vars(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [substitute_env_vars(item) for item in obj]
+            return obj
+
+        quantum_config = substitute_env_vars(quantum_config)
+        quantum_block = quantum_config.get("quantum", {})
+        execution_mode = quantum_block.get("execution_mode")
+        noise_model = quantum_block.get("simulator", {}).get("noise_model")
+        heron_block = quantum_block.get("heron", {}) if isinstance(quantum_block.get("heron", {}), dict) else {}
+        simulator_block = quantum_block.get("simulator", {}) if isinstance(quantum_block.get("simulator", {}), dict) else {}
+        backend_label = None
+
+        if execution_mode == "heron":
+            backend_label = quantum_block.get("heron", {}).get("backend")
+        elif execution_mode in ("simulator", "auto", "statevector", "simulator_statevector"):
+            backend_label = "simulator_noisy" if noise_model else "simulator"
+        elif execution_mode:
+            backend_label = execution_mode
+
+        return {
+            "execution_mode": execution_mode,
+            "noise_model": str(noise_model) if noise_model is not None else None,
+            "backend_label": backend_label,
+            "execution_shots": str(heron_block.get("shots")) if execution_mode == "heron" and heron_block.get("shots") is not None else (
+                str(simulator_block.get("shots")) if simulator_block.get("shots") is not None else None
+            ),
+            # Hardware mitigation knobs (best-effort logging; applied by QuantumExecutor if supported)
+            "mitigation_resilience_level": str(heron_block.get("resilience_level")) if execution_mode == "heron" and heron_block.get("resilience_level") is not None else None,
+            "mitigation_optimization_level": str(heron_block.get("optimization_level")) if execution_mode == "heron" and heron_block.get("optimization_level") is not None else None,
+            "mitigation_dynamical_decoupling": str(heron_block.get("use_dynamical_decoupling")) if execution_mode == "heron" and heron_block.get("use_dynamical_decoupling") is not None else None,
+        }
+
+    def save_results(self, results: Dict, qml_config: Dict, quantum_config_path: Optional[str] = None) -> None:
         """
         Save results to CSV for dashboard and benchmarking.
 
@@ -399,6 +522,18 @@ class QMLTrainer:
         for key, value in qml_config.items():
             flat_results[f"qml_{key}"] = str(value)
 
+        # Add execution metadata
+        flat_results.update(self._get_execution_metadata(quantum_config_path))
+
+        # Add run metadata
+        try:
+            import uuid
+            from datetime import datetime, timezone
+            flat_results["run_id"] = str(uuid.uuid4())
+            flat_results["run_timestamp_utc"] = datetime.now(timezone.utc).isoformat()
+        except Exception:
+            pass
+
         # Save as single-row CSV
         df = pd.DataFrame([flat_results])
         csv_path = os.path.join(self.results_dir, "latest_run.csv")
@@ -413,6 +548,52 @@ class QMLTrainer:
         else:
             df_history = df
         df_history.to_csv(history_path, index=False)
+
+# --- Kernel observables (fidelity-style summaries) ---
+def _kernel_observables(K_train: np.ndarray, y_train: np.ndarray) -> Dict[str, float]:
+    """
+    Compute simple fidelity-style observables from a kernel matrix.
+    These are useful for comparing ideal vs noisy vs hardware execution.
+    """
+    y = np.asarray(y_train).astype(int)
+    n = K_train.shape[0]
+    if n == 0:
+        return {}
+    # remove diagonal for pairwise stats
+    mask_offdiag = ~np.eye(n, dtype=bool)
+    K = K_train[mask_offdiag]
+    obs: Dict[str, float] = {
+        "kernel_offdiag_mean": float(np.mean(K)),
+        "kernel_offdiag_std": float(np.std(K)),
+    }
+
+    # class-conditional means (off-diagonal)
+    pos = np.where(y == 1)[0]
+    neg = np.where(y == 0)[0]
+    def _mean_block(idxs_a, idxs_b):
+        if len(idxs_a) == 0 or len(idxs_b) == 0:
+            return float("nan")
+        block = K_train[np.ix_(idxs_a, idxs_b)]
+        # drop diagonal if same set
+        if idxs_a is idxs_b or (len(idxs_a) == len(idxs_b) and np.all(idxs_a == idxs_b)):
+            block = block[~np.eye(block.shape[0], dtype=bool)]
+        return float(np.mean(block)) if block.size else float("nan")
+
+    pospos = _mean_block(pos, pos)
+    negneg = _mean_block(neg, neg)
+    posneg = _mean_block(pos, neg)
+    obs.update({
+        "kernel_pospos_mean": pospos,
+        "kernel_negneg_mean": negneg,
+        "kernel_posneg_mean": posneg,
+    })
+    # separability gap: within-class minus cross-class
+    if not np.isnan(pospos) and not np.isnan(negneg) and not np.isnan(posneg):
+        obs["kernel_gap"] = float(((pospos + negneg) / 2.0) - posneg)
+    else:
+        obs["kernel_gap"] = float("nan")
+
+    return obs
 
 # --- New function for precomputed QSVC kernel grid search ---
 def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
@@ -451,15 +632,557 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
     from qiskit_machine_learning.kernels import FidelityStatevectorKernel, FidelityQuantumKernel
     from qiskit_machine_learning.state_fidelities import ComputeUncompute
 
-    sampler, exec_mode = QuantumExecutor(args.quantum_config).get_sampler()
+    qe = QuantumExecutor(args.quantum_config)
+    sampler, exec_mode = qe.get_sampler()
     if exec_mode in ("statevector", "simulator_statevector"):
         qk = FidelityStatevectorKernel(feature_map=fm)
     else:
-        qk = FidelityQuantumKernel(feature_map=fm, fidelity=ComputeUncompute(sampler=sampler))
+        # Aer (and most backends) can't execute custom composite instructions like "ZZFeatureMap"
+        # unless the circuit is decomposed into basis gates first.
+        fm_exec = fm.decompose(reps=10)
+        qk = FidelityQuantumKernel(feature_map=fm_exec, fidelity=ComputeUncompute(sampler=sampler))
 
-    # Precompute kernels
-    K_train = qk.evaluate(X_train)                 # (n_train, n_train)
-    K_test  = qk.evaluate(X_test, X_train)         # (n_test,  n_train)
+    # ---------------------------
+    # Optional: Nyström kernel approximation (QSVC)
+    # ---------------------------
+    nystrom_m = getattr(args, "nystrom_m", None)
+    n_train = int(getattr(X_train, "shape", [len(X_train)])[0])
+    n_test = int(getattr(X_test, "shape", [len(X_test)])[0])
+    nystrom_enabled = bool(nystrom_m is not None and int(nystrom_m) >= 2 and int(nystrom_m) < n_train)
+    nystrom_landmark_mitigation = bool(getattr(args, "nystrom_landmark_mitigation", True))
+    nystrom_ridge = float(getattr(args, "nystrom_ridge", 1e-6))
+    nystrom_max_pairs = int(getattr(args, "nystrom_max_pairs", 20000))
+
+    def _select_landmarks_stratified(y: np.ndarray, m: int, rng: np.random.Generator) -> np.ndarray:
+        y = np.asarray(y).astype(int)
+        pos = np.where(y == 1)[0]
+        neg = np.where(y == 0)[0]
+        if len(pos) == 0 or len(neg) == 0:
+            return rng.choice(np.arange(len(y)), size=m, replace=False)
+        m_pos = min(len(pos), m // 2)
+        m_neg = min(len(neg), m - m_pos)
+        chosen = []
+        if m_pos > 0:
+            chosen.extend(rng.choice(pos, size=m_pos, replace=False).tolist())
+        if m_neg > 0:
+            chosen.extend(rng.choice(neg, size=m_neg, replace=False).tolist())
+        chosen = list(dict.fromkeys(chosen))  # preserve order, unique
+        # Fill remaining with random from all indices
+        if len(chosen) < m:
+            remaining = np.setdiff1d(np.arange(len(y)), np.array(chosen, dtype=int), assume_unique=False)
+            fill = rng.choice(remaining, size=(m - len(chosen)), replace=False).tolist()
+            chosen.extend(fill)
+        return np.array(chosen[:m], dtype=int)
+
+    def _build_depolarizing_noise_model(p: float):
+        from qiskit_aer.noise import NoiseModel, depolarizing_error
+        nm = NoiseModel()
+        one_qubit_gates = ["x", "y", "z", "h", "s", "t", "sx", "rz", "rx", "ry"]
+        two_qubit_gates = ["cx", "cz", "swap", "ecr"]
+        nm.add_all_qubit_quantum_error(depolarizing_error(p, 1), one_qubit_gates)
+        nm.add_all_qubit_quantum_error(depolarizing_error(p, 2), two_qubit_gates)
+        return nm
+
+    def _entrywise_linear_zne(scales: list[float], mats: list[np.ndarray]) -> np.ndarray:
+        """
+        Fit y = a + b*s per entry and return a (zero-noise intercept at s=0).
+        """
+        S = np.asarray(scales, dtype=float)
+        Y = np.stack([m.reshape(-1) for m in mats], axis=0)  # (k, n_entries)
+        A = np.stack([np.ones_like(S), S], axis=1)          # (k, 2)
+        coef, *_ = np.linalg.lstsq(A, Y, rcond=None)        # (2, n_entries)
+        a = coef[0, :].reshape(mats[0].shape)
+        return np.clip(a, 0.0, 1.0)
+
+    def _eval_block_with_optional_mitigation(XA: np.ndarray, XB: np.ndarray):
+        """
+        Evaluate a kernel block, optionally applying entrywise ZNE (landmark mitigation)
+        when on noisy depolarizing simulator and enabled.
+        """
+        # No mitigation needed/possible in statevector mode
+        if exec_mode in ("statevector", "simulator_statevector"):
+            return qk.evaluate(XA, XB)
+
+        sim_cfg = (qe.config or {}).get("quantum", {}).get("simulator", {})
+        zne_cfg = sim_cfg.get("zne", {}) if isinstance(sim_cfg.get("zne", {}), dict) else {}
+        zne_enabled = bool(zne_cfg.get("enabled", False))
+        noise_spec = sim_cfg.get("noise_model")
+
+        # Only implement scalable ZNE for depolarizing:* noisy simulator
+        can_scale_noise = (
+            exec_mode == "simulator_noisy"
+            and isinstance(noise_spec, str)
+            and noise_spec.strip().startswith("depolarizing:")
+            and zne_enabled
+            and nystrom_landmark_mitigation
+        )
+
+        # Cost guardrail: if too many pairs, skip entrywise mitigation
+        pairs = int(XA.shape[0]) * int(XB.shape[0])
+        if can_scale_noise and pairs > nystrom_max_pairs:
+            return qk.evaluate(XA, XB)
+
+        if not can_scale_noise:
+            return qk.evaluate(XA, XB)
+
+        from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
+        from qiskit_machine_learning.kernels import FidelityQuantumKernel
+        from qiskit_machine_learning.state_fidelities import ComputeUncompute
+        import json as _json
+
+        base_prob = float(noise_spec.strip().split(":", 1)[1])
+        scales = zne_cfg.get("scales", [1.0, 1.5, 2.0])
+        scales = sorted({float(s) for s in scales if float(s) >= 1.0} | {1.0})
+        shots = int(sim_cfg.get("shots", 1024) or 1024)
+
+        mats = []
+        for s in scales:
+            p_s = min(1.0, base_prob * float(s))
+            nm_s = _build_depolarizing_noise_model(p_s)
+            sampler_s = AerSamplerV2(
+                default_shots=shots,
+                options={"backend_options": {"noise_model": nm_s}},
+            )
+            qk_s = FidelityQuantumKernel(feature_map=fm_exec, fidelity=ComputeUncompute(sampler=sampler_s))
+            mats.append(qk_s.evaluate(XA, XB))
+
+        # Record once per run (not per block)
+        try:
+            nonlocal_observables = getattr(_eval_block_with_optional_mitigation, "_obs", None)
+            if nonlocal_observables is None:
+                _eval_block_with_optional_mitigation._obs = {
+                    "nystrom_entrywise_zne_enabled": 1,
+                    "nystrom_entrywise_zne_scales_json": _json.dumps(scales),
+                    "nystrom_entrywise_zne_base_noise_model": str(noise_spec),
+                    "nystrom_entrywise_zne_base_prob": float(base_prob),
+                    "nystrom_entrywise_zne_pairs_cap": int(nystrom_max_pairs),
+                }
+        except Exception:
+            pass
+
+        return _entrywise_linear_zne(scales, mats)
+
+    # Precompute kernels (full or Nyström-approx)
+    if nystrom_enabled:
+        import time as _time
+        t0 = _time.perf_counter()
+        rng = np.random.default_rng(int(getattr(args, "random_state", 42)))
+        m = int(nystrom_m)
+        y_arr = np.asarray(y_train).astype(int)
+        landmark_idx = _select_landmarks_stratified(y_arr, m, rng)
+        X_L = np.asarray(X_train)[landmark_idx]
+
+        log.info(f"[QSVC-precomputed] Using Nyström approximation: m={m}, n_train={n_train}, n_test={n_test}")
+        if nystrom_landmark_mitigation:
+            log.info("[QSVC-precomputed] Landmark mitigation: enabled (entrywise ZNE when scalable)")
+
+        # Evaluate landmark blocks (optionally mitigated)
+        t_mm0 = _time.perf_counter()
+        K_mm = _eval_block_with_optional_mitigation(X_L, X_L)
+        t_mm1 = _time.perf_counter()
+        t_nm0 = _time.perf_counter()
+        K_nm = _eval_block_with_optional_mitigation(np.asarray(X_train), X_L)
+        t_nm1 = _time.perf_counter()
+        t_tm0 = _time.perf_counter()
+        K_tm = _eval_block_with_optional_mitigation(np.asarray(X_test), X_L)
+        t_tm1 = _time.perf_counter()
+
+        # Stabilize and invert K_mm
+        K_mm = np.asarray(K_mm, dtype=float)
+        K_mm = (K_mm + K_mm.T) / 2.0
+        np.fill_diagonal(K_mm, 1.0)
+        W_inv = np.linalg.pinv(K_mm + (nystrom_ridge * np.eye(m)))
+
+        # Nyström approximation
+        K_nm = np.asarray(K_nm, dtype=float)
+        K_tm = np.asarray(K_tm, dtype=float)
+        K_train = K_nm @ W_inv @ K_nm.T
+        K_test = K_tm @ W_inv @ K_nm.T
+
+        # Clean up numerical issues
+        K_train = (K_train + K_train.T) / 2.0
+        np.fill_diagonal(K_train, 1.0)
+        K_train = np.clip(K_train, 0.0, 1.0)
+        K_test = np.clip(K_test, 0.0, 1.0)
+        t1 = _time.perf_counter()
+    else:
+        import time as _time
+        t0 = _time.perf_counter()
+        t_tr0 = _time.perf_counter()
+        K_train = qk.evaluate(X_train)                 # (n_train, n_train)
+        t_tr1 = _time.perf_counter()
+        t_te0 = _time.perf_counter()
+        K_test  = qk.evaluate(X_test, X_train)         # (n_test,  n_train)
+        t_te1 = _time.perf_counter()
+        t1 = _time.perf_counter()
+
+    # Base (raw) kernel observables (from the full kernel used for training)
+    observables = _kernel_observables(K_train, y_train)
+    # Timing + sizes (for professional benchmarking)
+    try:
+        observables.update({
+            "kernel_n_train": int(n_train),
+            "kernel_n_test": int(n_test),
+            "kernel_eval_seconds_total": float(t1 - t0),
+        })
+        if nystrom_enabled:
+            observables.update({
+                "kernel_eval_seconds_K_mm": float(t_mm1 - t_mm0),
+                "kernel_eval_seconds_K_nm": float(t_nm1 - t_nm0),
+                "kernel_eval_seconds_K_tm": float(t_tm1 - t_tm0),
+            })
+        else:
+            observables.update({
+                "kernel_eval_seconds_train": float(t_tr1 - t_tr0),
+                "kernel_eval_seconds_test": float(t_te1 - t_te0),
+            })
+    except Exception:
+        pass
+    if nystrom_enabled:
+        observables.update({
+            "nystrom_enabled": 1,
+            "nystrom_m": int(nystrom_m),
+            "nystrom_ridge": float(nystrom_ridge),
+            "nystrom_max_pairs": int(nystrom_max_pairs),
+            "nystrom_landmark_mitigation_enabled": int(bool(nystrom_landmark_mitigation)),
+            "kernel_source": "nystrom",
+        })
+        # If entrywise ZNE ran, attach its summary diagnostics
+        try:
+            extra = getattr(_eval_block_with_optional_mitigation, "_obs", None)
+            if isinstance(extra, dict):
+                observables.update(extra)
+        except Exception:
+            pass
+    else:
+        observables.update({"nystrom_enabled": 0, "kernel_source": "full"})
+
+    # ---------------------------
+    # Minimal ZNE for observables
+    # ---------------------------
+    # NOTE: This mitigates *scalar observables* derived from the kernel, not the full kernel matrix.
+    # Full-matrix ZNE would require re-evaluating O(n^2) circuits per noise scale.
+    try:
+        sim_cfg = (qe.config or {}).get("quantum", {}).get("simulator", {})
+        zne_cfg = sim_cfg.get("zne", {}) if isinstance(sim_cfg.get("zne", {}), dict) else {}
+        zne_enabled = bool(zne_cfg.get("enabled", False))
+        noise_spec = sim_cfg.get("noise_model")
+
+        if zne_enabled and exec_mode == "simulator_noisy" and isinstance(noise_spec, str) and noise_spec.strip().startswith("depolarizing:"):
+            from quantum_layer.advanced_error_mitigation import PauliPathZNE
+            from qiskit_aer.noise import NoiseModel, depolarizing_error
+            from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
+            import json as _json
+
+            base_prob = float(noise_spec.strip().split(":", 1)[1])
+            scales = zne_cfg.get("scales", [1.0, 1.5, 2.0])
+            # Ensure valid, sorted, includes 1.0 and only uses amplification (>= 1.0)
+            scales = sorted({float(s) for s in scales if float(s) >= 1.0} | {1.0})
+
+            max_train_for_zne = int(zne_cfg.get("max_train_for_zne", 120))
+            sample_size = int(zne_cfg.get("sample_size", 256))
+            shots = int(sim_cfg.get("shots", 1024) or 1024)
+
+            # Readout mitigation config (optional)
+            ro_cfg = sim_cfg.get("readout_mitigation", {}) if isinstance(sim_cfg.get("readout_mitigation", {}), dict) else {}
+            ro_enabled = bool(ro_cfg.get("enabled", False))
+            ro_max_qubits = int(ro_cfg.get("max_qubits", 8))
+            ro_cal_shots = int(ro_cfg.get("calibration_shots", shots))
+            ro_ridge = float(ro_cfg.get("ridge_lambda", 0.01))
+
+            def _bitstr_to_index(bitstr: str) -> int:
+                # Qiskit uses little-endian bitstrings in some contexts; BitArray.get_counts() returns strings
+                # in classical register order. For our calibration/correction, we stay consistent by using
+                # the exact bitstrings returned by get_counts() and mapping via int(bitstr, 2).
+                return int(bitstr, 2)
+
+            def _counts_to_prob_vector(counts: dict, n_bits: int) -> np.ndarray:
+                dim = 2 ** n_bits
+                v = np.zeros(dim, dtype=float)
+                total = float(sum(counts.values())) if counts else 0.0
+                if total <= 0:
+                    return v
+                for b, c in counts.items():
+                    try:
+                        v[_bitstr_to_index(b)] += float(c) / total
+                    except Exception:
+                        continue
+                return v
+
+            def _compute_assignment_matrix(sampler_v2, n_qubits: int) -> np.ndarray:
+                """Build assignment matrix A where A[i,j] = P(meas=i | prep=j)."""
+                from qiskit import QuantumCircuit
+                dim = 2 ** n_qubits
+                circs = []
+                # Prepare each computational basis state |j>
+                for j in range(dim):
+                    qc = QuantumCircuit(n_qubits)
+                    bits = format(j, f"0{n_qubits}b")
+                    for q, bit in enumerate(bits):
+                        if bit == "1":
+                            qc.x(q)
+                    qc.measure_all()
+                    circs.append(qc)
+                res = sampler_v2.run(circs, shots=ro_cal_shots).result()
+                A = np.zeros((dim, dim), dtype=float)
+                for j in range(dim):
+                    counts = res[j].data.meas.get_counts()
+                    A[:, j] = _counts_to_prob_vector(counts, n_qubits)
+                return A
+
+            def _mitigate_prob_vector(p_obs: np.ndarray, A: np.ndarray, lam: float) -> np.ndarray:
+                """Ridge-regularized inversion: p_true = argmin ||A p - p_obs||^2 + lam||p||^2."""
+                dim = A.shape[0]
+                AtA = A.T @ A
+                rhs = A.T @ p_obs
+                p = np.linalg.solve(AtA + lam * np.eye(dim), rhs)
+                p = np.clip(p, 0.0, 1.0)
+                s = float(np.sum(p))
+                if s > 0:
+                    p = p / s
+                return p
+
+            def _compute_uncompute_circuit(feature_map, x_vec: np.ndarray, y_vec: np.ndarray):
+                """Build compute-uncompute circuit U(x) U†(y) then measure all."""
+                from qiskit import QuantumCircuit
+                n = int(feature_map.num_qubits)
+                fm_x = feature_map.assign_parameters({p: float(v) for p, v in zip(feature_map.parameters, x_vec)}, inplace=False)
+                # Bind y (use fresh params by reusing feature_map structure)
+                fm_y = feature_map.assign_parameters({p: float(v) for p, v in zip(feature_map.parameters, y_vec)}, inplace=False)
+                qc = QuantumCircuit(n)
+                qc.compose(fm_x, inplace=True)
+                qc.compose(fm_y.inverse(), inplace=True)
+                qc.measure_all()
+                return qc
+
+            def _estimate_block_mean_posneg(
+                sampler_v2,
+                feature_map_exec,
+                X_pos_arr: np.ndarray,
+                X_neg_arr: np.ndarray,
+                A: Optional[np.ndarray],
+            ) -> float:
+                """Estimate mean fidelity over all pairs in (pos, neg) block."""
+                circs = []
+                for xv in X_pos_arr:
+                    for yv in X_neg_arr:
+                        circs.append(_compute_uncompute_circuit(feature_map_exec, xv, yv))
+                res = sampler_v2.run(circs, shots=shots).result()
+                n_qubits = int(feature_map_exec.num_qubits)
+                dim = 2 ** n_qubits
+                idx0 = 0  # |0...0>
+                vals = []
+                for k in range(len(circs)):
+                    counts = res[k].data.meas.get_counts()
+                    p_obs = _counts_to_prob_vector(counts, n_qubits)
+                    if A is not None:
+                        p_true = _mitigate_prob_vector(p_obs, A, ro_ridge)
+                        vals.append(float(p_true[idx0]))
+                    else:
+                        vals.append(float(p_obs[idx0]))
+                return float(np.mean(vals)) if vals else float("nan")
+
+            def _estimate_block_mean_posneg_raw_and_mitigated(
+                sampler_v2,
+                feature_map_exec,
+                X_pos_arr: np.ndarray,
+                X_neg_arr: np.ndarray,
+                A: Optional[np.ndarray],
+            ) -> Tuple[float, Optional[float]]:
+                """
+                Return (raw_mean, mitigated_mean_or_None).
+                If A is None, mitigated_mean_or_None is None.
+                """
+                circs = []
+                for xv in X_pos_arr:
+                    for yv in X_neg_arr:
+                        circs.append(_compute_uncompute_circuit(feature_map_exec, xv, yv))
+                res = sampler_v2.run(circs, shots=shots).result()
+                n_qubits = int(feature_map_exec.num_qubits)
+                idx0 = 0  # |0...0>
+                raw_vals = []
+                mit_vals = []
+                for k in range(len(circs)):
+                    counts = res[k].data.meas.get_counts()
+                    p_obs = _counts_to_prob_vector(counts, n_qubits)
+                    raw_vals.append(float(p_obs[idx0]))
+                    if A is not None:
+                        p_true = _mitigate_prob_vector(p_obs, A, ro_ridge)
+                        mit_vals.append(float(p_true[idx0]))
+                raw_mean = float(np.mean(raw_vals)) if raw_vals else float("nan")
+                if A is None:
+                    return raw_mean, None
+                mit_mean = float(np.mean(mit_vals)) if mit_vals else float("nan")
+                return raw_mean, mit_mean
+
+            n_train = int(getattr(X_train, "shape", [len(X_train)])[0])
+            if n_train > max_train_for_zne:
+                observables.update({
+                    "zne_enabled": 0,
+                    "zne_skipped_reason": f"train_size({n_train})>max_train_for_zne({max_train_for_zne})",
+                })
+            else:
+                y = np.asarray(y_train).astype(int)
+                pos = np.where(y == 1)[0]
+                neg = np.where(y == 0)[0]
+                if len(pos) == 0 or len(neg) == 0:
+                    observables.update({
+                        "zne_enabled": 0,
+                        "zne_skipped_reason": "need_both_pos_and_neg_labels",
+                    })
+                else:
+                    rng = np.random.default_rng(int(getattr(args, "random_state", 42)))
+                    # Choose small subsets so we can evaluate cross-block kernels cheaply per scale
+                    # Target ~sample_size cross-pairs via |P|*|N|
+                    side = max(2, int(np.sqrt(max(4, sample_size))))
+                    p_k = int(min(len(pos), side))
+                    n_k = int(min(len(neg), side))
+                    pos_sub = rng.choice(pos, size=p_k, replace=False)
+                    neg_sub = rng.choice(neg, size=n_k, replace=False)
+
+                    # Observable to mitigate: cross-class mean kernel similarity (in [0,1])
+                    # We'll estimate the observable via explicit compute-uncompute circuits so we can
+                    # optionally apply readout mitigation.
+                    X_pos = np.asarray(X_train)[pos_sub]
+                    X_neg = np.asarray(X_train)[neg_sub]
+
+                    # Feature map for execution (decomposed so Aer/backends can execute it)
+                    fm_exec = fm.decompose(reps=10)
+                    n_qubits = int(fm_exec.num_qubits)
+
+                    A_assign = None
+                    if ro_enabled and n_qubits <= ro_max_qubits:
+                        try:
+                            # Calibration uses the *same* sampler (same noise model at λ=1.0)
+                            A_assign = _compute_assignment_matrix(sampler, n_qubits)
+                            observables.update({
+                                "readout_mitigation_enabled": 1,
+                                "readout_mitigation_calibration_shots": int(ro_cal_shots),
+                                "readout_mitigation_ridge_lambda": float(ro_ridge),
+                            })
+                        except Exception as e:
+                            observables.update({
+                                "readout_mitigation_enabled": 0,
+                                "readout_mitigation_error": str(e),
+                            })
+                            A_assign = None
+                    else:
+                        if ro_enabled:
+                            observables.update({
+                                "readout_mitigation_enabled": 0,
+                                "readout_mitigation_skipped_reason": f"n_qubits({n_qubits})>max_qubits({ro_max_qubits})" if ro_enabled else None,
+                            })
+
+                    # Base measurement at λ=1.0
+                    base_raw, base_ro = _estimate_block_mean_posneg_raw_and_mitigated(
+                        sampler, fm_exec, X_pos, X_neg, A_assign
+                    )
+                    # We'll keep two streams of measurements:
+                    # - raw: no readout correction
+                    # - ro:  readout corrected (if enabled & calibration succeeded)
+                    measurements_raw = [base_raw]
+                    measurements_ro = [base_ro] if base_ro is not None else None
+
+                    observables.update({
+                        "kernel_posneg_mean_explicit_raw_lambda1": float(base_raw),
+                        "kernel_posneg_mean_explicit_readout_lambda1": float(base_ro) if base_ro is not None else None,
+                    })
+
+                    def _build_depolarizing_noise_model(prob: float) -> NoiseModel:
+                        nm = NoiseModel()
+                        one_qubit_gates = ["x", "y", "z", "h", "s", "t", "sx", "rz", "rx", "ry"]
+                        two_qubit_gates = ["cx", "cz", "swap", "ecr"]
+                        p = float(max(0.0, min(1.0, prob)))
+                        nm.add_all_qubit_quantum_error(depolarizing_error(p, 1), one_qubit_gates)
+                        nm.add_all_qubit_quantum_error(depolarizing_error(p, 2), two_qubit_gates)
+                        return nm
+
+                    # Measurements at amplified noise scales (skip 1.0 which we already have)
+                    for s in scales:
+                        if abs(s - 1.0) < 1e-12:
+                            continue
+                        p_s = min(1.0, base_prob * float(s))
+                        nm_s = _build_depolarizing_noise_model(p_s)
+                        sampler_s = AerSamplerV2(
+                            default_shots=shots,
+                            options={"backend_options": {"noise_model": nm_s}},
+                        )
+                        # NOTE: We *reuse* the λ=1.0 calibration matrix for readout mitigation at all λ.
+                        # This is an approximation but keeps cost bounded.
+                        m_raw, m_ro = _estimate_block_mean_posneg_raw_and_mitigated(
+                            sampler_s, fm_exec, X_pos, X_neg, A_assign
+                        )
+                        measurements_raw.append(m_raw)
+                        if measurements_ro is not None:
+                            measurements_ro.append(m_ro)
+
+                    # Align measurements order with scales (including 1.0)
+                    # We built as [at 1.0] + [for scales != 1.0 in ascending order]
+                    meas_arr_raw = np.array(measurements_raw, dtype=float)
+                    meas_arr_ro = np.array(measurements_ro, dtype=float) if measurements_ro is not None else None
+                    scales_arr = np.array(scales, dtype=float)
+                    if len(meas_arr_raw) != len(scales_arr):
+                        # Extremely defensive: if mismatch, skip rather than corrupt logging
+                        observables.update({
+                            "zne_enabled": 0,
+                            "zne_skipped_reason": f"scale_measurement_mismatch(scales={len(scales_arr)},meas={len(meas_arr_raw)})",
+                        })
+                    else:
+                        zne = PauliPathZNE(use_bayesian_priors=False)
+                        C0_raw, fit_params_raw = zne.fit_noise_model(scales_arr, meas_arr_raw, measurement_errors=None)
+                        C0_ro = None
+                        fit_params_ro = {}
+                        if meas_arr_ro is not None and len(meas_arr_ro) == len(scales_arr):
+                            try:
+                                zne2 = PauliPathZNE(use_bayesian_priors=False)
+                                C0_ro, fit_params_ro = zne2.fit_noise_model(scales_arr, meas_arr_ro, measurement_errors=None)
+                            except Exception:
+                                C0_ro = None
+
+                        # Choose primary C0: prefer readout-mitigated if available
+                        C0_primary = float(C0_ro) if C0_ro is not None else float(C0_raw)
+                        fit_params_primary = fit_params_ro if C0_ro is not None else fit_params_raw
+
+                        # Guardrail: clip C0 into [0,1] and record if we had to.
+                        clipped = False
+                        if not np.isnan(C0_primary):
+                            if C0_primary < 0.0 or C0_primary > 1.0:
+                                clipped = True
+                                C0_primary = float(np.clip(C0_primary, 0.0, 1.0))
+
+                        observables.update({
+                            "zne_enabled": 1,
+                            "zne_method": "pauli_path_zne",
+                            "zne_observable": "kernel_posneg_mean",
+                            "zne_base_noise_model": str(noise_spec),
+                            "zne_base_prob": float(base_prob),
+                            "zne_scales_json": _json.dumps(scales),
+                            "zne_measurements_json_raw": _json.dumps([float(x) for x in meas_arr_raw.tolist()]),
+                            "zne_measurements_json_readout": _json.dumps([float(x) for x in meas_arr_ro.tolist()]) if meas_arr_ro is not None else None,
+                            "zne_kernel_posneg_mean_C0_raw": float(C0_raw),
+                            "zne_kernel_posneg_mean_C0_readout": float(C0_ro) if C0_ro is not None else None,
+                            "zne_kernel_posneg_mean_C0": float(C0_primary),
+                            "zne_C0_clipped": int(clipped),
+                            "zne_fit_error": float(fit_params_primary.get("fit_error", float("nan"))),
+                            "zne_H_bar": float(fit_params_primary.get("H_bar", float("nan"))),
+                            "zne_sigma": float(fit_params_primary.get("sigma", float("nan"))),
+                            "zne_beta": float(fit_params_primary.get("beta", float("nan"))),
+                        })
+                        log.info(
+                            f"[ZNE] mitigated kernel_posneg_mean: raw@1.0={meas_arr_raw[0]:.4f} → C0={float(C0_primary):.4f} "
+                            f"(scales={scales})"
+                        )
+        else:
+            # Keep it explicit in logs/CSV when ZNE isn't configured.
+            if isinstance(sim_cfg, dict) and "zne" in sim_cfg:
+                observables.update({"zne_enabled": 0})
+    except Exception as e:
+        # Never fail the run because mitigation failed; just record it.
+        try:
+            observables.update({"zne_enabled": 0, "zne_error": str(e)})
+        except Exception:
+            pass
+        log.warning(f"[ZNE] skipped due to error: {e}")
 
     # Grid over C quickly
     from sklearn.svm import SVC
@@ -476,7 +1199,7 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
             best = (pr_auc, C, svc)
 
     log.info(f"[QSVC-precomputed] selected C={best[1]} (test PR-AUC={best[0]:.4f})")
-    return best[2], K_train, K_test
+    return best[2], K_train, K_test, observables
 
 if __name__ == "__main__":
     import argparse
@@ -584,7 +1307,7 @@ if __name__ == "__main__":
 
     # 4) QML model
     if args.model_type == "QSVC":
-        svc, K_train, K_test = qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log)
+        svc, K_train, K_test, _kernel_obs = qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log)
         # Compute metrics using svc, y_train/y_test, K_train/K_test and write the same JSON/CSV
         def _metrics_precomputed(K, y, split, svc):
             y_pred = svc.predict(K)
@@ -691,7 +1414,7 @@ if __name__ == "__main__":
 
     # --- Optionally use precomputed kernel grid search for QSVC ---
     if args.model_type == "QSVC" and getattr(args, "use_precomputed_kernel", False):
-        clf, K_train, K_test = qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log)
+        clf, K_train, K_test, _kernel_obs = qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log)
         # For metrics, we need to adapt _metrics to use precomputed kernel
         def _metrics_precomputed(K, y, split, clf):
             y_pred = clf.predict(K)

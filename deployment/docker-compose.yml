@@ -6,7 +6,7 @@ services:
   kg-api:
     build:
       context: ..
-      dockerfile: deployment/Dockerfile.api
+      dockerfile: deployment/Dockerfile.cli
     ports:
       # Host 8780 avoids clashing with other apps using localhost:8000; container still listens on 8000.
       - "8780:8000"

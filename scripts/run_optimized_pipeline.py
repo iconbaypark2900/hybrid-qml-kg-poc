@@ -857,6 +857,8 @@ def main():
                        help="Use K-Fold CV for evaluation (more robust than single split)")
     parser.add_argument("--random_state", type=int, default=42, help="Random seed")
     parser.add_argument("--results_dir", type=str, default="results", help="Results directory")
+    parser.add_argument("--model_dir", type=str, default="models",
+                        help="Directory to write serialized model artifacts for the API")
     parser.add_argument("--quantum_config_path", type=str, default="config/quantum_config.yaml",
                        help="Quantum execution config path")
     parser.add_argument("--gpu", action="store_true",
@@ -1269,18 +1271,17 @@ def main():
     else:
         # Choose training edges: full graph or task-specific
         if args.full_graph_embeddings:
-            logger.info("Using FULL GRAPH embeddings (all relations) for richer context...")
-            # Get all entities involved in task
-            task_entities = list(entity_to_id.keys())
-            # Prepare full graph edges involving these entities
-            embedding_training_edges = prepare_full_graph_for_embeddings(df, task_entities)
-            # CRITICAL: PyKEEN expects entity STRINGS, not integer IDs
-            # The edges already have 'source' and 'target' columns with entity strings
-            # Filter to only edges where both entities are in our task set
-            embedding_training_edges = embedding_training_edges[
-                embedding_training_edges["source"].isin(task_entities) &
-                embedding_training_edges["target"].isin(task_entities)
-            ].copy()
+            logger.info("Using FULL GRAPH embeddings (all compounds + diseases in Hetionet)...")
+            # Expand embedding scope to ALL Compound and Disease entities in the full graph
+            all_compounds = set(df[df["source"].str.startswith("Compound::")]["source"].unique()) | \
+                            set(df[df["target"].str.startswith("Compound::")]["target"].unique())
+            all_diseases = set(df[df["source"].str.startswith("Disease::")]["source"].unique()) | \
+                           set(df[df["target"].str.startswith("Disease::")]["target"].unique())
+            full_task_entities = list(set(entity_to_id.keys()) | all_compounds | all_diseases)
+            logger.info(f"Expanded entity scope: {len(entity_to_id)} CtD → {len(full_task_entities)} "
+                       f"({len(all_compounds)} compounds + {len(all_diseases)} diseases total in graph)")
+            # Get all edges involving any compound or disease (OR condition — no AND filter)
+            embedding_training_edges = prepare_full_graph_for_embeddings(df, full_task_entities)
             logger.info(f"Training embeddings on {len(embedding_training_edges)} edges "
                        f"({embedding_training_edges['metaedge'].nunique()} relation types)")
         else:
@@ -3470,6 +3471,93 @@ def main():
             )
             ens_diff = best_ensemble['pr_auc'] - best_individual
             print(f"📊 Ensemble vs Best Individual: {ens_diff:+.4f}")
+
+    # ------------------------------------------------------------------
+    # SAVE BEST CLASSICAL MODEL FOR API SERVING
+    # ------------------------------------------------------------------
+    # The orchestrator loads classical_best.joblib (priority) or
+    # classical_logisticregression.joblib (fallback) from models/.
+    # Persist whichever classical model ranked highest so the API always
+    # serves the latest trained artifact after a pipeline run.
+    import joblib as _joblib
+
+    _model_dir = getattr(args, "model_dir", "models")
+    os.makedirs(_model_dir, exist_ok=True)
+
+    _best_clf_name = best_classical["name"] if best_classical else None
+    _best_clf_obj  = (models.get(_best_clf_name)
+                      if (_best_clf_name and "models" in dir() and models)
+                      else None)
+    _scaler_obj = (getattr(feature_builder, "scaler", None)
+                   if "feature_builder" in dir() else None)
+
+    if _best_clf_obj is not None and hasattr(_best_clf_obj, "predict_proba"):
+        try:
+            _clf_path = os.path.join(_model_dir, "classical_best.joblib")
+            _joblib.dump(_best_clf_obj, _clf_path)
+            if _scaler_obj is not None:
+                _joblib.dump(_scaler_obj, os.path.join(_model_dir, "classical_best_scaler.joblib"))
+            _meta = {
+                "model_name":      _best_clf_name,
+                "pr_auc":          best_classical.get("pr_auc"),
+                "n_features_in_":  getattr(_best_clf_obj, "n_features_in_", None),
+                "saved_at":        datetime.now().isoformat(),
+                "relation":        getattr(args, "relation", "CtD"),
+                "embedding_method": getattr(args, "embedding_method", "unknown"),
+                "embedding_dim":    getattr(args, "embedding_dim", None),
+                "use_graph_features":  getattr(args, "use_graph_features", False),
+                "use_domain_features": getattr(args, "use_domain_features", False),
+            }
+            with open(os.path.join(_model_dir, "classical_best_meta.json"), "w") as _mf:
+                json.dump(_meta, _mf, indent=2, default=str)
+            logger.info(f"✅ Saved best classical model ({_best_clf_name}, "
+                        f"n_features={_meta['n_features_in_']}) → {_clf_path}")
+        except Exception as _e:
+            logger.warning(f"⚠️  Could not save best classical model artifact: {_e}")
+    else:
+        logger.warning("⚠️  No fitted classical model found to save.")
+
+    # Also train and save a serving-compatible model using the 4-embedding feature scheme
+    # [h, t, |h-t|, h*t] — the same scheme the orchestrator builds at inference time.
+    # This is what ClassicalLinkPredictor.load_model() will actually load.
+    try:
+        from sklearn.linear_model import LogisticRegression as _LR
+        from sklearn.preprocessing import StandardScaler as _SS
+        from kg_layer.kg_embedder import HetionetEmbedder as _HNE
+        import numpy as _np
+
+        _srv_embedder = _HNE(qml_dim=args.qml_dim)
+        if _srv_embedder.load_saved_embeddings():
+            # Sync embedding_dim so the deterministic fallback matches the loaded dim
+            _srv_embedder.embedding_dim = int(_srv_embedder.entity_embeddings.shape[1])
+            _srv_embedder.reduce_to_qml_dim()
+
+            def _build_serving_features(df):
+                rows = []
+                for _, row in df.iterrows():
+                    h = str(row.get("source", row.get("source_id", "")))
+                    t = str(row.get("target", row.get("target_id", "")))
+                    hv = _srv_embedder._get_vec(h, reduced=True)
+                    tv = _srv_embedder._get_vec(t, reduced=True)
+                    rows.append(_np.concatenate([hv, tv, _np.abs(hv - tv), hv * tv]))
+                return _np.array(rows, dtype=_np.float32)
+
+            _X_srv = _build_serving_features(train_df)
+            _y_srv = train_df["label"].values
+            _srv_scaler = _SS()
+            _X_srv_sc = _srv_scaler.fit_transform(_X_srv)
+            _srv_model = _LR(class_weight="balanced", max_iter=1000, random_state=42)
+            _srv_model.fit(_X_srv_sc, _y_srv)
+
+            _joblib.dump(_srv_model,  os.path.join(_model_dir, "classical_serving.joblib"))
+            _joblib.dump(_srv_scaler, os.path.join(_model_dir, "scaler.joblib"))
+            logger.info(f"✅ Saved serving-compatible LR (n_features={_srv_model.n_features_in_}) "
+                        f"→ {os.path.join(_model_dir, 'classical_serving.joblib')}")
+        else:
+            logger.warning("⚠️  Could not load embeddings for serving model — skipping.")
+    except Exception as _e:
+        logger.warning(f"⚠️  Could not save serving model: {_e}")
+    # ------------------------------------------------------------------
 
     # Save results
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")

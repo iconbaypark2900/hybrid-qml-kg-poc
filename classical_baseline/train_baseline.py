@@ -1,6 +1,8 @@
 # classical_baseline/train_baseline.py
 
 import os
+from pathlib import Path
+import yaml
 import numpy as np
 import pandas as pd
 import joblib
@@ -99,10 +101,11 @@ class ClassicalLinkPredictor:
         self.scaler = None
         self.metrics: Dict[str, float] = {}
 
-        os.makedirs(model_dir, exist_ok=True)
+        os.makedirs(self.model_dir, exist_ok=True)
 
         # Initialize model
-        if model_type == "LogisticRegression":
+        lr_config = config.get("logistic_regression", {"max_iter": 1000, "class_weight": "balanced"})
+        if self.model_type == "LogisticRegression":
             self.model = LogisticRegression(
                 random_state=self.random_state,
                 max_iter=lr_config["max_iter"],
@@ -275,16 +278,48 @@ class ClassicalLinkPredictor:
     def load_model(self) -> bool:
         """
         Load model and scaler from disk.
+
+        Search order (first compatible match wins):
+          1. classical_best.joblib   — written by run_optimized_pipeline.py
+          2. classical_{type}.joblib — written by train_baseline.py
+
+        Compatibility check: the model's n_features_in_ must be divisible by 4,
+        which is the invariant of the orchestrator's 4-embedding feature scheme
+        [h, t, |h-t|, h*t].  Pipeline models trained with graph/domain features
+        fail this check and are skipped so the serving model is always consistent
+        with what the orchestrator builds at inference time.
+
         Returns:
-            success: True if loaded successfully, False otherwise"""
-        model_path = os.path.join(self.model_dir, f"classical_{self.model_type.lower()}.joblib")
+            True if a compatible model+scaler pair was loaded, False otherwise.
+        """
         scaler_path = os.path.join(self.model_dir, "scaler.joblib")
 
-        if os.path.exists(model_path) and os.path.exists(scaler_path):
-            self.model = joblib.load(model_path)
-            self.scaler = joblib.load(scaler_path)
-            logger.info("Loaded saved model and scaler.")
-            return True
+        candidate_paths = [
+            os.path.join(self.model_dir, "classical_best.joblib"),
+            os.path.join(self.model_dir, "classical_serving.joblib"),
+            os.path.join(self.model_dir, f"classical_{self.model_type.lower()}.joblib"),
+        ]
+
+        for model_path in candidate_paths:
+            if not (os.path.exists(model_path) and os.path.exists(scaler_path)):
+                continue
+            try:
+                candidate = joblib.load(model_path)
+                n_feat = getattr(candidate, "n_features_in_", None)
+                if n_feat is not None and n_feat % 4 != 0:
+                    logger.warning(
+                        f"Skipping {model_path}: n_features_in_={n_feat} is not divisible by 4 "
+                        "(likely trained with graph/domain features, incompatible with orchestrator)"
+                    )
+                    continue
+                self.model = candidate
+                self.scaler = joblib.load(scaler_path)
+                logger.info(f"Loaded model from {os.path.basename(model_path)} "
+                            f"(n_features={n_feat})")
+                return True
+            except Exception as e:
+                logger.warning(f"Could not load {model_path}: {e}")
+
         return False
 
 
@@ -323,8 +358,8 @@ if __name__ == "__main__":
     embedder = HetionetEmbedder(embedding_dim=args.embedding_dim, qml_dim=args.qml_dim)
     if not embedder.load_saved_embeddings():
         log.info("No saved embeddings found; training/generating embeddings on task triples.")
-        embedder.train_embeddings(task_edges)   # <-- key change (triples with source/metaedge/target)
-        embedder.reduce_to_qml_dim()
+        embedder.train_embeddings(task_edges)
+    embedder.reduce_to_qml_dim()
 
     # 3) Train classical baseline and evaluate
     predictor = ClassicalLinkPredictor(

@@ -15,8 +15,8 @@ This folder documents the **Next.js** UI (`frontend/`), **FastAPI** backend (`mi
 ## Quick start
 
 1. **Install:** `cd frontend && pnpm install`
-2. **One command (recommended):** from repo root, `./scripts/dev_stack.sh` — starts FastAPI on `http://127.0.0.1:8000` and Next.js with `NEXT_PUBLIC_API_URL` set to match (see script for `API_PORT` / `FRONTEND_PORT`).
-3. **Manual:** **API:** from repo root, `uvicorn middleware.api:app --reload --host 127.0.0.1 --port 8000` (uvicorn default). **Next.js:** `cd frontend && pnpm dev` — set `NEXT_PUBLIC_API_URL` in `.env.local` to the same host/port as the API (`frontend/.env.example` uses `8000`).
+2. **One command (recommended):** from repo root, `./scripts/dev_stack.sh` — starts FastAPI on `http://127.0.0.1:8780` and Next.js on port **3780** with `NEXT_PUBLIC_API_URL` set to match (override with `API_PORT` / `FRONTEND_PORT`).
+3. **Manual:** **API:** from repo root, `uvicorn middleware.api:app --reload --host 127.0.0.1 --port 8780`. **Next.js:** `cd frontend && pnpm exec next dev -p 3780` — set `NEXT_PUBLIC_API_URL` in `.env.local` to the same host/port as the API (`frontend/.env.example` uses `8780`).
 4. **Production build:** `cd frontend && pnpm build && pnpm start`
 5. **Pipeline (CLI):** `python scripts/run_optimized_pipeline.py` — see [.cursor/rules/pipeline-scripts.mdc](../../.cursor/rules/pipeline-scripts.mdc) and [../reference/COMMAND_REFERENCE.md](../reference/COMMAND_REFERENCE.md)
 

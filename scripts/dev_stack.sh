@@ -3,16 +3,17 @@
 # Usage: ./scripts/dev_stack.sh
 #        API_PORT=9000 ./scripts/dev_stack.sh
 #
-# - API:  http://127.0.0.1:${API_PORT:-8000}  (default 8000, matches uvicorn default + frontend/.env.example)
-# - Next: http://localhost:3000 (default; override with FRONTEND_PORT)
+# Default ports are chosen to avoid collisions with other FastAPI/Next apps that use 8000/3000.
+# - API:  http://127.0.0.1:${API_PORT:-8780}  (default 8780)
+# - Next: http://localhost:${FRONTEND_PORT:-3780}  (default 3780)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-API_PORT="${API_PORT:-8000}"
+API_PORT="${API_PORT:-8780}"
 API_HOST="${API_HOST:-127.0.0.1}"
-FRONTEND_PORT="${FRONTEND_PORT:-3000}"
+FRONTEND_PORT="${FRONTEND_PORT:-3780}"
 API_URL="http://${API_HOST}:${API_PORT}"
 
 usage() {
@@ -23,9 +24,9 @@ Usage: ./scripts/dev_stack.sh
        API_PORT=9000 FRONTEND_PORT=3001 ./scripts/dev_stack.sh
 
 Environment:
-  API_PORT       API listen port (default: 8000)
+  API_PORT       API listen port (default: 8780)
   API_HOST       API bind address (default: 127.0.0.1)
-  FRONTEND_PORT  Next.js dev port (default: 3000)
+  FRONTEND_PORT  Next.js dev port (default: 3780)
 EOF
 }
 

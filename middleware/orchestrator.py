@@ -15,6 +15,78 @@ from quantum_layer.qml_model import QMLLinkPredictor
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Brand / common name → Hetionet ID.
+# Hetionet uses INN/WHO systematic names; these aliases bridge the most common
+# brand names that users are likely to type. The metadata CSV overrides these
+# for any key it also covers (via setdefault), so they are safe fallbacks.
+COMMON_NAME_ALIASES: Dict[str, str] = {
+    # Compounds — brand / common names
+    "aspirin":              "Compound::DB00945",  # acetylsalicylic acid
+    "tylenol":              "Compound::DB00316",  # acetaminophen / paracetamol
+    "acetaminophen":        "Compound::DB00316",
+    "paracetamol":          "Compound::DB00316",
+    "advil":                "Compound::DB01050",  # ibuprofen
+    "motrin":               "Compound::DB01050",
+    "ibuprofen":            "Compound::DB01050",
+    "metformin":            "Compound::DB00331",
+    "glucophage":           "Compound::DB00331",
+    "atorvastatin":         "Compound::DB01076",
+    "lipitor":              "Compound::DB01076",
+    "dexamethasone":        "Compound::DB01234",
+    "prednisone":           "Compound::DB00635",
+    "warfarin":             "Compound::DB00682",
+    "coumadin":             "Compound::DB00682",
+    "lisinopril":           "Compound::DB00722",
+    "metoprolol":           "Compound::DB00264",
+    "amlodipine":           "Compound::DB00381",
+    "omeprazole":           "Compound::DB00338",
+    "prilosec":             "Compound::DB00338",
+    "simvastatin":          "Compound::DB00641",
+    "zocor":                "Compound::DB00641",
+    "losartan":             "Compound::DB00678",
+    "cozaar":               "Compound::DB00678",
+    "levothyroxine":        "Compound::DB00451",
+    "synthroid":            "Compound::DB00451",
+    "albuterol":            "Compound::DB01001",
+    "salbutamol":           "Compound::DB01001",
+    "amoxicillin":          "Compound::DB01060",
+    "ciprofloxacin":        "Compound::DB00537",
+    "pindolol":             "Compound::DB00960",
+    "gabapentin":           "Compound::DB00996",
+    "neurontin":            "Compound::DB00996",
+    "sertraline":           "Compound::DB01104",
+    "zoloft":               "Compound::DB01104",
+    "fluoxetine":           "Compound::DB00472",
+    "prozac":               "Compound::DB00472",
+    "celecoxib":            "Compound::DB00482",
+    "celebrex":             "Compound::DB00482",
+    "montelukast":          "Compound::DB00471",
+    "singulair":            "Compound::DB00471",
+    # Diseases — common names Hetionet may use a longer form for
+    "diabetes":             "Disease::DOID:9351",   # type 1 diabetes mellitus
+    "type 2 diabetes":      "Disease::DOID:9352",
+    "hypertension":         "Disease::DOID:10763",
+    "high blood pressure":  "Disease::DOID:10763",
+    "cancer":               "Disease::DOID:162",
+    "breast cancer":        "Disease::DOID:1612",
+    "lung cancer":          "Disease::DOID:1324",
+    "asthma":               "Disease::DOID:2841",
+    "alzheimer":            "Disease::DOID:10652",
+    "alzheimer's disease":  "Disease::DOID:10652",
+    "alzheimers disease":   "Disease::DOID:10652",
+    "parkinson":            "Disease::DOID:14330",
+    "parkinson's disease":  "Disease::DOID:14330",
+    "parkinsons disease":   "Disease::DOID:14330",
+    "depression":           "Disease::DOID:1596",
+    "rheumatoid arthritis": "Disease::DOID:7148",
+    "multiple sclerosis":   "Disease::DOID:2377",
+    "lupus":                "Disease::DOID:9074",
+    "crohn":                "Disease::DOID:8778",
+    "crohn's disease":      "Disease::DOID:8778",
+    "heart failure":        "Disease::DOID:6000",
+    "schizophrenia":        "Disease::DOID:5419",
+}
+
 
 class LinkPredictionOrchestrator:
     """
@@ -42,18 +114,31 @@ class LinkPredictionOrchestrator:
         
         # Load entity mappings
         self._load_entity_mappings()
-        
-        # Initialize embedder (read-only mode)
-        self.embedder = HetionetEmbedder()
-        if not self.embedder.load_saved_embeddings():
-            logger.warning("Embeddings not found — orchestrator running in degraded mode.")
-            self.embedder = None
 
-        # Load classical model
+        # Load classical model first so we can infer the expected feature/qml dim
         self.classical_predictor = ClassicalLinkPredictor()
         if not self.classical_predictor.load_model():
             logger.warning("Classical model not found — orchestrator running in degraded mode.")
             self.classical_predictor = None
+
+        # Infer qml_dim from trained model (4-feature scheme: [h, t, |h-t|, h*t])
+        qml_dim = 12  # default from last training run
+        if self.classical_predictor and self.classical_predictor.model:
+            try:
+                qml_dim = self.classical_predictor.model.n_features_in_ // 4
+            except Exception:
+                pass
+
+        # Initialize embedder with matching qml_dim and reduce dimensions
+        self.embedder = HetionetEmbedder(qml_dim=qml_dim)
+        if not self.embedder.load_saved_embeddings():
+            logger.warning("Embeddings not found — orchestrator running in degraded mode.")
+            self.embedder = None
+        else:
+            # Sync embedding_dim to the actual loaded shape so _deterministic_vec
+            # produces vectors of the right size for PCA transform.
+            self.embedder.embedding_dim = int(self.embedder.entity_embeddings.shape[1])
+            self.embedder.reduce_to_qml_dim()
         
         # Load quantum model (if requested)
         self.quantum_predictor = None
@@ -65,37 +150,51 @@ class LinkPredictionOrchestrator:
                 self.use_quantum = False
     
     def _load_entity_mappings(self) -> None:
-        """Load entity name to Hetionet ID mappings."""
-        # For PoC, we'll use a simple name-to-ID mapping
-        # In production, you'd use a full biomedical name resolver (e.g., MetaMap, SciSpacy)
+        """Load entity name to Hetionet ID mappings.
+
+        Reads data/hetionet_nodes_metadata.csv (node_id, name, namespace, external_url).
+        Indexes on three keys per node so users can type any of:
+          - full ID:          "Compound::DB00945"
+          - ID suffix:        "DB00945"
+          - human-readable:   "aspirin"  (case-insensitive)
+        """
         self.name_to_id: Dict[str, str] = {}
         self.id_to_name: Dict[str, str] = {}
-        
-        # Load from id_to_entity.csv
-        map_path = os.path.join(self.data_dir, "id_to_entity.csv")
-        if os.path.exists(map_path):
-            df = pd.read_csv(map_path)
-            for _, row in df.iterrows():
-                het_id = row["0"]
-                # Extract human-readable name (simplified)
-                if het_id.startswith("Compound::"):
-                    name = het_id.split("::")[-1]  # e.g., DB00945
-                    # In real system, map DB IDs to drug names via DrugBank
-                    self.name_to_id[name] = het_id
-                    self.id_to_name[het_id] = name
-                elif het_id.startswith("Disease::"):
-                    name = het_id.split("::")[-1]  # e.g., DOID_9352
-                    self.name_to_id[name] = het_id
-                    self.id_to_name[het_id] = name
-                # Add more entity types as needed
-        
-        logger.info(f"Loaded {len(self.name_to_id)} entity name mappings.")
+
+        # Seed with brand / common-name aliases so users can type "aspirin", "ibuprofen", etc.
+        # The metadata CSV uses setdefault below, so CSV entries will not override these.
+        self.name_to_id.update(COMMON_NAME_ALIASES)
+
+        map_path = os.path.join(self.data_dir, "hetionet_nodes_metadata.csv")
+        if not os.path.exists(map_path):
+            logger.warning(f"Node metadata not found at {map_path}. Entity name resolution disabled.")
+            return
+
+        df = pd.read_csv(map_path)
+        for _, row in df.iterrows():
+            het_id = str(row["node_id"])
+            human_name = str(row.get("name", "")).strip()
+
+            # Always register the full ID as a passthrough key
+            self.name_to_id[het_id] = het_id
+
+            # Register the suffix after "::" (e.g. "DB00945", "DOID:9352")
+            if "::" in het_id:
+                suffix = het_id.split("::", 1)[-1]
+                self.name_to_id.setdefault(suffix, het_id)
+
+            # Register the human-readable name (lower-cased for case-insensitive lookup)
+            if human_name and human_name.lower() != "nan":
+                self.name_to_id.setdefault(human_name.lower(), het_id)
+                self.id_to_name[het_id] = human_name
+
+        logger.info(f"Loaded {len(self.name_to_id)} entity name mappings from {map_path}.")
     
     def _resolve_entity(self, name_or_id: str) -> str:
         """Resolve entity name to Hetionet ID."""
         if name_or_id in self.name_to_id:
             return self.name_to_id[name_or_id]
-        elif name_or_id in self.embedder.entity_to_id:
+        elif self.embedder is not None and name_or_id in self.embedder.entity_to_id:
             return name_or_id  # Already a Hetionet ID
         else:
             # Fuzzy match or raise error
@@ -104,20 +203,29 @@ class LinkPredictionOrchestrator:
                 logger.info(f"Fuzzy match found: {name_or_id} -> {matches[0]}")
                 return self.name_to_id[matches[0]]
             else:
-                raise ValueError(f"Entity '{name_or_id}' not found in KG.")
+                raise ValueError(
+                    f"Entity '{name_or_id}' not found in KG. "
+                    f"Hetionet uses INN/systematic names — try the INN name or a DrugBank/DOID ID. "
+                    f"Examples: 'acetylsalicylic acid' or 'DB00945' for aspirin; "
+                    f"'type 2 diabetes mellitus' or 'DOID:9352' for diabetes."
+                )
     
     def _prepare_features(self, drug_id: str, disease_id: str) -> np.ndarray:
-        """Prepare feature vector for prediction."""
-        # Get embeddings
-        try:
-            drug_emb = self.embedder.get_entity_embedding(drug_id, reduced=True)
-            disease_emb = self.embedder.get_entity_embedding(disease_id, reduced=True)
-        except KeyError as e:
-            raise ValueError(f"Embedding not found for entity: {e}")
-        
-        # Concatenate
-        features = np.concatenate([drug_emb, disease_emb])
-        return features.reshape(1, -1)  # Shape: (1, n_features)
+        """Prepare feature vector for prediction.
+
+        Uses the same 4-feature scheme as training: [h, t, |h-t|, h*t]
+        """
+        if self.embedder is None:
+            raise ValueError("Embedder not loaded — cannot prepare features.")
+        drug_emb = self.embedder._get_vec(drug_id, reduced=True)
+        disease_emb = self.embedder._get_vec(disease_id, reduced=True)
+        features = np.concatenate([
+            drug_emb,
+            disease_emb,
+            np.abs(drug_emb - disease_emb),
+            drug_emb * disease_emb,
+        ])
+        return features.reshape(1, -1)  # Shape: (1, 4*qml_dim)
     
     def predict_link_probability(
         self,

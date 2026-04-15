@@ -11,21 +11,26 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
 # Copy requirements first (for better caching)
 COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code (data/, models/, results/ are mounted as volumes at runtime)
 COPY kg_layer/ ./kg_layer/
 COPY classical_baseline/ ./classical_baseline/
 COPY quantum_layer/ ./quantum_layer/
 COPY middleware/ ./middleware/
+COPY utils/ ./utils/
 COPY config/ ./config/
-COPY data/ ./data/
-COPY models/ ./models/
-COPY results/ ./results/
+
+# Create volume mount-points so Docker doesn't create them as root-owned dirs
+RUN mkdir -p data models results
 
 # Expose port
 EXPOSE 8000

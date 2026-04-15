@@ -6,16 +6,16 @@ services:
   kg-api:
     build:
       context: ..
-      dockerfile: deployment/Dockerfile.cli
+      dockerfile: deployment/Dockerfile.api
     ports:
-      - "8000:8000"
+      # Host 8780 avoids clashing with other apps using localhost:8000; container still listens on 8000.
+      - "8780:8000"
     volumes:
       - ../data:/app/data
       - ../models:/app/models
       - ../results:/app/results
       - ../config:/app/config
     environment:
-      - PYTHONPATH=/app
       - IBM_QUANTUM_TOKEN=${IBM_QUANTUM_TOKEN}
     restart: unless-stopped
     healthcheck:
@@ -34,6 +34,7 @@ services:
       - "8501:8501"
     volumes:
       - ../results:/app/results
+      - ../models:/app/models
       - ../docs:/app/docs
     environment:
       - PYTHONPATH=/app

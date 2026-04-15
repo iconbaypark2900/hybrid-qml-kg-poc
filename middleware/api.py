@@ -206,10 +206,12 @@ async def predict_link(request: PredictionRequest):
         
         return PredictionResponse(**result)
     
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        logger.error(f"Unexpected error in predict_link: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -353,14 +355,22 @@ async def kg_stats():
     entity_count = len(emb.entity_to_id) if emb.entity_to_id else 0
     sample_entities = list(emb.entity_to_id.keys())[:20] if emb.entity_to_id else []
 
+    # Resolve raw entity IDs to human-readable labels where available
+    id_to_name = getattr(orchestrator, "id_to_name", {})
+    sample_entities = [
+        id_to_name.get(e, e) for e in (list(emb.entity_to_id.keys())[:20] if emb.entity_to_id else [])
+    ]
+
     edge_count = 0
     relation_types: List[str] = []
     sample_edges: List[Dict[str, str]] = []
     try:
         from kg_layer.kg_loader import load_hetionet_edges
         df = load_hetionet_edges(data_dir=orchestrator.data_dir)
+        # Drop any row where source == "source" (CSV header leaking as data)
+        df = df[df["source"] != "source"]
         edge_count = len(df)
-        relation_types = sorted(df["metaedge"].unique().tolist())
+        relation_types = sorted(r for r in df["metaedge"].unique().tolist() if r != "metaedge")
         sample_edges = df.head(10).to_dict("records")
     except Exception as exc:
         logger.warning(f"Could not load edges for stats: {exc}")
@@ -630,6 +640,23 @@ class VizKGSubgraphResponse(BaseModel):
     nodes: List[VizKGNode] = []
     links: List[VizKGLink] = []
     center_entity: Optional[str] = None
+    message: Optional[str] = None
+
+
+class EmbeddingVectorResponse(BaseModel):
+    status: str
+    drug: str = ""
+    disease: str = ""
+    drug_id: str = ""
+    disease_id: str = ""
+    drug_name: str = ""
+    disease_name: str = ""
+    drug_embedding: List[float] = []
+    disease_embedding: List[float] = []
+    abs_diff: List[float] = []
+    hadamard_product: List[float] = []
+    qml_dim: int = 0
+    in_training_set: Dict[str, bool] = {}
     message: Optional[str] = None
 
 
@@ -1054,6 +1081,52 @@ async def viz_kg_subgraph(
     )
 
 
+@app.get("/viz/embedding-vector", response_model=EmbeddingVectorResponse)
+async def viz_embedding_vector(
+    drug: str = Query(..., description="Drug name or ID (e.g. 'aspirin' or 'DB00945')"),
+    disease: str = Query(..., description="Disease name or ID (e.g. 'hypertension' or 'DOID:10763')"),
+):
+    """Return the qml_dim-dimensional embedding vectors for a drug-disease pair
+    and the derived 4-feature components fed to the model: [h, t, |h-t|, h*t]."""
+    empty = EmbeddingVectorResponse(status="unavailable", drug=drug, disease=disease,
+                                    message="Orchestrator or embedder not loaded.")
+    if orchestrator is None or orchestrator.embedder is None:
+        return empty
+    try:
+        drug_id = orchestrator._resolve_entity(drug)
+        disease_id = orchestrator._resolve_entity(disease)
+    except ValueError as e:
+        return EmbeddingVectorResponse(status="error", drug=drug, disease=disease, message=str(e))
+
+    drug_emb = orchestrator.embedder._get_vec(drug_id, reduced=True).tolist()
+    disease_emb = orchestrator.embedder._get_vec(disease_id, reduced=True).tolist()
+    diff = np.abs(np.array(drug_emb) - np.array(disease_emb)).tolist()
+    prod = (np.array(drug_emb) * np.array(disease_emb)).tolist()
+
+    # Is each entity in the trained embedding matrix (or is it a fallback vector)?
+    in_training = {
+        "drug": drug_id in orchestrator.embedder.entity_to_id,
+        "disease": disease_id in orchestrator.embedder.entity_to_id,
+    }
+
+    return EmbeddingVectorResponse(
+        status="ok",
+        drug=drug,
+        disease=disease,
+        drug_id=drug_id,
+        disease_id=disease_id,
+        drug_name=orchestrator.id_to_name.get(drug_id, drug_id.split("::")[-1]),
+        disease_name=orchestrator.id_to_name.get(disease_id, disease_id.split("::")[-1]),
+        drug_embedding=drug_emb,
+        disease_embedding=disease_emb,
+        abs_diff=diff,
+        hadamard_product=prod,
+        qml_dim=orchestrator.embedder.qml_dim,
+        in_training_set=in_training,
+    )
+
+
+
 @app.get("/viz/predictions", response_model=VizPredictionsResponse)
 async def viz_predictions(top_k: int = Query(30, description="Number of predictions")):
     """
@@ -1468,4 +1541,6 @@ async def viz_run_predictions(
 # Example usage (for local testing)
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+
+    port = int(os.environ.get("API_PORT", "8780"))
+    uvicorn.run("middleware.api:app", host="0.0.0.0", port=port, reload=True)

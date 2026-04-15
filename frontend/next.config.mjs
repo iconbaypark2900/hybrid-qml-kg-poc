@@ -1,4 +1,8 @@
 /** @type {import('next').NextConfig} */
+const apiOrigin = (
+  process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8780"
+).replace(/\/$/, "");
+
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
@@ -10,7 +14,7 @@ const nextConfig = {
       fallback: [
         {
           source: "/:path*",
-          destination: "http://localhost:8000/:path*",
+          destination: `${apiOrigin}/:path*`,
         },
       ],
     };

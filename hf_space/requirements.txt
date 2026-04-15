@@ -1,0 +1,22 @@
+# Hugging Face lite Gradio shell + in-process FastAPI (middleware.api).
+# Install from repository root context so kg_layer, middleware, etc. resolve.
+# See hf_space/README.md and docs/deployment/HF_LITE.md.
+
+gradio>=4.44.0,<6
+fastapi>=0.109.0,<0.116
+uvicorn[standard]>=0.27.0
+httpx>=0.27.0
+starlette>=0.36.0
+
+pandas>=2.0
+numpy>=1.24
+scikit-learn>=1.3
+joblib>=1.3
+PyYAML>=6.0
+networkx>=3.0
+
+qiskit>=1.0
+qiskit-machine-learning>=0.7
+qiskit-aer>=0.12
+qiskit-algorithms>=0.3
+qiskit-ibm-runtime>=0.15

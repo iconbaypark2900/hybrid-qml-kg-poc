@@ -53,17 +53,24 @@ export function Sidebar() {
 
 function iconFor(href: string): string {
   const map: Record<string, string> = {
+    // Start
+    "/": "home",
+    "/predict": "biotech",
+    // Results
     "/experiments": "monitoring",
+    "/analysis/drug-delivery": "medication",
+    "/hypotheses/new": "format_list_numbered",
+    "/visualization": "scatter_plot",
+    // Run
+    "/simulation": "play_circle",
+    "/simulation/parameters": "tune",
+    // System
     "/system": "dns",
     "/knowledge-graph": "hub",
     "/quantum": "blur_on",
-    "/simulation": "tune",
-    "/simulation/parameters": "settings",
     "/molecular-design": "science",
-    "/hypotheses/new": "lightbulb",
-    "/analysis/drug-delivery": "medication",
-    "/analysis/next-steps": "arrow_forward",
     "/export": "download",
+    "/analysis/next-steps": "arrow_forward",
   };
   return map[href] ?? "chevron_right";
 }

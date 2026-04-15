@@ -2,7 +2,7 @@ export function getApiBaseUrl(): string {
   return (
     (typeof window !== "undefined"
       ? process.env.NEXT_PUBLIC_API_URL
-      : process.env.NEXT_PUBLIC_API_URL) ?? "http://localhost:8000"
+      : process.env.NEXT_PUBLIC_API_URL) ?? "http://127.0.0.1:8780"
   );
 }
 
@@ -426,6 +426,31 @@ export interface VizModelMetricsResponse {
 
 export function fetchVizModelMetrics(): Promise<VizModelMetricsResponse> {
   return apiFetch<VizModelMetricsResponse>("/viz/model-metrics");
+}
+
+export interface EmbeddingVectorResponse {
+  status: string;
+  drug: string;
+  disease: string;
+  drug_id: string;
+  disease_id: string;
+  drug_name: string;
+  disease_name: string;
+  drug_embedding: number[];
+  disease_embedding: number[];
+  abs_diff: number[];
+  hadamard_product: number[];
+  qml_dim: number;
+  in_training_set: { drug: boolean; disease: boolean };
+  message?: string | null;
+}
+
+export function fetchVizEmbeddingVector(
+  drug: string,
+  disease: string,
+): Promise<EmbeddingVectorResponse> {
+  const params = new URLSearchParams({ drug, disease });
+  return apiFetch<EmbeddingVectorResponse>(`/viz/embedding-vector?${params}`);
 }
 
 export interface VizCircuitResponse {

@@ -3,37 +3,44 @@ export type NavSection = {
   items: { href: string; label: string }[];
 };
 
-/** Single sidebar model — see `docs/frontend/ROUTES.md`. */
+/**
+ * Sidebar navigation — organised around user tasks, not engineering layers.
+ *
+ * Start    → context + the primary action (prediction)
+ * Results  → what the pipeline produced
+ * Run      → trigger new work
+ * System   → deep-dive / technical
+ */
 export const navSections: NavSection[] = [
   {
-    heading: "Overview",
+    heading: "Start",
     items: [
-      { href: "/experiments", label: "Experiments" },
-      { href: "/system", label: "System status" },
+      { href: "/", label: "Home" },
+      { href: "/predict", label: "Predict treatment" },
     ],
   },
   {
-    heading: "Explore",
+    heading: "Results",
     items: [
-      { href: "/knowledge-graph", label: "Knowledge graph" },
-      { href: "/quantum", label: "Quantum logic" },
+      { href: "/experiments", label: "Experiments" },
+      { href: "/analysis/drug-delivery", label: "Drug delivery" },
+      { href: "/hypotheses/new", label: "Ranked candidates" },
+      { href: "/visualization", label: "Visualizer" },
     ],
   },
   {
     heading: "Run",
     items: [
-      { href: "/simulation", label: "Simulation" },
-      { href: "/simulation/parameters", label: "Parameters" },
-      { href: "/molecular-design", label: "Molecular design" },
-      { href: "/hypotheses/new", label: "New hypothesis" },
+      { href: "/simulation", label: "Pipeline jobs" },
+      { href: "/simulation/parameters", label: "New run" },
     ],
   },
   {
-    heading: "Analysis",
+    heading: "System",
     items: [
-      { href: "/visualization", label: "Visualizer" },
-      { href: "/analysis/drug-delivery", label: "Drug delivery" },
-      { href: "/analysis/next-steps", label: "Next steps" },
+      { href: "/system", label: "System status" },
+      { href: "/knowledge-graph", label: "Knowledge graph" },
+      { href: "/quantum", label: "Quantum config" },
       { href: "/export", label: "Export" },
     ],
   },

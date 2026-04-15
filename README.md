@@ -95,6 +95,16 @@ python scripts/run_optimized_pipeline.py --relation CtD \
 
 For robust evaluation (K-fold CV, no fast_mode), add `--use_cv_evaluation --cv_folds 5`. For paper-ready runs, add `--run_multimodel_fusion --fusion_method bayesian_averaging` and omit `--fast_mode`. See [docs/reference/TEST_COMMANDS.md](docs/reference/TEST_COMMANDS.md).
 
+### NVIDIA DGX Spark (full-graph embedding)
+
+Install **CUDA-enabled PyTorch** on the DGX (see PyTorch “Get Started”), then from the repo root:
+
+```bash
+./scripts/run_full_embedding_dgx.sh
+```
+
+Details, `LOG_PATH` / epoch overrides, and verification: [docs/deployment/DGX_SPARK.md](docs/deployment/DGX_SPARK.md).
+
 ### Launch the Dashboard
 
 ```bash
@@ -109,8 +119,10 @@ The dashboard uses a **six-page narrative flow**: The Problem, Our Approach, Res
 
 ### Start the API Server
 
+Default **development** port for this repository is **8780** (not 8000) so it does not conflict with other FastAPI apps. Use `./scripts/dev_stack.sh` to start the API and Next.js together with matching URLs.
+
 ```bash
-uvicorn middleware.api:app --reload
+uvicorn middleware.api:app --reload --host 127.0.0.1 --port 8780
 ```
 
 **IBM Quantum (BYOK):** `POST /quantum/runtime/verify` accepts an API token and optional instance CRN for a **one-time** connectivity check; the server does **not** persist credentials. The Next.js **Quantum logic** page and the Streamlit sidebar **IBM Quantum (BYOK test)** expander use this flow. Deploy the API behind **HTTPS** in production.
@@ -282,7 +294,10 @@ hybrid-qml-kg-poc/
 | `docs/TECHNICAL_PAPER.md` | Technical paper: hybrid QML-KG link prediction, methods, results, and discussion |
 | `docs/planning/NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` | Full experiment log, recommended commands, and optimization roadmap |
 | `docs/overview/IMPLEMENTATION_RECAP.md` | Summary of pipeline improvements and GPU/hardware readiness |
-| `docs/deployment/DEPLOY_HUGGINGFACE.md` | Deploying the dashboard to Hugging Face Spaces and pushing updates |
+| `docs/deployment/DEPLOY_HUGGINGFACE.md` | Deploying the Streamlit dashboard to Hugging Face Spaces and pushing updates |
+| `docs/HF_VENTURE.md` | HF lite initiative: positioning, audience, success criteria |
+| `docs/deployment/HF_LITE.md` | HF lite blueprint: Gradio-oriented demo, API tiers, phased plan, diagrams |
+| `hf_space/` | Gradio HF lite app (`app.py`), slim `requirements.txt`, Hub README template; run locally: `./scripts/run_hf_lite.sh` |
 | `docs/WHY_QUANTUM_UNDERPERFORMS.md` | Root cause analysis of quantum-classical performance gap |
 | `docs/OPTIMIZATION_PLAN.md` | Detailed optimization roadmap |
 

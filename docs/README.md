@@ -78,7 +78,11 @@ Iteration summaries: [improvements/](improvements/).
 
 | Path | Purpose |
 |------|---------|
-| [deployment/DEPLOY_HUGGINGFACE.md](deployment/DEPLOY_HUGGINGFACE.md) | Hugging Face Spaces |
+| [HF_VENTURE.md](HF_VENTURE.md) | Hugging Face **lite** initiative: audience, positioning vs full app, success criteria |
+| [deployment/HF_LITE.md](deployment/HF_LITE.md) | Hugging Face **lite** technical blueprint: tiers, APIs, phases, architecture diagrams |
+| [../hf_space/README.md](../hf_space/README.md) | HF Space README template + deploy notes (`app_file`, slim `requirements.txt`) |
+| [deployment/DEPLOY_HUGGINGFACE.md](deployment/DEPLOY_HUGGINGFACE.md) | Hugging Face Spaces (Streamlit dashboard push workflow) |
+| [deployment/FLY_IO.md](deployment/FLY_IO.md) | Fly.io: Next.js + FastAPI production deploy |
 | [deployment/DOCKER_INSTALL.md](deployment/DOCKER_INSTALL.md) | Docker install notes |
 | [deployment/README_FEATUREMAP_TESTING.md](deployment/README_FEATUREMAP_TESTING.md) | Feature-map Docker testing index |
 | [deployment/FEATUREMAP_TESTING_GUIDE.md](deployment/FEATUREMAP_TESTING_GUIDE.md), [deployment/FEATUREMAP_DOCKERFILE_ANALYSIS.md](deployment/FEATUREMAP_DOCKERFILE_ANALYSIS.md), … | Feature-map build & test notes |

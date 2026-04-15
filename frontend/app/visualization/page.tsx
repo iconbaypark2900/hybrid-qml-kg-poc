@@ -6,25 +6,23 @@ import {
   fetchVizRunPredictions,
   fetchVizPredictions,
   fetchVizMolecule,
-  fetchVizEmbeddings,
   fetchVizKGSubgraph,
   fetchVizModelMetrics,
   fetchVizCircuitParams,
+  fetchVizEmbeddingVector,
+  predictLink,
   searchKGEntities,
 } from "@/lib/api";
 import type {
   VizRunPrediction,
   VizAtom,
   VizBond,
-  VizEmbNode,
-  VizEmbEdge,
-  VizEmbeddingsResponse,
-  EmbeddingProjection,
   VizKGNode,
   VizKGLink,
   KGSearchResult,
   VizModelMetric,
   VizCircuitResponse,
+  EmbeddingVectorResponse,
 } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -49,7 +47,7 @@ const TABS: TabDef[] = [
   { id: "predictions", label: "Predictions", icon: "leaderboard" },
   { id: "mol3d", label: "Molecular 3D", icon: "science" },
   { id: "kggraph", label: "KG Graph", icon: "hub" },
-  { id: "embedding", label: "Embedding Space", icon: "scatter_plot" },
+  { id: "embedding", label: "Feature Vectors", icon: "scatter_plot" },
   { id: "circuit", label: "Quantum Circuit", icon: "memory" },
   { id: "comparison", label: "Model Comparison", icon: "bar_chart" },
 ];
@@ -1212,427 +1210,189 @@ function KGGraphTab() {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Embedding Space (Three.js 3D scatter)
+// 3. Feature Vector Comparison
 // ---------------------------------------------------------------------------
 
-function EmbeddingTab() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [model, setModel] = useState<string>(""); // empty = auto
-  const [projection, setProjection] = useState<EmbeddingProjection>("pca_stretch");
-  const [showLabels, setShowLabels] = useState(false);
-  const [meta, setMeta] = useState<VizEmbeddingsResponse | null>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
-
-  const showLabelsRef = useRef(showLabels);
-  showLabelsRef.current = showLabels;
-
-  const load = useCallback(
-    (selectedModel?: string, proj?: EmbeddingProjection) => {
-      const m = selectedModel ?? (model || undefined);
-      const p = proj ?? projection;
-      setLoading(true);
-      setError(null);
-      cleanupRef.current?.();
-      cleanupRef.current = null;
-
-      (async () => {
-        try {
-          const [data, THREE] = await Promise.all([
-            fetchVizEmbeddings(m, p),
-            import("three"),
-          ]);
-          if (!containerRef.current) return;
-          if (data.status !== "ok") throw new Error(data.message ?? "Failed");
-
-          setMeta(data);
-          if (!model && data.model_name) setModel(data.model_name);
-
-          cleanupRef.current = renderEmbedding3D(
-            containerRef.current,
-            THREE,
-            data.nodes,
-            data.edges,
-            { showLabels: showLabelsRef.current, maxLabels: 36 },
-          );
-        } catch (e) {
-          setError(e instanceof Error ? e.message : String(e));
-        } finally {
-          setLoading(false);
-        }
-      })();
-    },
-    [model, projection],
-  );
-
-  useEffect(() => {
-    load(undefined, "pca_stretch");
-    return () => { cleanupRef.current?.(); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Re-render Three.js when only label toggle changes (same data)
-  useEffect(() => {
-    if (loading || error || !meta || !containerRef.current) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        cleanupRef.current?.();
-        cleanupRef.current = null;
-        const THREE = await import("three");
-        if (cancelled || !containerRef.current) return;
-        cleanupRef.current = renderEmbedding3D(
-          containerRef.current,
-          THREE,
-          meta.nodes ?? [],
-          meta.edges ?? [],
-          { showLabels, maxLabels: 36 },
-        );
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [showLabels]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const onModelChange = (m: string) => {
-    setModel(m);
-    load(m, projection);
-  };
-
-  const onProjectionChange = (p: EmbeddingProjection) => {
-    setProjection(p);
-    load(model || undefined, p);
-  };
-
-  const lowLinearVariance =
-    meta?.variance_explained &&
-    meta.projection === "pca" &&
-    meta.variance_explained.reduce((a, b) => a + b, 0) < 0.15;
-
+// Mini bar chart for a single embedding dimension group
+function EmbedBars({
+  values,
+  color,
+  label,
+  note,
+}: {
+  values: number[];
+  color: string;
+  label: string;
+  note?: string;
+}) {
+  const max = Math.max(...values.map(Math.abs), 1e-9);
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-3">
-        {meta?.available_models && meta.available_models.length > 1 && (
-          <div>
-            <label className="mb-1 block text-xs text-on-surface-variant">Embedding model</label>
-            <select
-              value={model}
-              onChange={(e) => onModelChange(e.target.value)}
-              disabled={loading}
-              className="rounded-md bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-outline-variant/30 focus:ring-primary/60 disabled:opacity-50"
-            >
-              {meta.available_models.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        <div>
-          <label className="mb-1 block text-xs text-on-surface-variant">3D projection</label>
-          <select
-            value={projection}
-            onChange={(e) => onProjectionChange(e.target.value as EmbeddingProjection)}
-            disabled={loading}
-            className="rounded-md bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-outline-variant/30 focus:ring-primary/60 disabled:opacity-50"
-            title="Stretched PCA spreads axes for a clearer view; t-SNE can separate clusters."
-          >
-            <option value="pca_stretch">PCA (stretched axes) — recommended</option>
-            <option value="pca">PCA (raw scale)</option>
-            <option value="tsne">t-SNE (slow, first load)</option>
-          </select>
-        </div>
-        <label className="flex cursor-pointer items-center gap-2 pb-2 text-xs text-on-surface-variant">
-          <input
-            type="checkbox"
-            checked={showLabels}
-            onChange={(e) => setShowLabels(e.target.checked)}
-            className="rounded border-outline-variant/40"
-          />
-          Show compound labels (sample)
-        </label>
-        {meta && !loading && (
-          <div className="flex flex-wrap gap-4 text-xs text-on-surface-variant py-2">
-            <span>{meta.compound_count} compounds</span>
-            <span>{meta.disease_count} diseases</span>
-            <span>{meta.edge_count} CtD edges</span>
-            {meta.variance_explained && meta.projection !== "tsne" && (
-              <span className="flex items-center gap-1">
-                <span>
-                  Linear PCA variance:{" "}
-                  {meta.variance_explained.map((v) => `${(v * 100).toFixed(1)}%`).join(" / ")}
-                </span>
-                {lowLinearVariance && (
-                  <span
-                    className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-200"
-                    title="First 3 PCs capture little of total variance — try stretched PCA or t-SNE"
-                  >
-                    ⚠️ Low variance
-                  </span>
-                )}
-              </span>
-            )}
-            {meta.projection === "tsne" && (
-              <span className="text-on-surface-variant/80">t-SNE (nonlinear; no PCA %)</span>
-            )}
-          </div>
-        )}
+    <div className="space-y-1">
+      <div className="flex items-baseline gap-2">
+        <span className="text-xs font-semibold text-on-surface">{label}</span>
+        {note && <span className="text-[10px] text-on-surface-variant/70">{note}</span>}
       </div>
-
-      {meta?.projection_note && (
-        <p className="rounded-md border border-outline-variant/20 bg-surface-container-high/50 px-3 py-2 text-[11px] leading-relaxed text-on-surface-variant">
-          {meta.projection_note}
-        </p>
-      )}
-
-      {loading && <LoadingMsg text="Projecting embeddings\u2026" />}
-      {error && <ErrorMsg msg={error} />}
-      <div
-        ref={containerRef}
-        className="relative h-[520px] w-full overflow-hidden rounded-lg border border-outline-variant/15 bg-surface-container-lowest/40"
-        style={{ display: loading || error ? "none" : undefined }}
-      />
-      {!loading && !error && (
-        <div className="space-y-2">
-          <div className="flex flex-wrap gap-4 text-xs text-on-surface-variant">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#7bd0ff]" />
-              Compound
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#ff8a65]" />
-              Disease
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-1 w-4 bg-[#3cddc7]" />
-              CtD edge (sampled)
-            </span>
-            <span className="text-on-surface-variant/60">
-              Drag to rotate &middot; Scroll to zoom
-            </span>
-          </div>
-          {meta?.variance_explained && meta.projection !== "tsne" && (
-            <p className="text-[11px] text-on-surface-variant/70">
-              First three linear components explain{" "}
-              {(meta.variance_explained.reduce((a, b) => a + b, 0) * 100).toFixed(1)}% of total
-              variance — typical for 128D RotatE. Use <strong>stretched PCA</strong> or{" "}
-              <strong>t-SNE</strong> for a clearer spatial layout.
-            </p>
-          )}
-        </div>
-      )}
+      <div className="flex gap-px items-end h-10">
+        {values.map((v, i) => {
+          const pct = Math.abs(v) / max;
+          const isNeg = v < 0;
+          return (
+            <div
+              key={i}
+              title={`dim ${i + 1}: ${v.toFixed(4)}`}
+              className="flex-1 rounded-t-sm transition-all"
+              style={{
+                height: `${Math.max(pct * 100, 4)}%`,
+                backgroundColor: isNeg ? `${color}88` : color,
+                opacity: 0.85 + 0.15 * pct,
+              }}
+            />
+          );
+        })}
+      </div>
+      <div className="flex justify-between text-[9px] text-on-surface-variant/50">
+        <span>dim 1</span>
+        <span>dim {values.length}</span>
+      </div>
     </div>
   );
 }
 
-function renderEmbedding3D(
-  container: HTMLElement,
-  T: typeof import("three"),
-  nodes: VizEmbNode[],
-  edges: VizEmbEdge[],
-  opts?: { showLabels?: boolean; maxLabels?: number },
-): () => void {
-  const THREE = T; // local alias
-  const showLabels = opts?.showLabels === true;
-  const maxLabels = opts?.maxLabels ?? 32;
-  const cleanNodes = (nodes ?? []).filter(
-    (n): n is VizEmbNode => n != null && n.id != null && n.id !== "",
-  );
-  const edgeSet = new Set(cleanNodes.map((n) => n.id));
-  const cleanEdges = (edges ?? []).filter(
-    (e) =>
-      e != null &&
-      e.source != null &&
-      e.target != null &&
-      edgeSet.has(e.source) &&
-      edgeSet.has(e.target),
-  );
-  const width = container.clientWidth;
-  const height = container.clientHeight || 520;
+function EmbeddingTab() {
+  const [drug, setDrug] = useState("pindolol");
+  const [disease, setDisease] = useState("hypertension");
+  const [data, setData] = useState<EmbeddingVectorResponse | null>(null);
+  const [probability, setProbability] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setSize(width, height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  container.appendChild(renderer.domElement);
-
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x060e20);
-  const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 200);
-
-  // Lights
-  scene.add(new THREE.AmbientLight(0x404060, 1.5));
-  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-  dir.position.set(5, 5, 5);
-  scene.add(dir);
-
-  const group = new THREE.Group();
-  scene.add(group);
-
-  // Calculate bounding box for better camera positioning
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  cleanNodes.forEach((n) => {
-    minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
-    minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
-    minZ = Math.min(minZ, n.z); maxZ = Math.max(maxZ, n.z);
-  });
-  if (cleanNodes.length === 0 || !Number.isFinite(minX)) {
-    minX = maxX = minY = maxY = minZ = maxZ = 0;
+  async function compare(e?: React.FormEvent) {
+    e?.preventDefault();
+    setLoading(true);
+    setError(null);
+    setData(null);
+    setProbability(null);
+    try {
+      const [vec, pred] = await Promise.all([
+        fetchVizEmbeddingVector(drug.trim(), disease.trim()),
+        predictLink({ drug: drug.trim(), disease: disease.trim(), method: "classical" }),
+      ]);
+      if (vec.status === "error") throw new Error(vec.message ?? "Failed");
+      setData(vec);
+      if (pred.status === "success") setProbability(pred.link_probability);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  const centerZ = (minZ + maxZ) / 2;
-  const sizeX = maxX - minX;
-  const sizeY = maxY - minY;
-  const sizeZ = maxZ - minZ;
-  const maxDim = Math.max(sizeX, sizeY, sizeZ, 1);
+  // Load default pair on mount
+  useEffect(() => { compare(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Position camera based on data extent
-  const cameraDistance = maxDim * 1.8;
-  camera.position.set(0, 0, cameraDistance);
+  const scoreColor =
+    probability == null ? "text-on-surface-variant"
+    : probability >= 0.70 ? "text-tertiary"
+    : probability >= 0.40 ? "text-secondary"
+    : "text-error";
 
-  // Nodes
-  const nodeMap = new Map<string, import("three").Vector3>();
-  const compColor = new THREE.Color(0x7bd0ff);
-  const disColor = new THREE.Color(0xff8a65);
+  const GROUPS = data
+    ? [
+        { values: data.drug_embedding,     color: "#7bd0ff", label: `h  (${data.drug_name})`,     note: "drug RotatE vector" },
+        { values: data.disease_embedding,  color: "#ff8a65", label: `t  (${data.disease_name})`,  note: "disease RotatE vector" },
+        { values: data.abs_diff,           color: "#ffd54f", label: "|h − t|",                    note: "absolute difference" },
+        { values: data.hadamard_product,   color: "#69f0ae", label: "h ⊙ t",                      note: "element-wise product" },
+      ]
+    : [];
 
-  // Adjust node size based on data density
-  const nodeRadius = Math.max(0.08, maxDim * 0.03);
+  const inTraining = data?.in_training_set;
 
-  let labelCount = 0;
-  cleanNodes.forEach((n) => {
-    const geo = new THREE.SphereGeometry(nodeRadius, 16, 16);
-    const mat = new THREE.MeshPhongMaterial({
-      color: n.type === "compound" ? compColor : disColor,
-      shininess: 60,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    // Center the data
-    mesh.position.set(n.x - centerX, n.y - centerY, n.z - centerZ);
-    group.add(mesh);
-    nodeMap.set(n.id, mesh.position);
+  return (
+    <div className="space-y-5">
+      {/* Input form */}
+      <form onSubmit={compare} className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="mb-1 block text-xs text-on-surface-variant">Drug / compound</label>
+          <input
+            value={drug}
+            onChange={(e) => setDrug(e.target.value)}
+            placeholder="e.g. pindolol"
+            className="rounded-lg border border-outline/20 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-on-surface-variant">Disease</label>
+          <input
+            value={disease}
+            onChange={(e) => setDisease(e.target.value)}
+            placeholder="e.g. hypertension"
+            className="rounded-lg border border-outline/20 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary focus:outline-none"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="primary-gradient rounded-lg px-5 py-2 text-sm font-semibold text-on-primary shadow-glow disabled:opacity-50"
+        >
+          {loading ? "Computing…" : "Compare"}
+        </button>
+      </form>
 
-    if (
-      showLabels &&
-      n.type === "compound" &&
-      labelCount < maxLabels
-    ) {
-      labelCount += 1;
-      const canvas = document.createElement("canvas");
-      canvas.width = 256;
-      canvas.height = 64;
-      const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#7bd0ff";
-      ctx.font = "bold 22px monospace";
-      const rawLabel = n.label ?? "";
-      const label = rawLabel.length > 18 ? rawLabel.slice(0, 17) + "\u2026" : rawLabel;
-      ctx.fillText(label, 4, 40);
-      const tex = new THREE.CanvasTexture(canvas);
-      const spriteMat = new THREE.SpriteMaterial({
-        map: tex,
-        transparent: true,
-        opacity: 0.8,
-      });
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.scale.set(Math.max(1.5, maxDim * 0.08), Math.max(0.4, maxDim * 0.02), 1);
-      sprite.position.set(n.x - centerX, n.y - centerY + nodeRadius + 0.2, n.z - centerZ);
-      group.add(sprite);
-    }
-  });
+      {error && <ErrorMsg msg={error} />}
+      {loading && <LoadingMsg text="Fetching embedding vectors…" />}
 
-  // Edges - only draw a subset to avoid visual clutter
-  const maxEdges = 200;
-  const edgeStep = Math.max(1, Math.ceil(cleanEdges.length / maxEdges));
-  const edgesToDraw = cleanEdges.filter((_, i) => i % edgeStep === 0);
+      {data && !loading && (
+        <div className="space-y-6">
 
-  edgesToDraw.forEach((e) => {
-    const src = nodeMap.get(e.source);
-    const tgt = nodeMap.get(e.target);
-    if (!src || !tgt) return;
-    const pts = new Float32Array([src.x, src.y, src.z, tgt.x, tgt.y, tgt.z]);
-    const lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute("position", new THREE.BufferAttribute(pts, 3));
-    const line = new THREE.Line(
-      lineGeo,
-      new THREE.LineBasicMaterial({ color: 0x3cddc7, transparent: true, opacity: 0.45 }),
-    );
-    group.add(line);
-  });
+          {/* Training-set coverage warning */}
+          {(inTraining && (!inTraining.drug || !inTraining.disease)) && (
+            <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+              {!inTraining.drug && <span className="block">⚠ <strong>{data.drug_name}</strong> is not in the current embedding matrix — using a deterministic fallback vector. Run the full-graph pipeline for coverage.</span>}
+              {!inTraining.disease && <span className="block">⚠ <strong>{data.disease_name}</strong> is not in the current embedding matrix — using a deterministic fallback vector.</span>}
+            </div>
+          )}
 
-  // Subtle grid floor
-  const gridHelper = new THREE.GridHelper(maxDim * 1.5, 10, 0x333355, 0x222244);
-  gridHelper.position.set(0, -maxDim * 0.6, 0);
-  gridHelper.rotation.x = 0;
-  scene.add(gridHelper);
+          {/* Score */}
+          {probability != null && (
+            <div className="flex items-center gap-4 rounded-xl border border-outline/10 bg-surface-container-lowest/60 px-5 py-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-on-surface-variant">Link probability</p>
+                <p className={`text-3xl font-semibold ${scoreColor}`}>
+                  {(probability * 100).toFixed(1)}%
+                </p>
+              </div>
+              <div className="text-xs text-on-surface-variant space-y-0.5">
+                <p><span className="text-tertiary font-medium">≥ 70%</span> — strong structural evidence</p>
+                <p><span className="text-secondary font-medium">40–70%</span> — moderate signal</p>
+                <p><span className="text-on-surface-variant/70">&lt; 40%</span> — weak / no known relation</p>
+              </div>
+            </div>
+          )}
 
-  // Orbit controls (manual)
-  let isDragging = false;
-  let lastX = 0;
-  let lastY = 0;
-  let rotationX = 0;
-  let rotationY = 0;
+          {/* Feature vector breakdown */}
+          <div>
+            <h3 className="mb-1 font-headline text-sm font-semibold text-on-surface">
+              Feature vector breakdown — {data.qml_dim}-dim RotatE embeddings → {data.qml_dim * 4} features
+            </h3>
+            <p className="mb-4 text-xs text-on-surface-variant">
+              The model receives the concatenation <code className="rounded bg-surface-container px-1 py-0.5 text-[10px] text-primary">[h, t, |h−t|, h⊙t]</code> as its input.
+              Each bar is one embedding dimension. Height = magnitude; muted shade = negative value.
+            </p>
+            <div className="grid gap-5 sm:grid-cols-2">
+              {GROUPS.map((g) => (
+                <EmbedBars key={g.label} values={g.values} color={g.color} label={g.label} note={g.note} />
+              ))}
+            </div>
+          </div>
 
-  const onDown = (e: PointerEvent) => {
-    isDragging = true;
-    lastX = e.clientX;
-    lastY = e.clientY;
-  };
-  const onMove = (e: PointerEvent) => {
-    if (!isDragging) return;
-    rotationY += (e.clientX - lastX) * 0.008;
-    rotationX += (e.clientY - lastY) * 0.008;
-    rotationX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotationX));
-    group.rotation.x = rotationX;
-    group.rotation.y = rotationY;
-    lastX = e.clientX;
-    lastY = e.clientY;
-  };
-  const onUp = () => {
-    isDragging = false;
-  };
-  const onWheel = (e: WheelEvent) => {
-    camera.position.z = Math.max(maxDim * 0.5, Math.min(maxDim * 5, camera.position.z + e.deltaY * 0.02));
-  };
-
-  renderer.domElement.addEventListener("pointerdown", onDown);
-  renderer.domElement.addEventListener("pointermove", onMove);
-  renderer.domElement.addEventListener("pointerup", onUp);
-  renderer.domElement.addEventListener("pointerleave", onUp);
-  renderer.domElement.addEventListener("wheel", onWheel);
-
-  // Animate
-  let animId: number;
-  function animate() {
-    animId = requestAnimationFrame(animate);
-    if (!isDragging) {
-      group.rotation.y += 0.002;
-    }
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  // Resize
-  const ro = new ResizeObserver(() => {
-    const w = container.clientWidth;
-    const h = container.clientHeight || 520;
-    renderer.setSize(w, h);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-  });
-  ro.observe(container);
-
-  return () => {
-    cancelAnimationFrame(animId);
-    ro.disconnect();
-    renderer.domElement.removeEventListener("pointerdown", onDown);
-    renderer.domElement.removeEventListener("pointermove", onMove);
-    renderer.domElement.removeEventListener("pointerup", onUp);
-    renderer.domElement.removeEventListener("pointerleave", onUp);
-    renderer.domElement.removeEventListener("wheel", onWheel);
-    renderer.dispose();
-    if (container.contains(renderer.domElement))
-      container.removeChild(renderer.domElement);
-  };
+          {/* Resolved IDs */}
+          <p className="text-[10px] text-on-surface-variant/60">
+            Resolved: <code className="text-on-surface/70">{data.drug_id}</code> → <code className="text-on-surface/70">{data.disease_id}</code>
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1668,63 +1428,138 @@ function CircuitTab() {
   if (loading) return <LoadingMsg text="Loading circuit params\u2026" />;
   if (error) return <ErrorMsg msg={error} />;
 
+  const nq = config?.n_qubits ?? 12;
+  const nReps = config?.n_reps ?? 2;
+
   return (
-    <div className="space-y-3">
-      {/* Parameter badges */}
-      <div className="flex flex-wrap gap-3">
-        {[
-          { label: "Qubits", value: config?.n_qubits },
-          { label: "Reps", value: config?.n_reps },
-          { label: "Feature map", value: config?.feature_map },
-          { label: "Entanglement", value: config?.entanglement },
-          { label: "Mode", value: config?.execution_mode },
-          { label: "Backend", value: config?.backend },
-          { label: "Shots", value: config?.shots },
-        ]
-          .filter((b) => b.value != null)
-          .map((b) => (
-            <span
-              key={b.label}
-              className="inline-flex items-center gap-1.5 rounded-md bg-surface-container-high/60 px-2.5 py-1 text-xs"
-            >
-              <span className="text-on-surface-variant">{b.label}:</span>
-              <strong className="text-on-surface">{b.value}</strong>
-            </span>
+    <div className="space-y-6">
+
+      {/* ── How the circuit compares a drug to a disease ── */}
+      <section className="space-y-3">
+        <h2 className="font-headline text-base font-semibold text-on-surface">
+          How the quantum circuit compares a compound to a disease
+        </h2>
+
+        {/* Data-flow pipeline */}
+        <ol className="grid gap-3 sm:grid-cols-4">
+          {[
+            {
+              step: "01",
+              title: "PCA projection",
+              body: `The 128-dim RotatE embedding of the drug (or disease) is reduced to ${nq} principal components. Each component becomes one qubit's rotation angle φᵢ.`,
+              color: "text-[#7bd0ff]",
+            },
+            {
+              step: "02",
+              title: "Qubit encoding",
+              body: `A Hadamard gate puts each qubit into superposition. Then Rz(2φᵢ) rotates it by twice the embedding value — encoding the drug's position in graph space into a quantum state |ψ(drug)⟩.`,
+              color: "text-[#9b59b6]",
+            },
+            {
+              step: "03",
+              title: "ZZ entanglement",
+              body: `ZZ-interaction gates between qubit pairs compute cross-products φᵢ·φⱼ. This captures correlations between embedding dimensions that a simple dot-product misses — the circuit runs ${nReps} rep${nReps !== 1 ? "s" : ""}.`,
+              color: "text-[#3cddc7]",
+            },
+            {
+              step: "04",
+              title: "Quantum kernel",
+              body: `The circuit is run twice — once for the drug, once for the disease — producing |ψ(drug)⟩ and |ψ(disease)⟩. The kernel K = |⟨ψ(drug)|ψ(disease)⟩|² measures similarity in quantum feature space. QSVC uses this kernel as its decision boundary.`,
+              color: "text-[#69f0ae]",
+            },
+          ].map(({ step, title, body, color }) => (
+            <li key={step} className="rounded-xl border border-outline/10 bg-surface-container-lowest/60 p-4 space-y-1">
+              <p className={`font-mono text-xs font-bold opacity-70 ${color}`}>{step}</p>
+              <p className="text-sm font-semibold text-on-surface">{title}</p>
+              <p className="text-xs leading-relaxed text-on-surface-variant">{body}</p>
+            </li>
           ))}
-      </div>
+        </ol>
+      </section>
 
-      {/* Circuit diagram description */}
-      <p className="text-xs text-on-surface-variant">
-        {config?.feature_map === "ZZFeatureMap" || config?.feature_map === "Pauli"
-          ? "ZZFeatureMap: Hadamard layer \u2192 Rz(\u03c6) rotations \u2192 ZZ entangling \u2192 repeat \u2192 measurement"
-          : config?.feature_map === "ZFeatureMap"
-            ? "ZFeatureMap: Hadamard layer \u2192 Rz(\u03c6) rotations \u2192 repeat \u2192 measurement (no entanglement)"
-            : `${config?.feature_map} feature map: encoding + variational layers \u2192 measurement`}
-      </p>
+      {/* ── Classical vs Quantum comparison ── */}
+      <section className="rounded-xl border border-outline/10 bg-surface-container-lowest/60 p-5 space-y-3">
+        <h2 className="font-headline text-base font-semibold text-on-surface">
+          Classical vs quantum — what changes and what doesn&apos;t
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-outline/10 text-left text-on-surface-variant">
+                <th className="pb-2 pr-4 font-medium">Aspect</th>
+                <th className="pb-2 pr-4 font-medium text-secondary">Classical (LR / ExtraTrees)</th>
+                <th className="pb-2 font-medium text-[#3cddc7]">Quantum (QSVC)</th>
+              </tr>
+            </thead>
+            <tbody className="text-on-surface-variant">
+              {[
+                ["Input features", `${nq * 4} values — [h, t, |h−t|, h⊙t]`, `${nq} PCA dims each for drug and disease`],
+                ["Similarity measure", "Dot product / tree split", `Quantum kernel K(drug, disease) = |⟨ψ(drug)|ψ(disease)⟩|²`],
+                ["Cross-dim correlations", "Captured only by products in feature set", `Captured by ZZ gates — φᵢ·φⱼ for all pairs`],
+                ["Decision boundary", "Linear (LR) or piecewise (trees)", "Kernel SVM in Hilbert space — non-linear"],
+                ["Current PR-AUC (CtD)", "0.81 (ExtraTrees, 2317 features)", "0.80 (QSVC, ensemble)"],
+                ["Inference speed", "Microseconds", "Seconds (simulator) / minutes (hardware)"],
+                ["Served in API", "Yes — classical_serving.joblib", "No — not yet saved/loaded"],
+              ].map(([aspect, classical, quantum]) => (
+                <tr key={aspect} className="border-b border-outline/10">
+                  <td className="py-2 pr-4 font-medium text-on-surface">{aspect}</td>
+                  <td className="py-2 pr-4">{classical}</td>
+                  <td className="py-2 text-[#3cddc7]/90">{quantum}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-on-surface-variant/70 pt-1">
+          The quantum advantage is theoretical at this scale — {nq} qubits on a simulator. On real hardware, decoherence limits circuit depth. The value is in the kernel: ZZ entanglement captures embedding-dimension co-activations that linear features approximate but quantum circuits compute exactly.
+        </p>
+      </section>
 
-      <div className="overflow-x-auto rounded-lg border border-outline-variant/15 bg-surface-container-lowest/40 p-4">
-        <canvas
-          ref={canvasRef}
-          className="mx-auto"
-          style={{ maxWidth: "100%" }}
-        />
-      </div>
+      {/* ── Circuit diagram ── */}
+      <section className="space-y-2">
+        <h2 className="font-headline text-base font-semibold text-on-surface">
+          Circuit diagram ({nq} qubits, {nReps} rep{nReps !== 1 ? "s" : ""})
+        </h2>
 
-      {/* Gate colour legend */}
-      <div className="flex flex-wrap gap-3 text-xs text-on-surface-variant">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-5 rounded-sm bg-[#4a9eff]" /> Hadamard
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-5 rounded-sm bg-[#9b59b6]" /> Rotation (Rz)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#3cddc7]" /> Entangling (ZZ)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-5 rounded-sm bg-[#e67e22]" /> Measurement
-        </span>
-      </div>
+        {/* Parameter badges */}
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: "Qubits", value: config?.n_qubits },
+            { label: "Reps", value: config?.n_reps },
+            { label: "Feature map", value: config?.feature_map },
+            { label: "Entanglement", value: config?.entanglement },
+            { label: "Mode", value: config?.execution_mode ?? "simulator" },
+            { label: "Backend", value: config?.backend },
+            { label: "Shots", value: config?.shots },
+          ]
+            .filter((b) => b.value != null)
+            .map((b) => (
+              <span
+                key={b.label}
+                className="inline-flex items-center gap-1.5 rounded-md bg-surface-container-high/60 px-2.5 py-1 text-xs"
+              >
+                <span className="text-on-surface-variant">{b.label}:</span>
+                <strong className="text-on-surface">{b.value}</strong>
+              </span>
+            ))}
+        </div>
+
+        <p className="text-xs text-on-surface-variant">
+          Each horizontal wire = one qubit (one PCA component of the embedding).
+          Blue = Hadamard (superposition), purple = Rz rotation (encodes φᵢ), teal dot = ZZ entanglement (encodes φᵢ·φⱼ), orange = measurement.
+        </p>
+
+        <div className="overflow-x-auto rounded-lg border border-outline-variant/15 bg-surface-container-lowest/40 p-4">
+          <canvas ref={canvasRef} className="mx-auto" style={{ maxWidth: "100%" }} />
+        </div>
+
+        <div className="flex flex-wrap gap-3 text-xs text-on-surface-variant">
+          <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-5 rounded-sm bg-[#4a9eff]" /> Hadamard — superposition</span>
+          <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-5 rounded-sm bg-[#9b59b6]" /> Rz(2φᵢ) — encodes one embedding dim</span>
+          <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-full bg-[#3cddc7]" /> ZZ — captures φᵢ·φⱼ cross-correlation</span>
+          <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-5 rounded-sm bg-[#e67e22]" /> Measure — collapses to classical bit</span>
+        </div>
+      </section>
     </div>
   );
 }

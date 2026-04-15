@@ -497,7 +497,11 @@ def latest_execution_summary(df_hist: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_resource
 def load_classical_artifacts():
-    model_path = PROJECT_ROOT / "models" / "classical_logisticregression.joblib"
+    _candidates = [
+        PROJECT_ROOT / "models" / "classical_best.joblib",
+        PROJECT_ROOT / "models" / "classical_logisticregression.joblib",
+    ]
+    model_path  = next((p for p in _candidates if p.exists()), _candidates[-1])
     scaler_path = PROJECT_ROOT / "models" / "scaler.joblib"
     if not model_path.exists() or not scaler_path.exists():
         return None, None, str(model_path), str(scaler_path)

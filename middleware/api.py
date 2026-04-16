@@ -2,10 +2,11 @@
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Any, Dict
 import logging
 import os
+import re
 import numpy as np
 from .orchestrator import LinkPredictionOrchestrator
 from utils.latest_run import get_latest_run_snapshot
@@ -19,6 +20,12 @@ from utils.ibm_runtime_verify import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Security: control interactive docs via environment variable
+# Set FASTAPI_DOCS=1 to enable /docs and /redoc (disabled by default in prod)
+# ---------------------------------------------------------------------------
+_enable_docs = os.environ.get("FASTAPI_DOCS", "0").strip() in ("1", "true", "yes")
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Hybrid QML-KG Biomedical Link Predictor",
@@ -31,20 +38,43 @@ app = FastAPI(
     - **Use Case**: Drug repurposing and treatment discovery
     """,
     version="0.1.0",
+    docs_url="/docs" if _enable_docs else None,
+    redoc_url="/redoc" if _enable_docs else None,
     contact={
         "name": "Your Name",
         "email": "you@example.com",
     },
 )
 
-# Enable CORS (adjust origins for production)
+# ---------------------------------------------------------------------------
+# CORS — read allowed origins from environment; default to localhost dev ports.
+# Set CORS_ALLOWED_ORIGINS to a comma-separated list for production.
+# ---------------------------------------------------------------------------
+_default_origins = [
+    "http://localhost:3000",
+    "http://localhost:8501",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8501",
+]
+_cors_origins_env = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
+_cors_origins: List[str] = (
+    [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    if _cors_origins_env
+    else _default_origins
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+MAX_BATCH_SIZE = int(os.environ.get("MAX_BATCH_SIZE", "100"))
 
 # Initialize orchestrator (singleton)
 try:
@@ -113,6 +143,20 @@ class LatestRunResponse(BaseModel):
     message: Optional[str] = None
 
 
+# Regex for safe relative paths (no .., no leading /, alphanumeric + _-./)
+_SAFE_PATH_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_\-./]*$')
+
+
+def _validate_safe_relative_path(v: str, field_name: str) -> str:
+    """Reject paths that could escape the project directory."""
+    if '..' in v or v.startswith('/') or not _SAFE_PATH_RE.match(v):
+        raise ValueError(
+            f"{field_name} must be a safe relative path within the project "
+            f"(no '..', no leading '/', alphanumeric/underscore/hyphen/dot/slash only)"
+        )
+    return v
+
+
 class JobCreateRequest(BaseModel):
     """Subset of ``run_optimized_pipeline.py`` flags exposed to the UI."""
     relation: str = "CtD"
@@ -129,6 +173,16 @@ class JobCreateRequest(BaseModel):
     tune_classical: bool = False
     results_dir: str = "results"
     quantum_config_path: str = "config/quantum_config.yaml"
+
+    @field_validator("results_dir")
+    @classmethod
+    def _check_results_dir(cls, v: str) -> str:
+        return _validate_safe_relative_path(v, "results_dir")
+
+    @field_validator("quantum_config_path")
+    @classmethod
+    def _check_config_path(cls, v: str) -> str:
+        return _validate_safe_relative_path(v, "quantum_config_path")
 
 
 class JobResponse(BaseModel):
@@ -232,7 +286,14 @@ async def predict_link_get(
 async def batch_predict(requests: List[PredictionRequest]):
     """
     Predict multiple drug-disease pairs in a single request.
+
+    Limited to ``MAX_BATCH_SIZE`` items (default 100) to prevent DoS.
     """
+    if len(requests) > MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch size {len(requests)} exceeds maximum of {MAX_BATCH_SIZE}",
+        )
     if orchestrator is None:
         raise HTTPException(status_code=500, detail="System not initialized")
     
@@ -285,7 +346,7 @@ async def ranked_mechanisms(request: RankedMechanismsRequest):
         raise
     except Exception as e:
         logger.error(f"Ranked mechanisms failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 class KGStatsResponse(BaseModel):

@@ -240,12 +240,21 @@ def run_command(cmd: list, log_container):
         log_container.error(f"Failed to run command: {e}")
         return 1
 
-# Sidebar: Navigation
-st.sidebar.title("Navigation")
-if st.sidebar.button("Refresh data"):
-    st.cache_data.clear()
-    st.cache_resource.clear()
-    st.rerun()
+# NOTE: run_user_script was removed — it executed arbitrary user-supplied Python
+# code with no sandboxing, which is a remote code execution vulnerability.
+# See the security audit for details.
+
+# ============================================================================
+# SIDEBAR
+# ============================================================================
+st.sidebar.markdown(
+    '<div style="padding: 4px 0 12px 0;">'
+    '<p style="font-size:1.25rem; font-weight:800; margin:0; letter-spacing:-0.02em;">Hybrid QML-KG</p>'
+    '<p style="font-size:0.72rem; font-weight:500; margin:2px 0 0 0; opacity:0.6; letter-spacing:0.04em; text-transform:uppercase;">Biomedical Link Prediction</p>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+st.sidebar.markdown("---")
 
 page = st.sidebar.radio(
     "Go to",
@@ -261,6 +270,16 @@ page = st.sidebar.radio(
         "Hardware readiness (backend status)",
     ]
 )
+
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    '<p style="font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; opacity:0.5; margin-bottom:6px;">Tools</p>',
+    unsafe_allow_html=True,
+)
+if st.sidebar.button("Refresh data", use_container_width=True):
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    st.rerun()
 
 # ==============================
 # PAGE 0: PROJECT STORY

@@ -615,34 +615,9 @@ def run_command(cmd: list, log_container):
         return 1, str(e)
 
 
-def run_user_script(script_content: str, timeout_sec: int):
-    """
-    Run user-provided Python code in a subprocess with the project as cwd.
-    Returns (returncode, stdout, stderr). Raises on timeout or spawn failure.
-    """
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".py",
-        prefix="user_script_",
-        delete=False,
-        dir=str(PROJECT_ROOT),
-    ) as f:
-        f.write(script_content)
-        tmp_path = f.name
-    try:
-        result = subprocess.run(
-            [sys.executable, tmp_path],
-            cwd=str(PROJECT_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=max(1, int(timeout_sec)),
-        )
-        return result.returncode, result.stdout, result.stderr
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
+# NOTE: run_user_script was removed — it executed arbitrary user-supplied Python
+# code with no sandboxing, which is a remote code execution vulnerability.
+# See the security audit for details.
 
 
 # Sidebar: Navigation

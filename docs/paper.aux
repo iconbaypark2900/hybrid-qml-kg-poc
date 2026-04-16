@@ -1,0 +1,109 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\bibstyle{unsrtnat}
+\citation{himmelstein2017}
+\citation{mayers2023}
+\citation{qkdti2025}
+\citation{kruger2023}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Motivation}{1}{subsection.1.1}\protected@file@percent }
+\citation{himmelstein2017}
+\citation{mayers2023}
+\citation{llmrag2025}
+\citation{quantum2026}
+\citation{schuld2021}
+\citation{qkdti2025}
+\citation{kruger2023}
+\citation{hybrid2024}
+\citation{quantum2026}
+\citation{wolpert1992}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Problem Statement}{2}{subsection.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Contributions}{2}{subsection.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Background and Related Work}{2}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Hetionet and KG-Based Drug Repurposing}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Quantum Kernel Methods}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Quantum Methods in Drug Discovery}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Stacking Ensembles and Model Diversity}{2}{subsection.2.4}\protected@file@percent }
+\citation{pykeen2021}
+\citation{rotate2019}
+\citation{pykeen2021}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Dataset}{3}{section.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Hetionet CtD Dataset Statistics}}{3}{table.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:dataset}{{1}{3}{Hetionet CtD Dataset Statistics}{table.caption.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Methods}{3}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Pipeline Overview}{3}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:pipeline}{{4.1}{3}{Pipeline Overview}{subsection.4.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Hybrid quantum-classical pipeline for Compound-treats-Disease (CtD) link prediction on Hetionet. Full-graph RotatE embeddings are trained over all 24 relation types (2.25M edges). Pair-wise features are constructed from entity embeddings and training-graph topology. The quantum path applies a 16-qubit Pauli feature map to a PCA-reduced representation; the classical path uses RF/ET/LR with GridSearchCV tuning. A logistic regression stacking meta-learner combines base model outputs.}}{3}{figure.caption.2}\protected@file@percent }
+\newlabel{fig:pipeline}{{1}{3}{Hybrid quantum-classical pipeline for Compound-treats-Disease (CtD) link prediction on Hetionet. Full-graph RotatE embeddings are trained over all 24 relation types (2.25M edges). Pair-wise features are constructed from entity embeddings and training-graph topology. The quantum path applies a 16-qubit Pauli feature map to a PCA-reduced representation; the classical path uses RF/ET/LR with GridSearchCV tuning. A logistic regression stacking meta-learner combines base model outputs}{figure.caption.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Full-Graph Knowledge Graph Embeddings}{3}{subsection.4.2}\protected@file@percent }
+\citation{qiskit2023}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Pair Feature Construction}{4}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Quantum Kernel Classifier}{4}{subsection.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Mechanism-of-Action Feature Module}{4}{subsection.4.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}Classical Models and Ensemble}{4}{subsection.4.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Mechanism-of-Action Feature Definitions}}{5}{table.caption.3}\protected@file@percent }
+\newlabel{tab:moa}{{2}{5}{Mechanism-of-Action Feature Definitions}{table.caption.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Experimental Setup}{5}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Software and Hardware}{5}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Reproducing the Primary Result}{5}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Results}{5}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Primary Results}{5}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Extended Results: 256D Embeddings and Optuna Tuning}{5}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Feature Map Analysis: The Pauli Inversion Effect}{5}{subsection.6.3}\protected@file@percent }
+\newlabel{sec:results_feature_map}{{6.3}{5}{Feature Map Analysis: The Pauli Inversion Effect}{subsection.6.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Primary Benchmark --- RotatE-128D, Pauli-16Q. \textit  {Configuration: RotatE 128D, 200 epochs, full-graph embeddings, Pauli feature map (reps=2), 16 qubits, pre-PCA 24D, QSVC C=0.1, hard negatives (1:1), stacking ensemble, GridSearchCV classical tuning. Source: \texttt  {results/optimized\_results\_20260216-100431.json}. QSVC kernel computation: 2,619 s (uncached, genuine full-dataset computation).}}}{6}{table.caption.4}\protected@file@percent }
+\newlabel{tab:primary}{{3}{6}{Primary Benchmark --- RotatE-128D, Pauli-16Q. \textit {Configuration: RotatE 128D, 200 epochs, full-graph embeddings, Pauli feature map (reps=2), 16 qubits, pre-PCA 24D, QSVC C=0.1, hard negatives (1:1), stacking ensemble, GridSearchCV classical tuning. Source: \texttt {results/optimized\_results\_20260216-100431.json}. QSVC kernel computation: 2,619 s (uncached, genuine full-dataset computation).}}{table.caption.4}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Extended Configuration --- RotatE-256D, Pauli-12Q, Optuna. \textit  {Configuration: RotatE 256D, 250 epochs, full-graph embeddings, Pauli feature map (reps=1), 12 qubits, no pre-PCA, QSVC C=0.676 (Optuna-tuned), hard negatives, stacking ensemble. Source: \texttt  {results/optimized\_results\_20260323-134844.json}. Note: quantum kernel was computed once (${\sim }$99 s) on the first Optuna trial and reused across subsequent classical hyperparameter trials.}}}{6}{table.caption.5}\protected@file@percent }
+\newlabel{tab:extended}{{4}{6}{Extended Configuration --- RotatE-256D, Pauli-12Q, Optuna. \textit {Configuration: RotatE 256D, 250 epochs, full-graph embeddings, Pauli feature map (reps=1), 12 qubits, no pre-PCA, QSVC C=0.676 (Optuna-tuned), hard negatives, stacking ensemble. Source: \texttt {results/optimized\_results\_20260323-134844.json}. Note: quantum kernel was computed once (${\sim }$99 s) on the first Optuna trial and reused across subsequent classical hyperparameter trials.}}{table.caption.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Feature Map Ablation. \textit  {RotatE-128D held constant; all other parameters identical.}}}{6}{table.caption.6}\protected@file@percent }
+\newlabel{tab:ablation}{{5}{6}{Feature Map Ablation. \textit {RotatE-128D held constant; all other parameters identical.}}{table.caption.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}VQC Ablation}{6}{subsection.6.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces VQC Optimizer Comparison. \textit  {RealAmplitudes ansatz, 8 qubits, 50 iterations.}}}{6}{table.caption.8}\protected@file@percent }
+\newlabel{tab:vqc_optimizer}{{6}{6}{VQC Optimizer Comparison. \textit {RealAmplitudes ansatz, 8 qubits, 50 iterations.}}{table.caption.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces VQC Ansatz Comparison. \textit  {SPSA optimizer, 8 qubits, 50 iterations.}}}{6}{table.caption.9}\protected@file@percent }
+\newlabel{tab:vqc_ansatz}{{7}{6}{VQC Ansatz Comparison. \textit {SPSA optimizer, 8 qubits, 50 iterations.}}{table.caption.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Feature map selection reveals a counterintuitive quantum-classical tradeoff. Switching from ZZ to Pauli lowers standalone QSVC PR-AUC by 8.7 pp (0.7216 $\to $ 0.6343) while raising ensemble PR-AUC by 5.8 pp (0.7408 $\to $ 0.7987). The Pauli kernel generates predictions less correlated with classical tree model errors, providing greater complementary signal to the stacking meta-learner. Dashed line: best classical-only baseline (RandomForest, 0.7838).}}{7}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:pauli_zz}{{2}{7}{Feature map selection reveals a counterintuitive quantum-classical tradeoff. Switching from ZZ to Pauli lowers standalone QSVC PR-AUC by 8.7 pp (0.7216 $\to $ 0.6343) while raising ensemble PR-AUC by 5.8 pp (0.7408 $\to $ 0.7987). The Pauli kernel generates predictions less correlated with classical tree model errors, providing greater complementary signal to the stacking meta-learner. Dashed line: best classical-only baseline (RandomForest, 0.7838)}{figure.caption.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Hardware Validation: IBM Quantum Heron}{7}{subsection.6.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Clinical Validation}{7}{section.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Validation Methodology}{7}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}Validation Results}{7}{subsection.7.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Score-validity inversion: model prediction score vs.\ ClinicalTrials.gov registrations. The highest-scoring prediction (Abacavir$\to $ocular cancer, 0.793) has zero clinical trial support, while the most validated predictions (Losartan$\to $atherosclerosis, Mitomycin$\to $liver cancer, 7+ trials each) score 0.52--0.53. This inversion motivates the mechanism-of-action feature module.}}{7}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:clinical}{{3}{7}{Score-validity inversion: model prediction score vs.\ ClinicalTrials.gov registrations. The highest-scoring prediction (Abacavir$\to $ocular cancer, 0.793) has zero clinical trial support, while the most validated predictions (Losartan$\to $atherosclerosis, Mitomycin$\to $liver cancer, 7+ trials each) score 0.52--0.53. This inversion motivates the mechanism-of-action feature module}{figure.caption.11}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3}Score-Validity Inversion}{7}{subsection.7.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces ClinicalTrials.gov Validation of Top Novel Predictions}}{8}{table.caption.10}\protected@file@percent }
+\newlabel{tab:clinical}{{8}{8}{ClinicalTrials.gov Validation of Top Novel Predictions}{table.caption.10}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4}Novel Hypothesis: Ezetimibe for Gout}{8}{subsection.7.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Discussion}{8}{section.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.1}Why the Ensemble Beats Classical-Only}{8}{subsection.8.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.2}Embedding Quality as the Dominant Performance Driver}{8}{subsection.8.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.3}Quantum Kernel Scaling and the $O(n^2)$ Constraint}{8}{subsection.8.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.4}Score-Validity Inversion and the MoA Solution}{8}{subsection.8.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.5}Limitations}{9}{subsection.8.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}Future Work}{9}{section.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10}Conclusion}{9}{section.10}\protected@file@percent }
+\bibcite{himmelstein2017}{{1}{}{{}}{{}}}
+\bibcite{mayers2023}{{2}{}{{}}{{}}}
+\bibcite{qkdti2025}{{3}{}{{}}{{}}}
+\bibcite{kruger2023}{{4}{}{{}}{{}}}
+\bibcite{llmrag2025}{{5}{}{{}}{{}}}
+\bibcite{quantum2026}{{6}{}{{}}{{}}}
+\bibcite{hybrid2024}{{7}{}{{}}{{}}}
+\bibcite{rotate2019}{{8}{}{{}}{{}}}
+\bibcite{pykeen2021}{{9}{}{{}}{{}}}
+\bibcite{schuld2021}{{10}{}{{}}{{}}}
+\bibcite{qiskit2023}{{11}{}{{}}{{}}}
+\bibcite{wolpert1992}{{12}{}{{}}{{}}}
+\providecommand\NAT@force@numbers{}\NAT@force@numbers
+\@writefile{toc}{\contentsline {section}{\numberline {A}Full Configuration: Primary Run}{10}{appendix.A}\protected@file@percent }
+\newlabel{app:primary_config}{{A}{10}{Full Configuration: Primary Run}{appendix.A}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {B}Full Configuration: Extended Run}{10}{appendix.B}\protected@file@percent }
+\newlabel{app:extended_config}{{B}{10}{Full Configuration: Extended Run}{appendix.B}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Primary Run Configuration}}{11}{table.caption.12}\protected@file@percent }
+\newlabel{tab:config_primary}{{9}{11}{Primary Run Configuration}{table.caption.12}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Extended Run Configuration}}{11}{table.caption.13}\protected@file@percent }
+\newlabel{tab:config_extended}{{10}{11}{Extended Run Configuration}{table.caption.13}{}}
+\gdef \@abspage@last{11}

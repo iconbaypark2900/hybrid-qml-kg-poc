@@ -52,21 +52,11 @@ If you deploy without fixing this, the container may start but `/status` or pred
 
 The repository root **`Dockerfile`** already builds the Next.js app and runs both processes. Fly must bind the **public** process to **`0.0.0.0` and `$PORT`**.
 
-### 1. Adjust the container start command for Fly
+### 1. Container start command (root `Dockerfile`)
 
-The stock `CMD` in the root `Dockerfile` uses a fixed port (`7860`) for Next.js. On Fly, use the **`PORT`** environment variable (injected by the platform).
+The root **`Dockerfile`** binds Next.js to **`0.0.0.0:${PORT:-8080}`** (image default **`PORT=8080`** to match Fly `internal_port`; Hugging Face Spaces overrides `PORT` at runtime). FastAPI stays on **127.0.0.1:8000** (not publicly exposed).
 
-Replace the final `CMD` with something equivalent to:
-
-```dockerfile
-ENV PORT=8080
-CMD ["sh", "-c", "uvicorn middleware.api:app --host 127.0.0.1 --port 8000 & cd frontend && ./node_modules/.bin/next start -H 0.0.0.0 -p ${PORT}"]
-```
-
-Notes:
-
-- **FastAPI** stays on **127.0.0.1:8000** (not publicly exposed); only Next listens on `$PORT`.
-- Build the frontend with **same-origin API** so the browser does not hard-code a dev URL, e.g. build with `NEXT_PUBLIC_API_URL=` (empty) as in the root `Dockerfile`, so client calls use relative URLs and the Next rewrites/proxy can reach the API.
+- Build the frontend with **same-origin API** (`NEXT_PUBLIC_API_URL=""` in the Dockerfile) so the browser uses relative URLs and Next rewrites proxy to the API.
 
 ### 2. Create the Fly app
 
@@ -130,6 +120,25 @@ Match any variable names your `config/*.yaml` and `middleware/api.py` expect.
 
 ### 5. Deploy
 
+**Depot builder errors (`Waiting for depot builder...`, `403`, `ensure depot builder failed`):**  
+Fly CLI often uses [Depot](https://depot.dev/) for remote builds. If that step fails, deploy **without** Depot:
+
+```bash
+# Recommended wrapper (repo root — disables Depot by default)
+chmod +x scripts/fly_deploy.sh
+./scripts/fly_deploy.sh deploy -a hybrid-qml-kg-poc
+
+# Equivalent one-liner
+fly deploy --depot=false -a hybrid-qml-kg-poc
+
+# Build and push image only (no deploy), without Depot
+fly deploy --depot=false --build-only --push -a hybrid-qml-kg-poc --image-label YOUR_LABEL
+```
+
+To force Depot again: `FLY_USE_DEPOT=1 ./scripts/fly_deploy.sh deploy ...`
+
+Standard deploy:
+
 ```bash
 fly deploy
 fly status
@@ -181,6 +190,7 @@ fly launch --dockerfile deployment/Dockerfile.dashboard
 
 | Symptom | Things to check |
 |--------|-------------------|
+| `ensure depot builder failed` / `403` / `internal error` during build | Use `fly deploy --depot=false` or `./scripts/fly_deploy.sh deploy`. Retry later if Fly/Depot is degraded. |
 | `502` / connection refused | Next not listening on `0.0.0.0:$PORT`; `internal_port` in `fly.toml` mismatch. |
 | `Failed to fetch` / wrong API host | `NEXT_PUBLIC_API_URL` at build time vs actual API URL; CORS on FastAPI if browser calls API directly. |
 | Orchestrator / prediction errors | Missing `data/`, `models/`, or `results/` in the image or volume. |

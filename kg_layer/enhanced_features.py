@@ -71,6 +71,7 @@ class EnhancedFeatureBuilder:
         include_graph_features: bool = True,
         include_domain_features: bool = True,
         include_directional_features: bool = False,
+        include_moa_features: bool = False,
         normalize: bool = True
     ):
         """
@@ -78,14 +79,18 @@ class EnhancedFeatureBuilder:
             include_graph_features: Include topological graph features
             include_domain_features: Include biomedical domain-specific features
             include_directional_features: Include up/down regulation evidence (evidence_up, evidence_down, etc.)
+            include_moa_features: Include mechanism-of-action features (binding targets, pathway overlap,
+                                 drug class, chemical/disease similarity to known treatments)
             normalize: Apply standard scaling to features
         """
         self.include_graph_features = include_graph_features
         self.include_domain_features = include_domain_features
         self.include_directional_features = include_directional_features
+        self.include_moa_features = include_moa_features
         self.normalize = normalize
         self.scaler: Optional[StandardScaler] = None
         self.graph: Optional[nx.Graph] = None
+        self._moa_index = None  # Set via build_moa_index()
 
         # Cache for expensive computations
         self._degree_cache: Dict = {}
@@ -170,6 +175,21 @@ class EnhancedFeatureBuilder:
                 self._betweenness_cache = {n: 0.0 for n in self.graph.nodes()}
 
         logger.info("Graph metrics pre-computed.")
+
+    def build_moa_index(
+        self,
+        all_edges_df: pd.DataFrame,
+        train_ctd_df: pd.DataFrame
+    ):
+        """
+        Build mechanism-of-action lookup tables from full Hetionet edges.
+
+        Args:
+            all_edges_df: Full Hetionet edges DataFrame (source, metaedge, target).
+            train_ctd_df: Training CtD positive edges with 'source'/'target' string entity IDs.
+        """
+        from .moa_features import build_moa_index as _build_moa_index
+        self._moa_index = _build_moa_index(all_edges_df, train_ctd_df)
 
     def build_embedding_features(
         self,
@@ -529,6 +549,14 @@ class EnhancedFeatureBuilder:
                 features_list.append(directional_feats_array[idx])
                 if idx == 0:
                     feature_names.extend(directional_feat_names)
+
+            # 5. Mechanism-of-Action features
+            if self.include_moa_features and self._moa_index is not None:
+                from .moa_features import compute_moa_features, MOA_FEATURE_NAMES
+                moa_feats = compute_moa_features(h_id, t_id, self._moa_index)
+                features_list.append(moa_feats)
+                if idx == 0:
+                    feature_names.extend(MOA_FEATURE_NAMES)
 
             # Concatenate all features
             combined_feats = np.concatenate(features_list)

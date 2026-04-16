@@ -58,7 +58,7 @@ def _parse_pr_auc_from_log(log_text: str):
     return results
 
 
-def _run_pipeline(params: dict, extra_fixed_args: list) -> dict:
+def _run_pipeline(params: dict, extra_fixed_args: list, *, subprocess_timeout: int = 600) -> dict:
     """Run the pipeline with given params and return parsed PR-AUC dict."""
     python = _find_python()
     cmd = [
@@ -93,7 +93,7 @@ def _run_pipeline(params: dict, extra_fixed_args: list) -> dict:
 
     logger.info(f"Running pipeline: {' '.join(cmd[-20:])}")
     result = subprocess.run(
-        cmd, capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=600
+        cmd, capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=subprocess_timeout
     )
 
     combined = result.stdout + "\n" + result.stderr
@@ -124,7 +124,9 @@ def objective(trial: optuna.Trial, args) -> float:
     }
 
     try:
-        pr_auc_dict = _run_pipeline(params, args.extra_args)
+        pr_auc_dict = _run_pipeline(
+            params, args.extra_args, subprocess_timeout=args.subprocess_timeout
+        )
     except subprocess.TimeoutExpired:
         logger.warning(f"Trial {trial.number} timed out.")
         return 0.0
@@ -178,6 +180,13 @@ def main():
         type=str,
         default="results/optuna",
         help="Directory for CSV output",
+    )
+    parser.add_argument(
+        "--subprocess-timeout",
+        type=int,
+        default=600,
+        metavar="SEC",
+        help="Per-trial timeout for run_optimized_pipeline.py subprocess (default: 600)",
     )
 
     args, extra = parser.parse_known_args()

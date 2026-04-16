@@ -41,6 +41,13 @@ def main():
     if args.mode in ["terminal", "both"]:
         print("Running terminal tests...")
         run_terminal_tests()
+        print("Running discovery metrics tests (tests/test_discovery_metrics.py)...")
+        r = subprocess.run(
+            [sys.executable, str(_ROOT / "tests" / "test_discovery_metrics.py")],
+            cwd=_ROOT,
+        )
+        if r.returncode != 0:
+            sys.exit(r.returncode)
     
     if args.mode in ["dashboard", "both"]:
         print(f"Starting dashboard on port {args.port}...")

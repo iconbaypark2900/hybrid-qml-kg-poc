@@ -174,8 +174,26 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
+def top_k_hit_rate(y_true, y_scores, k: int = 10) -> float:
+    """Fraction of test positives appearing in the top-k ranked predictions."""
+    y_true = np.asarray(y_true)
+    y_scores = np.asarray(y_scores)
+    idx = np.argsort(y_scores)[::-1][:k]
+    total_pos = max(1, int(y_true.sum()))
+    return float(y_true[idx].sum() / total_pos)
+
+
+def mean_rank_of_positives(y_true, y_scores) -> float:
+    """Average 1-indexed rank of true-positive edges in the ranked list."""
+    y_true = np.asarray(y_true)
+    y_scores = np.asarray(y_scores)
+    ranked = np.argsort(y_scores)[::-1]
+    ranks = np.where(y_true[ranked] == 1)[0] + 1
+    return float(ranks.mean()) if len(ranks) > 0 else float("nan")
+
+
 def compute_metrics(y_true, y_pred, y_score=None) -> Dict[str, float]:
-    """Compute comprehensive metrics."""
+    """Compute comprehensive metrics including discovery metrics."""
     metrics = {
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "precision": float(precision_score(y_true, y_pred, zero_division=0)),
@@ -192,6 +210,14 @@ def compute_metrics(y_true, y_pred, y_score=None) -> Dict[str, float]:
             metrics["pr_auc"] = float(average_precision_score(y_true, y_score))
         except Exception:
             metrics["pr_auc"] = float("nan")
+        try:
+            metrics["top_10_hit_rate"] = top_k_hit_rate(y_true, y_score, k=10)
+        except Exception:
+            metrics["top_10_hit_rate"] = float("nan")
+        try:
+            metrics["mean_rank"] = mean_rank_of_positives(y_true, y_score)
+        except Exception:
+            metrics["mean_rank"] = float("nan")
 
     return metrics
 
@@ -293,54 +319,80 @@ def _make_split_with_negatives(
         out["label"] = 0
         return out
 
-    def _sample_negs_hard(n: int, seed: int) -> pd.DataFrame:
+    def _sample_negs_hard(n: int, seed: int, strategy: str = "degree_corrupt") -> pd.DataFrame:
+        """Delegate hard negatives to kg_layer.kg_loader.get_hard_negatives.
+
+        The shared implementation supports degree_corrupt, type_aware, and
+        embedding_knn strategies. It operates on string source/target columns,
+        so we build a string-keyed frame, call the library, and map back to
+        integer IDs. Falls back to random sampling if the mapping is too sparse.
         """
-        Hard negatives (standard KG corruption): for each positive, corrupt head or tail,
-        sampling replacements proportional to node degrees to avoid trivial negatives.
-        """
+        from kg_layer.kg_loader import get_hard_negatives as _kg_hard_negs
+
         n = int(max(0, n))
-        rng = np.random.default_rng(int(seed))
-        # degree-based sampling to bias toward frequent nodes (harder)
-        src_deg = pos_df["source_id"].value_counts().to_dict()
-        tgt_deg = pos_df["target_id"].value_counts().to_dict()
-        src_ids = np.array(list(src_deg.keys()), dtype=int)
-        tgt_ids = np.array(list(tgt_deg.keys()), dtype=int)
-        src_p = np.array([src_deg[int(i)] for i in src_ids], dtype=float)
-        tgt_p = np.array([tgt_deg[int(i)] for i in tgt_ids], dtype=float)
-        src_p = src_p / max(1e-9, src_p.sum())
-        tgt_p = tgt_p / max(1e-9, tgt_p.sum())
+        entity_to_id = {v: k for k, v in id_to_entity.items()} if id_to_entity else {}
 
-        pos_pairs = list(zip(pos_df["source_id"].values.tolist(), pos_df["target_id"].values.tolist()))
-        rng.shuffle(pos_pairs)
+        has_strings = ("source" in pos_df.columns and "target" in pos_df.columns
+                       and pos_df["source"].notna().any())
 
-        neg_s, neg_t = [], []
-        attempts = 0
-        max_attempts = max(2000, n * 40)
-        while len(neg_s) < n and attempts < max_attempts:
-            s_pos, t_pos = pos_pairs[attempts % len(pos_pairs)]
-            corrupt_tail = bool(rng.random() < 0.5)
-            if corrupt_tail:
-                s = int(s_pos)
-                t = int(rng.choice(tgt_ids, p=tgt_p))
-            else:
-                s = int(rng.choice(src_ids, p=src_p))
-                t = int(t_pos)
-            if (s, t) not in existing_pairs:
-                neg_s.append(s)
-                neg_t.append(t)
-            attempts += 1
-        out = pd.DataFrame({"source_id": neg_s, "target_id": neg_t})
-        if id_to_entity:
-            out["source"] = out["source_id"].map(id_to_entity)
-            out["target"] = out["target_id"].map(id_to_entity)
-        out["label"] = 0
-        return out
+        if not has_strings and not entity_to_id:
+            logger.warning("Hard-neg delegation: no string↔id mapping available; "
+                           "falling back to random negatives.")
+            return _sample_negs_random(n, seed)
+
+        if has_strings:
+            str_pos = pos_df[["source", "target"]].copy()
+        else:
+            str_pos = pd.DataFrame({
+                "source": pos_df["source_id"].map(id_to_entity),
+                "target": pos_df["target_id"].map(id_to_entity),
+            })
+
+        str_pos = str_pos.dropna(subset=["source", "target"])
+        if str_pos.empty:
+            logger.warning("Hard-neg delegation: string mapping yielded no rows; "
+                           "falling back to random negatives.")
+            return _sample_negs_random(n, seed)
+
+        raw = _kg_hard_negs(
+            str_pos,
+            strategy=strategy,
+            num_negatives=n,
+            random_state=seed,
+        )
+
+        if raw.empty:
+            return _sample_negs_random(n, seed)
+
+        if entity_to_id:
+            raw["source_id"] = raw["source"].map(entity_to_id)
+            raw["target_id"] = raw["target"].map(entity_to_id)
+        elif "source_id" not in raw.columns:
+            raw["source_id"] = raw["source"]
+            raw["target_id"] = raw["target"]
+
+        raw = raw.dropna(subset=["source_id", "target_id"])
+        raw["source_id"] = raw["source_id"].astype(int)
+        raw["target_id"] = raw["target_id"].astype(int)
+        raw["label"] = 0
+
+        if id_to_entity and "source" not in raw.columns:
+            raw["source"] = raw["source_id"].map(id_to_entity)
+            raw["target"] = raw["target_id"].map(id_to_entity)
+
+        raw = raw.drop_duplicates(subset=["source_id", "target_id"]).head(n)
+
+        shortfall = n - len(raw)
+        if shortfall > 0:
+            logger.info("Hard-neg delegation: topped up %d rows with random negatives.", shortfall)
+            extra = _sample_negs_random(shortfall, seed + 99)
+            raw = pd.concat([raw, extra], ignore_index=True).drop_duplicates(
+                subset=["source_id", "target_id"]).head(n)
+
+        return raw.reset_index(drop=True)
 
     def _sample_negs_diverse(n: int, seed: int) -> pd.DataFrame:
-        """
-        Mix of hard and random negatives to improve coverage.
-        `diversity_weight` controls fraction of random negatives (0..1).
-        """
+        """Mix of hard (via kg_layer) and random negatives."""
         n = int(max(0, n))
         w = float(diversity_weight)
         w = min(1.0, max(0.0, w))
@@ -351,7 +403,6 @@ def _make_split_with_negatives(
         out = pd.concat([df_a, df_b], ignore_index=True)
         if not out.empty:
             out = out.drop_duplicates(subset=["source_id", "target_id"]).reset_index(drop=True)
-        # Top up if duplicates reduced count
         if len(out) < n:
             extra = _sample_negs_random(n - len(out), seed + 33)
             out = pd.concat([out, extra], ignore_index=True).drop_duplicates(subset=["source_id", "target_id"]).reset_index(drop=True)
@@ -688,6 +739,9 @@ def main():
     # Feature args
     parser.add_argument("--use_graph_features", action="store_true", default=True, help="Include graph features")
     parser.add_argument("--use_domain_features", action="store_true", default=True, help="Include domain features")
+    parser.add_argument("--use_moa_features", action="store_true", default=False,
+                       help="Include mechanism-of-action features (binding targets, pathway overlap, "
+                            "drug class, chemical/disease similarity to known treatments)")
 
     # Quantum args
     parser.add_argument("--qml_dim", type=int, default=12, help="Number of qubits (default: 12, was 10)")
@@ -971,7 +1025,7 @@ def main():
     logger.info(f"Calibrate probabilities: {args.calibrate_probabilities}")
     if args.calibrate_probabilities:
         logger.info(f"Calibration method: {args.calibration_method}")
-    logger.info(f"Graph features: {args.use_graph_features}, Domain features: {args.use_domain_features}")
+    logger.info(f"Graph features: {args.use_graph_features}, Domain features: {args.use_domain_features}, MoA features: {getattr(args, 'use_moa_features', False)}")
     logger.info(f"Quantum encoding: {args.qml_encoding} (qubits={args.qml_dim})")
     logger.info(f"Quantum feature map: {args.qml_feature_map} (reps={args.qml_feature_map_reps}, entanglement={args.qml_entanglement})")
 
@@ -1816,6 +1870,7 @@ def main():
     feature_builder = EnhancedFeatureBuilder(
         include_graph_features=args.use_graph_features,
         include_domain_features=args.use_domain_features,
+        include_moa_features=getattr(args, 'use_moa_features', False),
         normalize=True
     )
 
@@ -1836,6 +1891,11 @@ def main():
     if args.use_graph_features:
         logger.info("Building graph on TRAINING edges only (prevents leakage)...")
         feature_builder.build_graph(train_edges_only)
+
+    # Build MoA index (uses full Hetionet edges but only TRAINING CtD for known treatments)
+    if getattr(args, 'use_moa_features', False):
+        logger.info("Building mechanism-of-action index from full Hetionet edges...")
+        feature_builder.build_moa_index(df, train_edges_only)
 
     # Convert integer IDs to entity string IDs for feature building
     # build_features expects entity string IDs (e.g., "Compound::DB00001"), not integer IDs
@@ -2004,11 +2064,14 @@ def main():
         feature_builder_no_norm = EnhancedFeatureBuilder(
             include_graph_features=args.use_graph_features,
             include_domain_features=args.use_domain_features,
+            include_moa_features=getattr(args, 'use_moa_features', False),
             normalize=False  # Disable normalization
         )
-        
+
         if args.use_graph_features:
             feature_builder_no_norm.build_graph(train_edges_only)
+        if getattr(args, 'use_moa_features', False):
+            feature_builder_no_norm.build_moa_index(df, train_edges_only)
         
         X_train, feature_names = feature_builder_no_norm.build_features(
             train_df, embeddings, edges_df=train_edges_only, fit_scaler=False
@@ -3382,49 +3445,36 @@ def main():
 
     all_results = []
 
+    def _result_row(name, rtype, metrics_dict, fit_time):
+        return {
+            'name': name,
+            'type': rtype,
+            'pr_auc': metrics_dict.get('pr_auc', 0.0),
+            'accuracy': metrics_dict.get('accuracy', 0.0),
+            'top_10_hit_rate': metrics_dict.get('top_10_hit_rate'),
+            'mean_rank': metrics_dict.get('mean_rank'),
+            'fit_time': fit_time,
+        }
+
     # Add classical results
     for name, result in classical_results.items():
         if result['status'] == 'success':
-            all_results.append({
-                'name': name,
-                'type': 'classical',
-                'pr_auc': result['test_metrics'].get('pr_auc', 0.0),
-                'accuracy': result['test_metrics'].get('accuracy', 0.0),
-                'fit_time': result['fit_seconds']
-            })
+            all_results.append(_result_row(name, 'classical', result['test_metrics'], result['fit_seconds']))
 
     # Add quantum results
     for name, result in quantum_results.items():
         if result['status'] == 'success':
-            all_results.append({
-                'name': name,
-                'type': 'quantum',
-                'pr_auc': result['test_metrics'].get('pr_auc', 0.0),
-                'accuracy': result['test_metrics'].get('accuracy', 0.0),
-                'fit_time': result['fit_seconds']
-            })
+            all_results.append(_result_row(name, 'quantum', result['test_metrics'], result['fit_seconds']))
 
     # Add GNN results
     for name, result in gnn_results.items():
         if result.get('status') == 'success':
-            all_results.append({
-                'name': name,
-                'type': 'gnn',
-                'pr_auc': result.get('pr_auc', 0.0),
-                'accuracy': result.get('accuracy', 0.0),
-                'fit_time': result.get('fit_seconds', 0.0)
-            })
+            all_results.append(_result_row(name, 'gnn', result, result.get('fit_seconds', 0.0)))
 
     # Add ensemble results
     for name, result in ensemble_results.items():
         if result.get('status') == 'success':
-            all_results.append({
-                'name': name,
-                'type': 'ensemble',
-                'pr_auc': result['test_metrics'].get('pr_auc', 0.0),
-                'accuracy': result['test_metrics'].get('accuracy', 0.0),
-                'fit_time': result.get('fit_seconds', 0.0)
-            })
+            all_results.append(_result_row(name, 'ensemble', result['test_metrics'], result.get('fit_seconds', 0.0)))
 
     # Sort by PR-AUC
     all_results.sort(key=lambda x: x['pr_auc'], reverse=True)
@@ -3440,7 +3490,9 @@ def main():
         print(f"{rank:<6d} | {res['name']:<35s} | {res['type']:<10s} | "
               f"{res['pr_auc']:<10.4f} | {res['accuracy']:<10.4f} | {res['fit_time']:<10.2f}")
 
-    # Best models
+    # Best models (defaults for quantum_only / empty ranking and serving-save block below)
+    best_classical = None
+    best_quantum = None
     if all_results:
         best_overall = all_results[0]
         best_classical = next((r for r in all_results if r['type'] == 'classical'), None)
@@ -3507,6 +3559,7 @@ def main():
                 "embedding_dim":    getattr(args, "embedding_dim", None),
                 "use_graph_features":  getattr(args, "use_graph_features", False),
                 "use_domain_features": getattr(args, "use_domain_features", False),
+                "use_moa_features":    getattr(args, "use_moa_features", False),
             }
             with open(os.path.join(_model_dir, "classical_best_meta.json"), "w") as _mf:
                 json.dump(_meta, _mf, indent=2, default=str)
@@ -3579,6 +3632,73 @@ def main():
         json.dump(payload, f, indent=2, default=str)
 
     logger.info(f"\n✅ Results saved to: {out_path}")
+
+    # ── Provenance registry ──────────────────────────────────────────
+    try:
+        from scripts.benchmark_registry import register_run
+
+        _best = all_results[0] if all_results else {}
+        _best_classical = next((r for r in all_results if r.get("type") == "classical"), {})
+        _best_quantum   = next((r for r in all_results if r.get("type") == "quantum"),   {})
+
+        _qcfg_backend: dict = {"name": "simulator_statevector", "execution_mode": "simulator",
+                               "shots": None, "noise_model": None}
+        try:
+            if yaml and os.path.exists(getattr(args, "quantum_config_path", "")):
+                with open(args.quantum_config_path) as _qf:
+                    _qcfg = yaml.safe_load(_qf) or {}
+                _qsec = _qcfg.get("quantum", {})
+                _exec = _qsec.get("execution_mode", "simulator")
+                _qcfg_backend = {
+                    "name": _qsec.get(_exec, {}).get("backend", f"simulator_{_exec}"),
+                    "execution_mode": _exec,
+                    "shots": _qsec.get(_exec, {}).get("shots"),
+                    "noise_model": _qsec.get(_exec, {}).get("noise_model"),
+                }
+        except Exception:
+            pass
+
+        register_run(
+            run_id=stamp,
+            relation=args.relation,
+            embedding={
+                "method":     getattr(args, "embedding_method",  "unknown"),
+                "dim":        getattr(args, "embedding_dim",     None),
+                "epochs":     getattr(args, "embedding_epochs",  None),
+                "full_graph": bool(getattr(args, "full_graph_embeddings", False)),
+            },
+            reduction={
+                "method":      "PCA",
+                "pre_pca_dim": getattr(args, "qml_pre_pca_dim", None),
+                "output_dim":  getattr(args, "qml_dim",         None),
+            },
+            model={
+                "name":   _best.get("name",   "none"),
+                "type":   _best.get("type",   "none"),
+                "pr_auc": _best.get("pr_auc", None),
+            },
+            backend=_qcfg_backend,
+            metrics={
+                "pr_auc":           _best.get("pr_auc"),
+                "classical_pr_auc": _best_classical.get("pr_auc"),
+                "quantum_pr_auc":   _best_quantum.get("pr_auc"),
+                "top_10_hit_rate":  _best.get("top_10_hit_rate"),
+                "mean_rank":        _best.get("mean_rank"),
+            },
+            negative_sampling={
+                "strategy": getattr(args, "negative_sampling", "random"),
+                "ratio":    1.0,
+            },
+            split={
+                "test_size":    0.20,
+                "random_state": getattr(args, "random_state", 42),
+            },
+            notes=f"run_optimized_pipeline fast_mode={getattr(args, 'fast_mode', False)}",
+        )
+        logger.info("✅ Provenance registered → results/benchmark_registry.jsonl")
+    except Exception as _reg_err:
+        logger.warning("Could not register run: %s", _reg_err)
+    # ─────────────────────────────────────────────────────────────────
 
     # Best-effort: augment latest_run.csv with baseline metrics (PyKEEN/GNN) for dashboard visibility
     if pykeen_direct_metrics is not None or gnn_metrics is not None:

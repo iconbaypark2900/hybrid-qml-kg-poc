@@ -158,7 +158,7 @@ This compose file does **not** build the Next.js frontend; use `scripts/dev_stac
 
 ### 5.2 Root `Dockerfile` (combined Next + FastAPI)
 
-- Installs Node 20 + pnpm, Python deps from `requirements-huggingface.txt` (+ extra pip lines), builds `frontend/` with `NEXT_PUBLIC_API_URL=""`, copies the project, exposes **7860**, starts uvicorn on **127.0.0.1:8000** and `next start` on **7860**.
+- Installs Node 20 + pnpm, Python deps from `requirements-huggingface.txt` (+ extra pip lines), builds `frontend/` with `NEXT_PUBLIC_API_URL=""`, copies the project, exposes **8080** (image default `PORT`; HF/Fly may override), starts uvicorn on **127.0.0.1:8000** and `next start` on **`${PORT:-8080}`**.
 
 Adjust **`CMD`** and **`PORT`** when deploying to platforms that inject `PORT` (see [FLY_IO.md](./FLY_IO.md)).
 

@@ -103,7 +103,7 @@ class QMLTrainer:
 
         # AUC metrics
         try:
-            roc_auc = roc_auc_score(y_test, y_proba_arr)
+            roc_auc = roc_auc_score(y_test, y_proba)
         except ValueError:
             roc_auc = float('nan')
 

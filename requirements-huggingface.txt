@@ -11,10 +11,12 @@ joblib>=1.3
 PyYAML>=6.0
 networkx>=3.0
 
-# Quantum kernel (statevector) for Live Prediction
-qiskit>=1.0
-qiskit-machine-learning>=0.7
-qiskit-aer>=0.12
+# Quantum kernel (statevector) for Live Prediction.
+# Pin Qiskit 1.x: Qiskit 2+ removes `Sampler` from `qiskit.primitives` (breaks qml_model / orchestrator import chain).
+qiskit==1.4.4
+qiskit-aer==0.17.2
+qiskit-algorithms==0.4.0
+qiskit-machine-learning==0.8.4
 
 # Optional: IBM runtime only needed for "Hardware readiness" page
-# qiskit-ibm-runtime>=0.15
+# qiskit-ibm-runtime==0.42.0

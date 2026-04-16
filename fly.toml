@@ -1,0 +1,35 @@
+# Fly.io Machines (Apps V2) — hybrid-qml-kg-poc
+# Build: uses root Dockerfile. If remote Depot returns 403/internal, use:
+#   ./scripts/fly_deploy.sh deploy ...
+# or: fly deploy --depot=false
+#
+# Docs: docs/deployment/FLY_IO.md
+
+app = "hybrid-qml-kg-poc"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[http_service.checks]]
+  grace_period = "45s"
+  interval = "15s"
+  method = "GET"
+  path = "/status"
+  timeout = "10s"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "2048mb"

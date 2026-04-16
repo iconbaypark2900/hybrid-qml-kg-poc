@@ -11,7 +11,7 @@ WORKDIR /app
 
 # --- Python dependencies ---
 COPY requirements-huggingface.txt ./
-RUN pip install --no-cache-dir fastapi uvicorn[standard] qiskit-algorithms>=0.3 && \
+RUN pip install --no-cache-dir fastapi uvicorn[standard] && \
     pip install --no-cache-dir -r requirements-huggingface.txt
 
 # --- Next.js build ---
@@ -19,13 +19,15 @@ COPY frontend/package.json frontend/pnpm-lock.yaml ./frontend/
 RUN cd frontend && pnpm install --frozen-lockfile
 
 COPY frontend/ ./frontend/
-# NEXT_PUBLIC_API_URL="" → calls go to same origin, Next.js rewrites proxy to FastAPI
-RUN cd frontend && NEXT_PUBLIC_API_URL="" pnpm build
+# Rewrites use API_ORIGIN (see frontend/next.config.mjs); default matches uvicorn in this image.
+RUN cd frontend && pnpm build
 
 # --- Copy full project (Python source) ---
 COPY . .
 
-EXPOSE 7860
+# Public HTTP must match Fly http_service.internal_port (8080). HF Spaces overrides PORT at runtime.
+ENV PORT=8080
+EXPOSE 8080
 
-# Start FastAPI on 8000 (internal, matches dev_stack.sh / .env.example), Next.js on 7860 (public)
-CMD ["sh", "-c", "uvicorn middleware.api:app --host 127.0.0.1 --port 8000 & cd frontend && node_modules/.bin/next start -p 7860"]
+# FastAPI on 127.0.0.1:8000 (Next rewrites proxy); edge listens on 0.0.0.0:$PORT for Fly proxy health checks.
+CMD ["sh", "-c", "uvicorn middleware.api:app --host 127.0.0.1 --port 8000 & cd frontend && exec node_modules/.bin/next start -H 0.0.0.0 -p ${PORT:-8080}"]

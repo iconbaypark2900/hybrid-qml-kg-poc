@@ -111,3 +111,114 @@ python scripts/run_optimized_pipeline.py --relation CtD \
 
 **Output files:**
 - CV JSON: `results/cv_results_20260323-122644.json`
+
+---
+
+## Pending experiment campaigns
+
+All runs below produce provenance records in `results/benchmark_registry.jsonl`
+via the registry wired in Phase A. Discovery metrics (top-10 hit rate, mean
+rank) are now emitted automatically by `compute_metrics`.
+
+### Campaign 1: Extended Optuna search (50+ trials)
+
+**Goal:** Broader hyperparameter sweep to push ensemble PR-AUC beyond 0.80.
+
+**Note:** The default subprocess timeout in `optuna_pipeline_search.py` is 600 s
+per trial. For full-graph RotatE (128D, 200 epochs) this may not be enough.
+Either lower `--embedding_epochs` during search or raise the timeout in the
+script before launching.
+
+```bash
+python scripts/optuna_pipeline_search.py \
+  --n_trials 50 --objective ensemble \
+  --results_dir results/optuna
+```
+
+**Expected output:** `results/optuna/optuna_trials.csv`, `results/optuna/optuna_best.json`.
+
+### Campaign 2: Full-scale run (no entity cap)
+
+**Goal:** Embed all 47,031 Hetionet entities; use full positive edge set.
+
+```bash
+python scripts/run_optimized_pipeline.py --relation CtD \
+  --full_graph_embeddings --embedding_method RotatE --embedding_dim 128 \
+  --embedding_epochs 200 --negative_sampling hard --qml_dim 16 \
+  --qml_feature_map Pauli --qml_feature_map_reps 2 --qsvc_C 0.1 \
+  --run_ensemble --ensemble_method stacking --tune_classical \
+  --qml_pre_pca_dim 24 --max_entities 0 \
+  --results_dir results/full_scale
+```
+
+GPU recommended; see `docs/deployment/DGX_SPARK.md` for the DGX wrapper.
+
+### Campaign 3: Ablation matrix (spec sections 4-5)
+
+Four conditions, each registered separately. Comparing QSVC on 16-dim against
+classical on matched 16-dim (condition B vs C) is the scientifically valid
+quantum comparison.
+
+```bash
+# Condition A — full classical (512-dim features)
+python scripts/run_optimized_pipeline.py --relation CtD \
+  --full_graph_embeddings --embedding_method RotatE --embedding_dim 128 \
+  --embedding_epochs 200 --negative_sampling hard \
+  --classical_only --results_dir results/ablation_A
+
+# Condition B — classical on reduced features (matches quantum 16-dim)
+python scripts/run_optimized_pipeline.py --relation CtD \
+  --full_graph_embeddings --embedding_method RotatE --embedding_dim 128 \
+  --embedding_epochs 200 --negative_sampling hard \
+  --classical_only --restrict_classical_to_qml_dim --qml_dim 16 \
+  --results_dir results/ablation_B
+
+# Condition C — quantum only (16-dim)
+python scripts/run_optimized_pipeline.py --relation CtD \
+  --full_graph_embeddings --embedding_method RotatE --embedding_dim 128 \
+  --embedding_epochs 200 --negative_sampling hard \
+  --quantum_only --qml_dim 16 --qml_feature_map Pauli \
+  --qml_feature_map_reps 2 --qsvc_C 0.1 \
+  --results_dir results/ablation_C
+
+# Condition D — stacking ensemble (A + C combined)
+python scripts/run_optimized_pipeline.py --relation CtD \
+  --full_graph_embeddings --embedding_method RotatE --embedding_dim 128 \
+  --embedding_epochs 200 --negative_sampling hard \
+  --qml_dim 16 --qml_feature_map Pauli --qml_feature_map_reps 2 \
+  --qsvc_C 0.1 --run_ensemble --ensemble_method stacking \
+  --results_dir results/ablation_D
+```
+
+### Campaign 4: Noisy simulator tier
+
+**Goal:** Benchmark QSVC under depolarizing noise. Uses
+`config/quantum_config_noisy.yaml` (depolarizing:0.01 + ZNE + readout
+mitigation). Registry labels `execution_mode` as `simulator` with
+`noise_model` set, so results stay separated from ideal-simulator runs.
+
+```bash
+python scripts/run_optimized_pipeline.py --relation CtD \
+  --full_graph_embeddings --embedding_method RotatE --embedding_dim 128 \
+  --embedding_epochs 200 --negative_sampling hard \
+  --quantum_only --qml_dim 16 --qml_feature_map Pauli \
+  --qml_feature_map_reps 2 --qsvc_C 0.1 \
+  --quantum_config_path config/quantum_config_noisy.yaml \
+  --results_dir results/noisy_sim
+```
+
+### After all campaigns
+
+Query the registry to compare all runs side-by-side:
+
+```bash
+python scripts/benchmark_registry.py --list
+```
+
+Or load into a DataFrame:
+
+```python
+import pandas as pd
+df = pd.read_json("results/benchmark_registry.jsonl", lines=True)
+print(df[["run_id", "model", "backend", "metrics"]].to_string())
+```

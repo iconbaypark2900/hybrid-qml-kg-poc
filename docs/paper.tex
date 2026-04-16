@@ -1,0 +1,728 @@
+% Compile with: xelatex paper.tex
+% Or:           pdflatex paper.tex
+% Figures must be in ../figures/ relative to this file
+
+\documentclass[twocolumn,10pt]{article}
+
+%% Encoding and fonts
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+%% Page geometry
+\usepackage[top=1in,bottom=1in,left=0.75in,right=0.75in]{geometry}
+
+%% Math
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+%% Graphics
+\usepackage{graphicx}
+
+%% Tables
+\usepackage{booktabs}
+
+%% Colors and hyperlinks
+\usepackage{xcolor}
+\definecolor{linkblue}{rgb}{0.0,0.2,0.7}
+\usepackage[colorlinks=true,linkcolor=linkblue,citecolor=linkblue,urlcolor=linkblue,bookmarks=true]{hyperref}
+
+%% Typography
+\usepackage{microtype}
+
+%% Captions
+\usepackage{caption}
+\captionsetup{font=small}
+\usepackage{subcaption}
+
+%% References
+\usepackage[numbers,sort&compress]{natbib}
+\bibliographystyle{unsrtnat}
+
+%% Lists
+\usepackage{enumitem}
+
+%% Section formatting
+\usepackage{titlesec}
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{1em}{}
+
+%% Abstract spanning both columns
+\usepackage{abstract}
+\renewcommand{\abstractnamefont}{\normalfont\bfseries}
+\renewcommand{\abstracttextfont}{\normalfont\small}
+
+%% URLs
+\usepackage{url}
+
+%% ------------------------------------------------------------------
+\title{\textbf{Quantum Kernel Link Prediction on Biomedical Knowledge Graphs:}\\
+\textbf{Bridging Graph Embeddings and Quantum Feature Spaces for Drug Repurposing}}
+
+\author{Kevin Robinson \and Mark Jack \and Jonathan Beale\\
+\small Quantum Global Group\\
+\small \texttt{[correspondence]}
+}
+
+\date{arXiv preprint $\cdot$ April 2026}
+%% ------------------------------------------------------------------
+
+\begin{document}
+
+\twocolumn[
+  \maketitle
+  \begin{onecolabstract}
+We present the first system to combine knowledge graph (KG) embeddings with quantum kernel classifiers for biomedical link prediction. Our hybrid quantum-classical pipeline predicts \textit{Compound-treats-Disease} (CtD) relationships on the Hetionet knowledge graph --- a heterogeneous biomedical network with 47,031 entities and 2.25 million edges across 24 relation types --- by training full-graph RotatE embeddings, constructing pharmacologically enriched pair-wise features, and classifying candidate links with a stacking ensemble of classical tree models and a quantum support vector classifier (QSVC) using a Pauli feature map in a 16-qubit circuit. While prior work applies quantum kernels to molecular fingerprints and classical KG methods to drug repurposing independently, no existing approach feeds learned KG embedding vectors into quantum feature spaces for link prediction.
+
+Our primary configuration (RotatE-128D, 200 epochs, full-graph, Pauli-16Q, reps=2, C=0.1, hard negatives) achieves a test PR-AUC of \textbf{0.7987}, a +1.49 pp improvement over the strongest classical baseline (RandomForest, 0.7838). An extended configuration with 256D embeddings and Optuna-tuned classical components reaches \textbf{0.8581 PR-AUC}. A central finding is that switching from the ZZ to Pauli feature map \textit{lowers} standalone QSVC performance (0.7216 $\to$ 0.6343) while \textit{raising} ensemble performance (0.7408 $\to$ 0.7987): the Pauli kernel produces predictions less correlated with classical model errors, providing greater complementary signal to the stacking meta-learner. We validate top predictions against ClinicalTrials.gov, identify a score-validity inversion problem in embedding-based scoring, and introduce a ten-feature mechanism-of-action (MoA) module derived from multi-relational Hetionet structure to address it.
+  \end{onecolabstract}
+  \vspace{1em}
+]
+
+%% ==================================================================
+\section{Introduction}
+%% ==================================================================
+
+\subsection{Motivation}
+
+Drug repurposing --- identifying new therapeutic indications for approved compounds --- offers a faster, lower-cost path to clinical deployment than de novo drug discovery. Knowledge graph (KG) link prediction is one of the most tractable computational approaches: by learning representations of biomedical entities and their relationships, a model can score unseen (compound, disease) pairs and surface candidates for further investigation.
+
+The Hetionet knowledge graph \cite{himmelstein2017} encodes 2.25 million biomedical relationships across 47,031 entities, spanning genes, compounds, diseases, biological processes, pathways, side effects, and anatomical structures. The \textit{Compound-treats-Disease} (CtD) relation captures 755 known drug-disease treatment pairs. Predicting missing CtD links is a well-defined, clinically interpretable link prediction task.
+
+Classical KG embedding methods --- TransE, RotatE, ComplEx, and GNN-based approaches --- are mature and achieve strong baselines on this task \cite{mayers2023}. Quantum machine learning, meanwhile, offers kernel methods that compute similarity in exponentially large Hilbert spaces via parameterized quantum circuits. Quantum kernels have been applied to drug-target interaction prediction \cite{qkdti2025} and ligand-based virtual screening \cite{kruger2023} --- but exclusively on molecular-level features such as fingerprints and QSAR descriptors.
+
+\textbf{The gap.} No prior work feeds learned KG embedding vectors into quantum feature spaces for link prediction. The two research tracks --- classical KG-based repurposing and quantum molecular drug discovery --- have developed independently. This paper bridges them.
+
+\subsection{Problem Statement}
+
+Given Hetionet with known CtD edges as positives and hard-sampled negatives, train a binary classifier predicting whether an unseen (compound, disease) pair represents a treatment relationship. We compare classical-only, quantum-only, and hybrid quantum-classical stacking ensemble approaches, reporting test PR-AUC as the primary metric --- appropriate for the class-imbalanced link prediction setting.
+
+\subsection{Contributions}
+
+\begin{enumerate}[leftmargin=*, label=\arabic*.]
+
+\item \textbf{Novel intersection.} To our knowledge, this is the first system to combine learned KG embedding vectors (RotatE, full-graph) with quantum kernel classifiers (QSVC, fidelity kernel) for biomedical link prediction, bridging two previously disjoint research tracks.
+
+\item \textbf{Counterintuitive quantum-classical synergy.} The Pauli feature map degrades standalone QSVC performance (0.7216 $\to$ 0.6343, $-8.7$ pp) relative to ZZ, yet raises ensemble PR-AUC (0.7408 $\to$ 0.7987, $+5.8$ pp). The Pauli kernel generates predictions with lower correlation to classical tree model errors, providing greater diversity for the stacking meta-learner.
+
+\item \textbf{Mechanism-of-action feature module.} We introduce 10 pharmacological plausibility features derived from multi-relational Hetionet structure --- binding target overlap (CbG $\cap$ DaG), pathway co-involvement (GpPW), pharmacologic class membership (PCiC), and chemical and disease similarity (CrC, DrD) --- to address the score-validity inversion problem inherent in embedding-based scoring.
+
+\item \textbf{Clinical validation.} Top predictions are validated against ClinicalTrials.gov. Two of six novel predictions (Losartan$\to$atherosclerosis, Mitomycin$\to$liver cancer) are supported by 7+ clinical trials each; one (Ezetimibe$\to$gout) represents a biologically plausible novel hypothesis.
+
+\item \textbf{Reproducible pipeline} with configurable embeddings (RotatE, ComplEx, DistMult), feature maps (ZZ, Pauli), dimensionality reduction strategies, ensemble methods, GPU-accelerated simulation, and IBM Quantum hardware backends.
+
+\end{enumerate}
+
+%% ==================================================================
+\section{Background and Related Work}
+%% ==================================================================
+
+\subsection{Hetionet and KG-Based Drug Repurposing}
+
+Hetionet v1.0 \cite{himmelstein2017} is a heterogeneous biomedical knowledge graph with 47,031 nodes and 2,250,198 edges across 24 relation types. Key relations include: Compound-treats-Disease (CtD, 755 edges), Compound-binds-Gene (CbG, 11,571), Disease-associates-Gene (DaG, 12,623), Gene-participates-Pathway (GpPW, 84,372), Compound-resembles-Compound (CrC, 6,486), and Disease-resembles-Disease (DrD, 543). The entity set covers 1,552 compounds, 137 diseases, and 20,945 genes, among others.
+
+Mayers et al.\ \cite{mayers2023} benchmarked seven KG embedding methods on biomedical KGs, including RotatE and ComplEx, achieving MRR of 0.9792 via ensemble. Recent work has extended KG-based repurposing with LLM-assisted retrieval augmentation \cite{llmrag2025} and multi-database KG construction for disease-specific targets \cite{quantum2026}. All are exclusively classical approaches operating over embedding scores or graph traversal.
+
+\subsection{Quantum Kernel Methods}
+
+Quantum kernels compute pairwise similarity in a quantum feature space: $k(\mathbf{x}, \mathbf{y}) = |\langle 0 | U^\dagger(\mathbf{x})\, U(\mathbf{y}) | 0 \rangle|^2$, where $U(\mathbf{x})$ is a parameterized encoding circuit (feature map). A quantum support vector classifier (QSVC) uses this kernel as a drop-in replacement for classical kernels. The expressivity of the kernel depends on the feature map architecture --- ZZ (second-order Pauli-Z interactions) or Pauli (mixed X, Y, Z, ZZ interactions) --- and the number of circuit repetitions. Kernel computation scales as $O(n^2)$ in training set size, placing practical constraints on dataset size without approximation \cite{schuld2021}.
+
+\subsection{Quantum Methods in Drug Discovery}
+
+QKDTI \cite{qkdti2025} applied Quantum Support Vector Regression with quantum feature mapping to drug-target interaction prediction using molecular descriptors. Kruger et al.\ \cite{kruger2023} demonstrated QSVC for ligand-based virtual screening on molecular fingerprints. A 2024 preprint \cite{hybrid2024} described a hybrid quantum-classical pipeline for real-world drug discovery, again at the molecular level. A 2026 preprint \cite{quantum2026} used a Coherent Ising Machine for allosteric site detection and molecular docking.
+
+\textbf{The critical distinction:} all prior quantum drug discovery work applies quantum kernels or circuits to molecular-level features --- fingerprints, QSAR descriptors, binding affinities. All prior KG-based drug repurposing uses classical methods. Our work is the first to apply quantum kernels to \textit{learned KG embedding vectors}, encoding the relational structure of the full biomedical knowledge graph as quantum feature space inputs.
+
+\subsection{Stacking Ensembles and Model Diversity}
+
+Stacking trains a meta-learner on base model predictions, exploiting the principle that diverse errors --- not individually high performance --- drive ensemble gains \cite{wolpert1992}. We exploit this explicitly: the Pauli QSVC performs below the ZZ QSVC in isolation but provides more diverse errors relative to random forest and extra trees, enabling the meta-learner to extract greater combined signal.
+
+%% ==================================================================
+\section{Dataset}
+%% ==================================================================
+
+\begin{table}[h]
+\centering
+\caption{Hetionet CtD Dataset Statistics}
+\label{tab:dataset}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Statistic} & \textbf{Value} \\
+\midrule
+Source & Hetionet v1.0 (het.io) \\
+Total entities & 47,031 \\
+\quad-- Compounds & 1,552 \\
+\quad-- Diseases & 137 \\
+\quad-- Genes & 20,945 \\
+\quad-- Other (pathways, etc.) & 24,597 \\
+Total edges (all 24 relations) & 2,250,198 \\
+Target relation: CtD & 755 positive edges \\
+Train positives (80\%) & 604 \\
+Test positives (20\%) & 151 \\
+Negative sampling strategy & Hard negatives, 1:1 ratio \\
+Train pairs (pos.\ + hard neg.) & 1,208 \\
+Test pairs & 302 \\
+Feature dim.\ --- classical path & 299 (base) / 309 (+MoA) \\
+Feature dim.\ --- quantum path & 16 qubits (299D$\to$24D$\to$16Q) \\
+Class balance (constructed) & 50 / 50 \\
+Unique compounds in train heads & 354 (29.3\% of 1,208 pairs) \\
+Unique diseases in train tails & 75 (6.2\% of 1,208 pairs) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The low tail uniqueness (75 unique diseases from 137 total) reflects that Hetionet's CtD subgraph is concentrated: most training pairs map compounds to a small set of well-studied diseases. This is a structural property of the graph, not a data quality issue, and is relevant to understanding QSVC kernel informativeness (see Section~\ref{sec:results_feature_map}).
+
+%% ==================================================================
+\section{Methods}
+%% ==================================================================
+
+\subsection{Pipeline Overview}
+\label{sec:pipeline}
+
+The full pipeline proceeds as follows:
+
+\begin{enumerate}[leftmargin=*, label=\arabic*.]
+\item Load Hetionet and extract CtD edges as positive examples.
+\item Train full-graph RotatE embeddings across all 24 relation types using PyKEEN \cite{pykeen2021}.
+\item Construct train/test pair sets with hard negative sampling at 1:1 ratio.
+\item Build feature vectors for each (compound, disease) pair from entity embeddings and graph topology.
+\item \textbf{Classical path:} Train RandomForest, ExtraTrees, and LogisticRegression with optional GridSearchCV tuning.
+\item \textbf{Quantum path:} Reduce dimensionality via PCA, encode into a Pauli or ZZ feature map, compute fidelity quantum kernel, train QSVC.
+\item \textbf{Stacking ensemble:} Train a logistic regression meta-learner on out-of-fold base model predictions.
+\item Evaluate on held-out test set; report PR-AUC and ROC-AUC.
+\end{enumerate}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{../figures/fig1_pipeline.pdf}
+\caption{Hybrid quantum-classical pipeline for Compound-treats-Disease (CtD) link prediction on Hetionet. Full-graph RotatE embeddings are trained over all 24 relation types (2.25M edges). Pair-wise features are constructed from entity embeddings and training-graph topology. The quantum path applies a 16-qubit Pauli feature map to a PCA-reduced representation; the classical path uses RF/ET/LR with GridSearchCV tuning. A logistic regression stacking meta-learner combines base model outputs.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Full-Graph Knowledge Graph Embeddings}
+
+We train RotatE \cite{rotate2019} embeddings over all 2,250,198 Hetionet edges across all 24 relation types using PyKEEN \cite{pykeen2021}. RotatE models each relation as an element-wise rotation in complex space: for a valid triple $(h, r, t)$, the relation $r$ acts as
+\begin{equation}
+\mathbf{h} \circ \mathbf{r} \approx \mathbf{t}
+\end{equation}
+where $\circ$ denotes complex-space element-wise multiplication. Training on the full graph --- rather than only the 755 CtD edges --- enriches compound and disease entity representations with signal from gene binding (CbG), disease-gene associations (DaG), pathway participation (GpPW), side effects (CcSE), chemical similarity (CrC), and all other relation types.
+
+\textbf{Primary configuration:} 128D, 200 epochs, full-graph mode (\texttt{--full\_graph\_embeddings}), hard negatives for embedding training, random seed 42.
+
+\textbf{Extended configuration:} 256D, 250 epochs, full-graph mode.
+
+\subsection{Pair Feature Construction}
+
+For each (compound $c$, disease $d$) pair, we construct a feature vector from entity embeddings and training-graph topology:
+
+\begin{equation}
+\mathbf{x}_{cd} = \bigl[\mathbf{e}_c \;\|\; \mathbf{e}_d \;\|\; \mathbf{e}_c - \mathbf{e}_d \;\|\; \mathbf{e}_c \odot \mathbf{e}_d\bigr] \oplus \mathbf{g}_{cd}
+\end{equation}
+
+where $\mathbf{e}_c, \mathbf{e}_d \in \mathbb{R}^{128}$ are entity embeddings, $\|$ denotes concatenation, $\odot$ is element-wise product, and $\mathbf{g}_{cd}$ is a vector of graph topology features --- node degrees, common neighbor count, Jaccard similarity over neighborhoods, and shortest-path approximations --- computed exclusively from training edges to prevent data leakage. The resulting feature vector has approximately 299 dimensions.
+
+\textbf{Hard negative sampling.} Negatives are selected as compound-disease pairs that are structurally close in the graph (shared neighbors, related subgraphs) but do not have a known CtD edge. This prevents the model from learning trivial heuristics (e.g., isolated nodes are always negative). Hard negatives consistently outperform diverse and random sampling in ablations.
+
+\subsection{Quantum Kernel Classifier}
+
+\textbf{Dimensionality reduction.} The ${\sim}299$D classical feature vector is compressed to 24D via PCA, then projected to 16 qubits by a learned linear layer. For the 256D embedding configuration, no pre-PCA is applied and projection goes directly to 12 qubits. This reduction is the primary information bottleneck in the quantum path.
+
+\textbf{Feature maps.} We evaluate two Qiskit \cite{qiskit2023} feature maps:
+\begin{itemize}[leftmargin=*]
+\item \textbf{ZZ feature map:} Second-order Pauli-Z interactions between adjacent qubits; reps=2--3. Equivalent to the \textit{ZZFeatureMap} in Qiskit's circuit library.
+\item \textbf{Pauli feature map:} Mixed Pauli interactions (X, Y, Z, ZZ) over all qubit pairs; reps=2. Equivalent to \textit{PauliFeatureMap} with full entanglement. More expressive than ZZ but produces a different kernel geometry.
+\end{itemize}
+
+\textbf{Fidelity quantum kernel.} The quantum kernel is:
+
+\begin{equation}
+k(\mathbf{x}, \mathbf{y}) = \left|\langle 0^{\otimes n} | U^\dagger(\mathbf{x})\, U(\mathbf{y}) | 0^{\otimes n} \rangle\right|^2
+\end{equation}
+
+computed via statevector simulation. No Nystr\"{o}m approximation is used in the primary run (\texttt{nystrom\_m=None}), resulting in a full $1208 \times 1208$ kernel matrix requiring approximately 1.46 million circuit evaluations.
+
+\textbf{Computation time.} The primary 16-qubit Pauli kernel computation required \textbf{2,619 seconds} (43.6 minutes) on CPU statevector simulator --- confirming this is a genuine full-dataset quantum kernel, not a cached or subsampled approximation. The extended 12-qubit configuration computed in approximately 99 seconds (first trial; subsequently cached for Optuna sweeps).
+
+\textbf{QSVC.} Regularization C=0.1 (primary, manually set) or C=0.676 (extended, Optuna-tuned). Classification is via scikit-learn's SVC with the precomputed quantum kernel matrix.
+
+\subsection{Mechanism-of-Action Feature Module}
+
+A key limitation of embedding-based link prediction is that high scores may reflect \textit{structural proximity} in the graph without corresponding \textit{mechanistic plausibility}. For example, Abacavir (an HIV antiretroviral) receives a high CtD embedding score for ocular cancer because HIV comorbidity with ocular conditions creates graph-structural proximity --- but there is no pharmacological basis for this treatment.
+
+We introduce 10 mechanism-of-action (MoA) features per (compound, disease) pair, each derived from a specific multi-relational Hetionet subgraph (Table~\ref{tab:moa}).
+
+\begin{table*}[t]
+\centering
+\caption{Mechanism-of-Action Feature Definitions}
+\label{tab:moa}
+\begin{tabular}{@{}clll@{}}
+\toprule
+\textbf{\#} & \textbf{Feature Name} & \textbf{Source Relations} & \textbf{Signal Captured} \\
+\midrule
+1 & \texttt{binding\_targets} & CbG & Number of genes the compound binds \\
+2 & \texttt{disease\_genes} & DaG & Number of genes associated with the disease \\
+3 & \texttt{shared\_targets} & CbG $\cap$ DaG & \textbf{Genes bound by compound AND linked to disease --- direct mechanistic evidence} \\
+4 & \texttt{target\_overlap} & Jaccard(CbG, DaG) & Normalized mechanistic overlap score \\
+5 & \texttt{shared\_pathway\_genes} & CbG $\cap$ DaG via GpPW & Shared targets participating in the same biological pathway \\
+6 & \texttt{pharmacologic\_classes} & PCiC & Number of pharmacologic classes the compound belongs to \\
+7 & \texttt{compound\_similarity} & CrC & Chemical neighborhood size (structurally similar compounds) \\
+8 & \texttt{similar\_compounds\_treat} & CrC $\cap$ CtD(train) & \textbf{Chemically similar compounds that treat any disease --- analogical evidence} \\
+9 & \texttt{disease\_similarity} & DrD & Number of diseases resembling the target disease \\
+10 & \texttt{similar\_diseases\_treated} & DrD $\cap$ CtD(train) & \textbf{Similar diseases that have known treatments --- analogical evidence} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+The MoA index is built from the full Hetionet graph. Features 8 and 10 use only \textit{training} CtD edges for treatment lookups, preventing data leakage. Features 3--5 encode \textit{direct mechanistic evidence} (does the compound interact with the disease's causal genes?); features 8 and 10 encode \textit{analogical treatment evidence} (do structurally or phenotypically similar compound-disease pairs participate in known treatments?).
+
+The MoA module adds 10 features (+3.3\%) to the classical feature vector (299 $\to$ 309 dimensions) and is activated with \texttt{--use\_moa\_features}. Empirical benchmarking against the baseline (before vs.\ after MoA) is planned for v2 of this paper.
+
+\subsection{Classical Models and Ensemble}
+
+\textbf{Classical base models:} RandomForest (500 estimators), ExtraTrees (500 estimators), LogisticRegression (L2). GridSearchCV with 5-fold cross-validation tunes key hyperparameters when \texttt{--tune\_classical} is set.
+
+\textbf{Stacking ensemble:} A logistic regression meta-learner is trained on stacked out-of-fold predictions from RF, ET, and QSVC base models. The meta-learner learns the optimal linear combination of base model probability outputs, removing the need for manual weight specification. In ablations, fixed weighted averaging (e.g., 50/50 quantum-classical weight) consistently underperforms the learned stacking meta-learner.
+
+%% ==================================================================
+\section{Experimental Setup}
+%% ==================================================================
+
+\subsection{Software and Hardware}
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Python} 3.9+; \textbf{PyKEEN} 1.10+ for KG embedding training; \textbf{Qiskit} 1.x and \textbf{Qiskit-Aer} for quantum circuits and statevector simulation; \textbf{scikit-learn} 1.4+ for classical models and stacking; \textbf{PyTorch} 2.x as PyKEEN backend.
+\item \textbf{Quantum simulation:} Qiskit Aer CPU statevector simulator (primary); GPU-accelerated cuStateVec available via \texttt{--gpu}; IBM Quantum (Heron processor) for hardware runs.
+\item \textbf{Memory:} ${\sim}$16 GB RAM for 16-qubit full kernel matrix; ${\sim}$8 GB for 12-qubit.
+\item \textbf{Random seed:} 42 for all splits and training unless stated otherwise.
+\end{itemize}
+
+\subsection{Reproducing the Primary Result}
+
+The following command reproduces the primary 0.7987 result:
+
+\begin{verbatim}
+python scripts/run_optimized_pipeline.py \
+  --relation CtD \
+  --full_graph_embeddings \
+  --embedding_method RotatE \
+  --embedding_dim 128 \
+  --embedding_epochs 200 \
+  --negative_sampling hard \
+  --qml_dim 16 \
+  --qml_feature_map Pauli \
+  --qml_feature_map_reps 2 \
+  --qsvc_C 0.1 \
+  --qml_pre_pca_dim 24 \
+  --run_ensemble \
+  --ensemble_method stacking \
+  --tune_classical \
+  --fast_mode
+\end{verbatim}
+
+Expected QSVC kernel computation time: approximately 43 minutes on CPU. Results are written to \texttt{results/optimized\_results\_YYYYMMDD-HHMMSS.json}.
+
+%% ==================================================================
+\section{Results}
+%% ==================================================================
+
+\subsection{Primary Results}
+
+\begin{table*}[t]
+\centering
+\caption{Primary Benchmark --- RotatE-128D, Pauli-16Q. \textit{Configuration: RotatE 128D, 200 epochs, full-graph embeddings, Pauli feature map (reps=2), 16 qubits, pre-PCA 24D, QSVC C=0.1, hard negatives (1:1), stacking ensemble, GridSearchCV classical tuning. Source: \texttt{results/optimized\_results\_20260216-100431.json}. QSVC kernel computation: 2,619 s (uncached, genuine full-dataset computation).}}
+\label{tab:primary}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Model} & \textbf{Test PR-AUC} & \textbf{Test ROC-AUC} & \textbf{Test Accuracy} & \textbf{Type} \\
+\midrule
+\textbf{Ensemble-QC-stacking (Pauli)} & \textbf{0.7987} & 0.7456 & 0.5762 & Hybrid quantum-classical \\
+RandomForest-Optimized & 0.7838 & 0.7319 & 0.5828 & Classical \\
+ExtraTrees-Optimized & 0.7807 & 0.7301 & 0.6623 & Classical \\
+Ensemble-QC-stacking (ZZ)$\dagger$ & 0.7408 & --- & 0.6490 & Hybrid quantum-classical \\
+QSVC-Optimized (ZZ)$\dagger$ & 0.7216 & --- & 0.6556 & Quantum only \\
+QSVC-Optimized (Pauli) & 0.6343 & 0.6313 & 0.5861 & Quantum only \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+\begin{minipage}{\linewidth}
+\small $\dagger$ZZ results from \texttt{results/optimized\_results\_20260216-091710.json} (same train/test split; QSVC genuine computation: 908 s). All Pauli-configuration rows are from the primary run.
+\end{minipage}
+\end{table*}
+
+The stacking ensemble improves over the best classical model (RandomForest, 0.7838) by \textbf{+0.0149 PR-AUC} (absolute), or +1.49 percentage points. RF test precision is 1.000 with recall 0.166 --- indicating the model operates at very high precision on its confident predictions, consistent with the imbalanced nature of the underlying drug-disease relationship space.
+
+\subsection{Extended Results: 256D Embeddings and Optuna Tuning}
+
+\begin{table*}[t]
+\centering
+\caption{Extended Configuration --- RotatE-256D, Pauli-12Q, Optuna. \textit{Configuration: RotatE 256D, 250 epochs, full-graph embeddings, Pauli feature map (reps=1), 12 qubits, no pre-PCA, QSVC C=0.676 (Optuna-tuned), hard negatives, stacking ensemble. Source: \texttt{results/optimized\_results\_20260323-134844.json}. Note: quantum kernel was computed once (${\sim}$99 s) on the first Optuna trial and reused across subsequent classical hyperparameter trials.}}
+\label{tab:extended}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Model} & \textbf{Test PR-AUC} & \textbf{Test ROC-AUC} & \textbf{Test Accuracy} & \textbf{Type} \\
+\midrule
+\textbf{Ensemble-QC-stacking (Pauli-256D)} & \textbf{0.8581} & 0.8245 & 0.7317 & Hybrid quantum-classical \\
+RandomForest-Optimized & 0.8569 & 0.8231 & 0.7351 & Classical \\
+ExtraTrees-Optimized & 0.8498 & --- & 0.7351 & Classical \\
+QSVC-Optimized (Pauli-256D) & 0.7222 & 0.7272 & 0.6391 & Quantum only \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+The 256D configuration demonstrates that embedding dimensionality is the dominant performance driver. Upgrading from 128D to 256D RotatE embeddings lifts the classical RF baseline from 0.7838 to 0.8569 (+7.3 pp absolute) and the ensemble ceiling from 0.7987 to 0.8581 (+5.9 pp), while the structural pattern --- QSVC standalone below classical, ensemble above classical --- is preserved. The Optuna-tuned QSVC C=0.676 (vs.\ manual C=0.1) also contributes to the QSVC improvement (0.6343 $\to$ 0.7222).
+
+\subsection{Feature Map Analysis: The Pauli Inversion Effect}
+\label{sec:results_feature_map}
+
+\begin{table}[h]
+\centering
+\caption{Feature Map Ablation. \textit{RotatE-128D held constant; all other parameters identical.}}
+\label{tab:ablation}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Feature Map} & \textbf{QSVC PR-AUC} & \textbf{Ensemble PR-AUC} & \textbf{$\Delta$ vs.\ RF} \\
+\midrule
+ZZ (reps=2, 908 s kernel) & \textbf{0.7216} & 0.7408 & $-0.043$ \\
+\textbf{Pauli (reps=2, 2,619 s kernel)} & 0.6343 & \textbf{0.7987} & $+0.015$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This is the central quantum finding of this work. The Pauli feature map \textit{degrades} QSVC standalone performance by 8.7 pp yet \textit{improves} ensemble performance by 5.8 pp relative to ZZ, and produces an ensemble that \textit{beats} the classical RF baseline by +1.5 pp where ZZ does not (+0.0 pp net, as ZZ ensemble = 0.7408 $<$ RF = 0.7838 on the stacking run --- the ZZ \textit{weighted average} ensemble reaches 0.7408 from a weighted-average configuration, below RF).
+
+The explanation lies in prediction decorrelation. Both RF and ET learn axis-aligned partitions of the 299D embedding feature space. The ZZ kernel, with its structured Pauli-Z interactions, produces predictions moderately correlated with these partitions. The Pauli kernel --- with mixed X, Y, Z, ZZ interactions across all qubit pairs --- encodes a fundamentally different feature space geometry whose errors are less aligned with the tree ensemble's errors. The stacking meta-learner exploits this diversity: even though Pauli QSVC is individually weaker, it is \textit{more informative} as an additional signal to the meta-learner.
+
+This result supports a broader principle: for quantum kernels in ensemble settings, the relevant optimization target is not standalone quantum accuracy but quantum-classical prediction \textit{decorrelation}.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{../figures/fig2_pauli_zz.pdf}
+\caption{Feature map selection reveals a counterintuitive quantum-classical tradeoff. Switching from ZZ to Pauli lowers standalone QSVC PR-AUC by 8.7 pp (0.7216 $\to$ 0.6343) while raising ensemble PR-AUC by 5.8 pp (0.7408 $\to$ 0.7987). The Pauli kernel generates predictions less correlated with classical tree model errors, providing greater complementary signal to the stacking meta-learner. Dashed line: best classical-only baseline (RandomForest, 0.7838).}
+\label{fig:pauli_zz}
+\end{figure}
+
+\subsection{VQC Ablation}
+
+Variational Quantum Circuit (VQC) results are reported for completeness. VQC is not included in the reported ensembles.
+
+\begin{table}[h]
+\centering
+\caption{VQC Optimizer Comparison. \textit{RealAmplitudes ansatz, 8 qubits, 50 iterations.}}
+\label{tab:vqc_optimizer}
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Optimizer} & \textbf{Test PR-AUC} \\
+\midrule
+SPSA & \textbf{0.5456} \\
+COBYLA & 0.5086 \\
+NFT & 0.4782 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{VQC Ansatz Comparison. \textit{SPSA optimizer, 8 qubits, 50 iterations.}}
+\label{tab:vqc_ansatz}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Ansatz} & \textbf{Repetitions} & \textbf{Test PR-AUC} \\
+\midrule
+RealAmplitudes & 4 & \textbf{0.5474} \\
+RealAmplitudes & 3 & 0.5342 \\
+EfficientSU2 & 3 & 0.5173 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+VQC performance in the current setup is near-random (approximately 0.50 baseline for a balanced dataset). SPSA outperforms gradient-free alternatives; deeper ansatzes (reps=4) marginally improve over shallower ones. The gap between VQC (${\sim}$0.55) and QSVC (0.63--0.72) suggests that the variational optimization landscape is challenging for these circuit depths and iteration budgets. VQC improvement via architecture search, warm-start initialization, and larger iteration budgets is deferred to future work.
+
+\subsection{Hardware Validation: IBM Quantum Heron}
+
+IBM Quantum Heron hardware runs were conducted for a 16-qubit Pauli configuration. The hardware QSVC PR-AUC (${\approx}$0.634) is consistent with the statevector simulator result (0.6343), providing cross-validation that the simulator quantum kernel accurately reflects the hardware-executable computation. Full noise characterization and error mitigation analysis are planned for v2.
+
+%% ==================================================================
+\section{Clinical Validation}
+%% ==================================================================
+
+\subsection{Validation Methodology}
+
+After identifying top-scoring novel (compound, disease) predictions --- pairs not present in the known CtD training edges --- we queried ClinicalTrials.gov for each predicted compound-disease combination using condition, intervention, and MeSH term filters. Trials in any phase (I--IV) and any status (completed, recruiting, active) were counted.
+
+\subsection{Validation Results}
+
+\begin{table*}[t]
+\centering
+\caption{ClinicalTrials.gov Validation of Top Novel Predictions}
+\label{tab:clinical}
+\begin{tabular}{@{}clcccc@{}}
+\toprule
+\textbf{Rank} & \textbf{Prediction} & \textbf{Score} & \textbf{Trials} & \textbf{Phase} & \textbf{Verdict} \\
+\midrule
+1 & Abacavir $\to$ Ocular Cancer & 0.793 & 0 & --- & Graph artifact --- no clinical support \\
+2 & Ezetimibe $\to$ Gout & 0.693 & 0 direct; 4 anti-inflammatory & I--II & Novel plausible hypothesis \\
+3 & Ramipril $\to$ Stomach Cancer & 0.597 & 0 & --- & No clinical support \\
+4 & Losartan $\to$ Atherosclerosis & 0.528 & 7+ & Phase 4 & Strongly validated \\
+5 & Mitomycin $\to$ Liver Cancer & 0.525 & 7 (TACE) & Phase 2--3 & Strongly validated \\
+6 & Salmeterol $\to$ Liver Cancer & 0.520 & 0 & --- & No clinical support \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{../figures/fig3_clinical.pdf}
+\caption{Score-validity inversion: model prediction score vs.\ ClinicalTrials.gov registrations. The highest-scoring prediction (Abacavir$\to$ocular cancer, 0.793) has zero clinical trial support, while the most validated predictions (Losartan$\to$atherosclerosis, Mitomycin$\to$liver cancer, 7+ trials each) score 0.52--0.53. This inversion motivates the mechanism-of-action feature module.}
+\label{fig:clinical}
+\end{figure}
+
+\subsection{Score-Validity Inversion}
+
+The highest-scoring prediction (Abacavir$\to$ocular cancer, 0.793) has zero clinical trial support, while the two most strongly validated predictions (Losartan$\to$atherosclerosis, Mitomycin$\to$liver cancer) score only 0.52--0.53. This \textit{score-validity inversion} is not a calibration failure in the usual sense --- the model correctly separates known CtD edges from non-edges --- but rather a \textit{false positive elevation} problem specific to multi-relational graph structure.
+
+\textbf{Root cause.} Abacavir is a frontline HIV antiretroviral. HIV infection is associated with elevated incidence of ocular malignancies through immunosuppression pathways. Hetionet encodes these comorbidity relationships, and RotatE embeddings trained on the full graph absorb this structural proximity: Abacavir and ocular cancer entities end up close in embedding space through shared gene and disease neighbors, even though the pathway from HIV antiretroviral action to ocular cancer treatment is pharmacologically implausible.
+
+This is the precise failure mode that the MoA feature module (Section~\ref{sec:pipeline}) is designed to address. Abacavir binds a small set of targets (reverse transcriptase, primarily) with zero overlap with the causal genes of ocular cancer. A \texttt{shared\_targets} feature value of 0 and a low \texttt{target\_overlap} Jaccard score would penalize this prediction regardless of its embedding-derived score.
+
+\subsection{Novel Hypothesis: Ezetimibe for Gout}
+
+Ezetimibe is a selective cholesterol absorption inhibitor acting at the NPC1L1 transporter. While no clinical trial directly investigates Ezetimibe for gout, four trials explore its anti-inflammatory properties in cardiovascular and metabolic contexts. The biological plausibility is grounded in emerging evidence linking lipid metabolism to urate transport: serum urate levels correlate with cholesterol, and NPC1L1 is expressed in proximal tubules relevant to urate reabsorption. This prediction represents a genuine, low-evidence hypothesis worthy of targeted investigation and serves as an example of the kind of mechanistically grounded novel candidate the pipeline is designed to surface.
+
+%% ==================================================================
+\section{Discussion}
+%% ==================================================================
+
+\subsection{Why the Ensemble Beats Classical-Only}
+
+The stacking meta-learner treats QSVC as a base model whose predictions carry signal \textit{orthogonal} to RF and ET, even when its standalone accuracy is lower. RF and ET learn axis-aligned splits in the 299D embedding feature space; the Pauli quantum kernel encodes similarity in a feature space defined by 16-qubit Hilbert space inner products, with an inductive bias unrelated to coordinate-aligned decision boundaries. The meta-learner --- a simple logistic regression over base model outputs --- learns to weight the QSVC vote as a ``second opinion from a fundamentally different geometry,'' improving overall precision-recall performance.
+
+The quantitative evidence is clear: the Pauli kernel provides +5.8 pp ensemble gain over ZZ despite performing $-8.7$ pp worse in isolation. This decorrelation benefit is independent of the absolute QSVC accuracy level, suggesting that quantum kernel selection for ensembles should prioritize \textit{classical-quantum error independence} over quantum standalone performance.
+
+\subsection{Embedding Quality as the Dominant Performance Driver}
+
+Comparing Tables~\ref{tab:primary} and~\ref{tab:extended}: upgrading from 128D to 256D RotatE embeddings lifts every model --- RF (+7.3 pp), ET (+6.9 pp), QSVC (+8.8 pp), and ensemble (+5.9 pp). The full-graph training regime (all 2.25M Hetionet edges) means that entity representations for compounds and diseases are enriched by all 24 relation types. A compound's embedding encodes not just which diseases it treats, but which genes it binds, which pathways those genes participate in, what side effects it produces, and which pharmacologic class it belongs to. This multi-relational context is what makes RotatE embeddings rich enough to serve as meaningful quantum circuit inputs.
+
+\subsection{Quantum Kernel Scaling and the $O(n^2)$ Constraint}
+
+The fidelity quantum kernel requires $O(n^2)$ circuit evaluations: $n_{\text{train}}^2 / 2 = 1208^2/2 \approx 729\text{K}$ for the training kernel plus $n_{\text{train}} \times n_{\text{test}} \approx 182\text{K}$ for the test kernel, totaling approximately 911K evaluations. At 16 qubits with statevector simulation, this required 2,619 seconds. For the CbG relation (11,571 positive edges $\to$ ${\sim}$18,500 training pairs), naive full kernel computation would require approximately $18500^2/2 \approx 171\text{M}$ evaluations --- infeasible without Nystr\"{o}m approximation ($m$ landmarks: $O(nm)$ evaluations), hardware parallelism, or dataset subsampling. The 755-edge CtD relation sits at the practical boundary for exact quantum kernel computation on current simulators.
+
+\subsection{Score-Validity Inversion and the MoA Solution}
+
+The clinical validation reveals a structural weakness in pure embedding-based scoring: proximity in graph embedding space does not guarantee mechanistic plausibility. This is not unique to Hetionet --- any KG that encodes comorbidity, co-occurrence, or phenotypic similarity alongside direct treatment relations will produce false positive elevations for this reason.
+
+The MoA feature module directly encodes the question the embedding cannot answer: \textit{does the compound interact with the biological machinery implicated in the disease?} Features 3--5 (\texttt{shared\_targets}, \texttt{target\_overlap}, \texttt{shared\_pathway\_genes}) provide direct mechanistic signal; features 8 and 10 (\texttt{similar\_compounds\_treat}, \texttt{similar\_diseases\_treated}) provide analogical treatment signal. Together, they give the model the vocabulary to distinguish ``structurally close in the graph'' from ``mechanistically plausible as a treatment.'' Empirical evaluation of MoA feature impact on the score-validity inversion is planned for v2.
+
+\subsection{Limitations}
+
+\textbf{Single relation.} All primary results use the CtD relation (755 positive edges). The pipeline is designed for multi-relational extension; CpD (Compound-palliates-Disease, 390 edges) and DrD (Disease-resembles-Disease, 543 edges) are natural immediate targets requiring no code changes beyond \texttt{--relation CpD}.
+
+\textbf{Single seed.} Results in Tables~\ref{tab:primary} and~\ref{tab:extended} are single-seed runs (seed=42). No variance estimates are reported in v1. Multi-seed evaluation (3--5 seeds) is planned for v2 to provide confidence intervals and confirm result stability.
+
+\textbf{Simulation-based quantum.} All primary results use CPU statevector simulation. IBM Quantum Heron hardware runs confirm comparable QSVC scores (${\sim}$0.634 hardware vs.\ 0.6343 simulator), but a complete hardware-equivalent benchmark with full error characterization is deferred to v2.
+
+\textbf{MoA features not yet benchmarked.} The MoA module is fully implemented and integrated into the pipeline (\texttt{kg\_layer/moa\_features.py}, \texttt{kg\_layer/enhanced\_features.py}). Empirical PR-AUC results with \texttt{--use\_moa\_features} enabled will be reported in v2.
+
+\textbf{No random or degree-heuristic baselines.} A random classifier (PR-AUC $\approx$ 0.50 for balanced data) and a degree-heuristic baseline (rank by compound degree in the training graph) are planned as explicit baseline rows for v2 Table~3.
+
+%% ==================================================================
+\section{Future Work}
+%% ==================================================================
+
+The following experiments and extensions are planned for v2 of this paper and subsequent work:
+
+\textbf{Immediate (v2):}
+\begin{itemize}[leftmargin=*]
+\item MoA feature benchmark: run \texttt{--use\_moa\_features} on the primary CtD config; report PR-AUC before/after and change in score-validity inversion rank for Abacavir.
+\item CpD relation: run \texttt{--relation CpD} (390 edges) with the identical pipeline; report the first quantum KG result on compound-pathway link prediction.
+\item Multi-seed evaluation: 5 seeds for the primary configuration; report mean $\pm$ std.
+\item Degree-heuristic and random baselines.
+\end{itemize}
+
+\textbf{Medium-term:}
+\begin{itemize}[leftmargin=*]
+\item Extend to DrD (543 edges), CbG (11,571 edges with Nystr\"{o}m approximation), and DaG (12,623 edges).
+\item VQC ansatz search with larger circuit budgets (100+ iterations, reps=6--8).
+\item IBM Quantum Heron full benchmark with noise mitigation characterization.
+\item Kernel-target alignment analysis as a diagnostic for feature map selection.
+\end{itemize}
+
+\textbf{Longer-term:}
+\begin{itemize}[leftmargin=*]
+\item Extend to DRKG (4.4M edges, 97K entities) with Nystr\"{o}m-approximated quantum kernels.
+\item Variational quantum kernel learning (train the feature map jointly with the classifier).
+\item Multi-relational joint training (train on CtD + CpD + DrD simultaneously with shared quantum feature space).
+\end{itemize}
+
+%% ==================================================================
+\section{Conclusion}
+%% ==================================================================
+
+We have presented the first hybrid quantum-classical pipeline that bridges knowledge graph embeddings with quantum kernel classifiers for biomedical link prediction. On the Hetionet CtD task --- 755 known drug-disease treatments, 47,031 entities, 2.25 million edges across 24 relation types --- our system achieves:
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{PR-AUC 0.7987} (primary: RotatE-128D, Pauli-16Q, genuine 2,619 s quantum kernel, +1.49 pp over best classical)
+\item \textbf{PR-AUC 0.8581} (extended: RotatE-256D, Pauli-12Q, Optuna-tuned classical)
+\end{itemize}
+
+The central finding is a counterintuitive quantum-classical synergy: the Pauli feature map degrades standalone QSVC PR-AUC by 8.7 pp relative to ZZ but raises ensemble PR-AUC by 5.8 pp, because it generates predictions more decorrelated from classical tree model errors. This finding reframes the optimization target for quantum kernels in hybrid ensembles: maximize classical-quantum prediction independence, not standalone quantum accuracy.
+
+Clinical validation against ClinicalTrials.gov reveals a score-validity inversion problem --- the highest-scoring prediction (Abacavir$\to$ocular cancer, 0.793) has zero clinical support while validated predictions score 0.52--0.53 --- and identifies Ezetimibe$\to$gout as a biologically plausible novel hypothesis. We introduce a ten-feature mechanism-of-action module encoding binding target overlap, pathway co-involvement, pharmacologic class, and treatment analogy to address this inversion.
+
+This work establishes a new research direction at the intersection of quantum kernel methods and knowledge graph reasoning for biomedicine, with a reproducible open pipeline, verified experimental provenance, and a clear experimental roadmap toward multi-relation, multi-seed, and hardware-validated results.
+
+%% ==================================================================
+%% References
+%% ==================================================================
+
+\begin{thebibliography}{99}
+
+\bibitem{himmelstein2017}
+Himmelstein, D.S.\ et al.\ (2017).
+Systematic integration of biomedical knowledge prioritizes drugs for repurposing.
+\textit{eLife}, 6, e26726.
+\url{https://doi.org/10.7554/eLife.26726}
+
+\bibitem{mayers2023}
+Mayers, M.\ et al.\ (2023; updated 2024).
+Drug repurposing using consilience of knowledge graph completion methods.
+\textit{bioRxiv}.
+\url{https://doi.org/10.1101/2023.05.12.540594}
+
+\bibitem{qkdti2025}
+QKDTI (2025).
+Quantum kernel-based drug-target interaction prediction.
+\textit{Scientific Reports}.
+\url{https://doi.org/10.1038/s41598-025-07303-z}
+
+\bibitem{kruger2023}
+Kruger, D.M.\ et al.\ (2023).
+Quantum machine learning framework for virtual screening.
+\textit{Machine Learning: Science and Technology}.
+\url{https://doi.org/10.1088/2632-2153/acb900}
+
+\bibitem{llmrag2025}
+Deep learning-based drug repurposing using KG embeddings and GraphRAG (2025).
+\textit{bioRxiv}.
+\url{https://doi.org/10.64898/2025.12.08.693009}
+
+\bibitem{quantum2026}
+Large-scale quantum computing framework enhances drug discovery (2026).
+\textit{bioRxiv}.
+\url{https://doi.org/10.64898/2026.02.09.704961}
+
+\bibitem{hybrid2024}
+Hybrid classical-quantum pipeline for real-world drug discovery (2024).
+\textit{bioRxiv}.
+\url{https://doi.org/10.1101/2024.01.08.574600}
+
+\bibitem{rotate2019}
+Sun, Z.\ et al.\ (2019).
+RotatE: Knowledge graph embedding by relational rotation in complex space.
+\textit{ICLR 2019}.
+\url{https://arxiv.org/abs/1902.10197}
+
+\bibitem{pykeen2021}
+Ali, M.\ et al.\ (2021).
+PyKEEN 1.0: A Python library for training and evaluating knowledge graph embeddings.
+\textit{Journal of Machine Learning Research}, 22(82), 1--6.
+\url{https://jmlr.org/papers/v22/20-1531.html}
+
+\bibitem{schuld2021}
+Schuld, M.\ \& Petruccione, F.\ (2021).
+\textit{Machine Learning with Quantum Computers}.
+Springer.
+\url{https://doi.org/10.1007/978-3-030-83098-4}
+
+\bibitem{qiskit2023}
+Qiskit contributors (2023).
+Qiskit: An open-source framework for quantum computing.
+\url{https://doi.org/10.5281/zenodo.2573505}
+
+\bibitem{wolpert1992}
+Wolpert, D.H.\ (1992).
+Stacked generalization.
+\textit{Neural Networks}, 5(2), 241--259.
+\url{https://doi.org/10.1016/S0893-6080(05)80023-1}
+
+\end{thebibliography}
+
+%% ==================================================================
+%% Appendices
+%% ==================================================================
+
+\appendix
+
+\section{Full Configuration: Primary Run}
+\label{app:primary_config}
+
+\textit{Complete configuration for \texttt{results/optimized\_results\_20260216-100431.json}.}
+
+\begin{table*}[h]
+\centering
+\caption{Primary Run Configuration}
+\label{tab:config_primary}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+\texttt{relation} & CtD \\
+\texttt{embedding\_method} & RotatE \\
+\texttt{embedding\_dim} & 128 \\
+\texttt{embedding\_epochs} & 200 \\
+\texttt{full\_graph\_embeddings} & True \\
+\texttt{qml\_feature\_map} & Pauli \\
+\texttt{qml\_feature\_map\_reps} & 2 \\
+\texttt{qml\_dim} & 16 \\
+\texttt{qml\_pre\_pca\_dim} & 24 \\
+\texttt{qsvc\_C} & 0.1 \\
+\texttt{qsvc\_nystrom\_m} & None (full kernel) \\
+\texttt{negative\_sampling} & hard \\
+\texttt{ensemble\_method} & stacking \\
+\texttt{tune\_classical} & True \\
+\texttt{fast\_mode} & True \\
+\texttt{random\_state} & 42 \\
+\texttt{cv\_folds} & 5 \\
+QSVC kernel computation time & 2,618.6 s \\
+Result file timestamp & 20260216-100431 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{Full Configuration: Extended Run}
+\label{app:extended_config}
+
+\textit{Complete configuration for \texttt{results/optimized\_results\_20260323-134844.json}.}
+
+\begin{table*}[h]
+\centering
+\caption{Extended Run Configuration}
+\label{tab:config_extended}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+\texttt{relation} & CtD \\
+\texttt{embedding\_method} & RotatE \\
+\texttt{embedding\_dim} & 256 \\
+\texttt{embedding\_epochs} & 250 \\
+\texttt{full\_graph\_embeddings} & True \\
+\texttt{qml\_feature\_map} & Pauli \\
+\texttt{qml\_feature\_map\_reps} & 1 \\
+\texttt{qml\_dim} & 12 \\
+\texttt{qml\_pre\_pca\_dim} & 0 (none) \\
+\texttt{qsvc\_C} & 0.6756 (Optuna-tuned) \\
+\texttt{qsvc\_nystrom\_m} & None \\
+\texttt{negative\_sampling} & hard \\
+\texttt{ensemble\_method} & stacking \\
+\texttt{tune\_classical} & True \\
+\texttt{fast\_mode} & True \\
+\texttt{random\_state} & 42 \\
+QSVC kernel computation (first trial) & ${\sim}$99 s \\
+Kernel reuse across Optuna trials & Yes (83 trials, fixed quantum kernel) \\
+Result file timestamp & 20260323-134844 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\end{document}

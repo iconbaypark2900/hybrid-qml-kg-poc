@@ -11,7 +11,7 @@ A hybrid quantum-classical machine learning system for biomedical link predictio
 ---
 
 ## Results
-
+~
 | Model | Test PR-AUC | Type |
 |-------|-------------|------|
 | Ensemble-QC-stacking (Pauli) | **0.7987** | Hybrid ensemble |
@@ -293,6 +293,24 @@ hybrid-qml-kg-poc/
 |------|-------|
 | `requirements.txt` | Dashboard and lightweight local runs (Streamlit, Qiskit, scikit-learn) |
 | `requirements-full.txt` | Full pipeline including PyTorch, PyKEEN, and embedding training |
+
+---
+
+## Reproducibility & Preregistration
+
+The repository ships an OSF-style retroactive preregistration, three charter gates, locked methodological constants, a paired-bootstrap CI helper, and a deterministic synthetic-KG fixture so the test suite runs without Hetionet.
+
+| Artifact | Purpose |
+|---|---|
+| [`preregistration/osf_preregistration_v1.md`](preregistration/osf_preregistration_v1.md) | OSF preregistration §1–12, with explicit retroactive disclosure. H1 (QSVC alone), H1b (stacking ensemble headline), H2/H3 (hardware ZNE, scaling) — paired-bootstrap decision rule with conjunction-across-baselines |
+| [`charter/01_phase_alignment.md`](charter/01_phase_alignment.md) | Path A research positioning, audience, timeline (Q1 2027 submission), 12-month success criteria |
+| [`charter/02_scope_decisions.md`](charter/02_scope_decisions.md) | Forward-looking scope: four CtD-relevant edge types, R-GCN + TransE baselines, stacking-ensemble headline, hardware experiment scope |
+| [`charter/03_methodology_decisions.md`](charter/03_methodology_decisions.md) | Methodology table reconciled with the headline configuration (PauliFeatureMap reps=2 primary, RotatE 128D pair features, hard negatives, stacking ensemble) |
+| [`utils/preregistered_constants.py`](utils/preregistered_constants.py) | Locked thresholds — feature map type/reps, embedding method/dim/epochs, pre-PCA dim, qubits, C-values, bootstrap seed (`20260504`), split fractions, hardware problem sizes, ZNE noise scales. Modifying any value requires a §12 amendment. |
+| [`utils/bootstrap_ci.py`](utils/bootstrap_ci.py) | `paired_bootstrap_pr_auc_difference` and `conjunction_across_baselines` — H1/H1b decision rule with 10,000 resamples |
+| [`tests/fixtures/synthetic_kg.py`](tests/fixtures/synthetic_kg.py) + [`tests/conftest.py`](tests/conftest.py) | Deterministic Hetionet-flavored synthetic KG (Compounds/Diseases/Genes, four edge types) for CI smoke tests without Hetionet downloads |
+
+The preregistration is **retroactive**: H1 and H1b are formalized after PR-AUC 0.7987 was observed, and that disclosure is explicit. H2 and H3 (hardware experiments) are blinded.
 
 ---
 

@@ -94,7 +94,72 @@ def parse_args() -> argparse.Namespace:
                    help="Verify imports + minimal setup; do NOT load data or train models")
     p.add_argument("--subsample", type=int, default=0,
                    help="Debug: cap positive count (0 = full dataset)")
+    p.add_argument("--gpu", action="store_true",
+                   help="Use GPU-backed Aer simulator (cuStateVec) for QSVC kernel evaluation. "
+                        "Requires qiskit-aer-gpu installed against your CUDA version. "
+                        "Verify with `python scripts/verify_qiskit_gpu.py` first.")
+    p.add_argument("--quantum_config_path", type=str, default=None,
+                   help="Override the quantum executor config (YAML). "
+                        "If --gpu is set and this is unset, defaults to config/quantum_config_gpu.yaml. "
+                        "Otherwise uses QMLLinkPredictor's default (CPU statevector).")
     return p.parse_args()
+
+
+def _resolve_quantum_config(args: argparse.Namespace) -> str | None:
+    """Apply the --gpu / --quantum_config_path precedence rules.
+
+    Mirrors scripts/run_optimized_pipeline.py: --gpu forces the GPU YAML
+    unless an explicit path is given. Returns the resolved path (or None
+    if no path is configured).
+    """
+    if args.quantum_config_path:
+        return args.quantum_config_path
+    if args.gpu:
+        return os.path.join("config", "quantum_config_gpu.yaml")
+    return None
+
+
+def _log_gpu_availability() -> None:
+    """Probe the quantum executor for GPU support and log the result."""
+    try:
+        from quantum_layer.quantum_executor import QuantumExecutor  # noqa: E402
+        if QuantumExecutor.gpu_available():
+            print("[gpu] QuantumExecutor reports NVIDIA GPU available (cuStateVec)")
+        else:
+            print("[gpu] No GPU-backed Aer available; falling back to CPU statevector simulation")
+    except Exception as e:
+        print(f"[gpu] could not check GPU availability: {e}")
+
+
+def _aer_gpu_truly_available() -> bool:
+    """Strict check: AerSimulator.available_devices() actually includes 'GPU'.
+
+    More reliable than QuantumExecutor.gpu_available() (which can return
+    True on CPU-only systems). Used to gate `--gpu` so the multi-hour
+    bootstrap CI doesn't silently fall through to CPU.
+    """
+    try:
+        from qiskit_aer import AerSimulator
+        return "GPU" in AerSimulator().available_devices()
+    except Exception:
+        return False
+
+
+def _gate_gpu_or_abort(args: argparse.Namespace) -> None:
+    """If --gpu is set, abort early unless qiskit-aer-gpu is genuinely working."""
+    if not args.gpu:
+        return
+    if not _aer_gpu_truly_available():
+        print(
+            "[gpu] ABORT: --gpu was requested but AerSimulator.available_devices() "
+            "does not include 'GPU'.\n"
+            "       qiskit-aer-gpu is either not installed or not seeing CUDA.\n"
+            "       Run `python scripts/verify_qiskit_gpu.py` for a full diagnosis.\n"
+            "       To proceed on CPU instead, drop the --gpu flag.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    print("[gpu] AerSimulator confirmed GPU device — proceeding with GPU CV.")
 
 
 def _git_commit() -> str:
@@ -218,8 +283,13 @@ def _train_classical(name: str, grid: dict, X_train, y_train):
     return gs.best_estimator_
 
 
-def _train_qsvc(X_train, y_train):
-    """Train QSVC with double-PCA pipeline matching the headline."""
+def _train_qsvc(X_train, y_train, *, quantum_config_path: str | None = None):
+    """Train QSVC with double-PCA pipeline matching the headline.
+
+    Optionally routes through a non-default quantum executor config (e.g.,
+    config/quantum_config_gpu.yaml for cuStateVec on DGX). The double-PCA
+    pipeline (521D -> 24D -> 16D) is unchanged regardless of backend.
+    """
     from sklearn.decomposition import PCA
     from sklearn.preprocessing import StandardScaler
 
@@ -232,7 +302,7 @@ def _train_qsvc(X_train, y_train):
     pca_qml = PCA(n_components=QSVC_QML_DIM, random_state=0).fit(X_train_pre)
     X_train_qml = pca_qml.transform(X_train_pre)
 
-    qsvc = QMLLinkPredictor(
+    qsvc_kwargs = dict(
         model_type="QSVC",
         feature_map_type=QSVC_FEATURE_MAP_TYPE.replace("FeatureMap", ""),  # "Pauli" / "ZZ"
         feature_map_reps=QSVC_FEATURE_MAP_REPS,
@@ -240,6 +310,10 @@ def _train_qsvc(X_train, y_train):
         random_state=0,
         C=QSVC_C_BEST,
     )
+    if quantum_config_path is not None:
+        qsvc_kwargs["quantum_config_path"] = quantum_config_path
+
+    qsvc = QMLLinkPredictor(**qsvc_kwargs)
     qsvc.fit(X_train_qml, y_train)
     return qsvc, scaler, pca_pre, pca_qml
 
@@ -319,7 +393,9 @@ def run_cv(args: argparse.Namespace) -> tuple[dict, np.ndarray]:
 
         if not args.skip_qsvc:
             print("  [QSVC] training...")
-            qsvc, sc, p1, p2 = _train_qsvc(X_train, y_train)
+            qsvc, sc, p1, p2 = _train_qsvc(
+                X_train, y_train, quantum_config_path=args._quantum_config_path
+            )
             scores = _qsvc_predict(qsvc, sc, p1, p2, X_test)
             oof_scores["QSVC"][test_idx] = scores
             fold_artifacts["QSVC"] = scores
@@ -357,6 +433,7 @@ def emit_report(
     n_resamples: int,
     has_ensemble: bool,
     has_qsvc: bool,
+    quantum_config_path: str | None = None,
 ) -> None:
     """Compute H1 / H1b CIs and emit the markdown report."""
     from sklearn.metrics import average_precision_score
@@ -377,6 +454,7 @@ def emit_report(
         f"(edges sha256 `{sha_edges}`)",
         f"**Configuration:** PauliFeatureMap reps=2, RotatE 128D pair features (concat + diff + Hadamard + scalars), "
         f"hard negatives 1:1, 5-fold stratified CV",
+        f"**Quantum backend:** {quantum_config_path or 'default (CPU statevector)'}",
         f"**Bootstrap:** {n_resamples:,} resamples, seed `{BOOTSTRAP_SEED}`, "
         f"{int(BOOTSTRAP_CONFIDENCE * 100)}% confidence",
         "",
@@ -474,6 +552,7 @@ def emit_report(
 
 def main() -> int:
     args = parse_args()
+    args._quantum_config_path = _resolve_quantum_config(args)
 
     if args.dry_run:
         print("[dry_run] verifying imports only...")
@@ -482,15 +561,25 @@ def main() -> int:
         from kg_layer import enhanced_features  # noqa: F401
         if not args.skip_qsvc:
             from quantum_layer import qml_model  # noqa: F401
+            _log_gpu_availability()
         from utils.bootstrap_ci import paired_bootstrap_pr_auc_difference  # noqa: F401
         print(f"[dry_run] OK. seed={BOOTSTRAP_SEED} resamples={args.n_resamples}")
         print(f"[dry_run] cache_dir={args.cache_dir}")
         print(f"[dry_run] report -> {REPORT_PATH}")
+        if args._quantum_config_path:
+            print(f"[dry_run] quantum_config_path={args._quantum_config_path}")
         return 0
 
     # Lazy import pandas (heavy)
     global pd
     import pandas as pd  # noqa: F811
+
+    # Log GPU status if QSVC will be trained; abort hard if --gpu can't deliver
+    if not args.skip_qsvc:
+        _log_gpu_availability()
+        _gate_gpu_or_abort(args)
+        if args._quantum_config_path:
+            print(f"[gpu] quantum_config_path={args._quantum_config_path}")
 
     if args.resume_from_cache:
         print(f"[resume] loading from {args.cache_dir}...")
@@ -517,6 +606,7 @@ def main() -> int:
         n_resamples=args.n_resamples,
         has_ensemble=has_ensemble,
         has_qsvc=has_qsvc,
+        quantum_config_path=args._quantum_config_path,
     )
     return 0
 

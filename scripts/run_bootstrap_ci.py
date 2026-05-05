@@ -134,9 +134,11 @@ def _log_gpu_availability() -> None:
 def _aer_gpu_truly_available() -> bool:
     """Strict check: AerSimulator.available_devices() actually includes 'GPU'.
 
-    More reliable than QuantumExecutor.gpu_available() (which can return
-    True on CPU-only systems). Used to gate `--gpu` so the multi-hour
-    bootstrap CI doesn't silently fall through to CPU.
+    Used to gate `--gpu` so the multi-hour bootstrap CI doesn't silently
+    fall through to CPU. Equivalent in behavior to
+    ``QuantumExecutor.gpu_available()`` after the strictness fix; kept as
+    a separate helper so the abort path doesn't acquire a dependency on
+    the working pipeline module.
     """
     try:
         from qiskit_aer import AerSimulator

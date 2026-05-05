@@ -6,10 +6,6 @@ preregistration §3.2 (CtD, CrC, CbG, DaG). Suitable as a CI fixture so
 the test suite does not require Hetionet downloads or PyKEEN-trained
 embeddings.
 
-Ported from ``qgg-hybrid-qml-kg-biomedical/src/hybrid_qml_kg_biomedical/
-{datasets/synthetic.py, methods/link_prediction.py}`` and rewritten with
-local imports.
-
 Node-type encoding:
   0 = Compound, 1 = Disease, 2 = Gene
 """

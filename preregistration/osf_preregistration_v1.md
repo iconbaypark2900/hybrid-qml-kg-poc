@@ -237,7 +237,7 @@ Each unsealing event is logged with methodology version (git commit), configurat
 
 Per-fold PR-AUC differences (QSVC − each baseline for H1; ensemble − each baseline for H1b) on the test partition. 5-fold cross-validation.
 
-Paired bootstrap with **10,000 resamples** produces 95% CI on the mean per-fold PR-AUC difference for each baseline. Implementation: `utils/bootstrap_ci.paired_bootstrap_pr_auc_difference` and `utils/bootstrap_ci.conjunction_across_baselines` (this repository, no external dependency on a separate `qgg_shared` package).
+Paired bootstrap with **10,000 resamples** produces 95% CI on the mean per-fold PR-AUC difference for each baseline. Implementation: `utils/bootstrap_ci.paired_bootstrap_pr_auc_difference` and `utils/bootstrap_ci.conjunction_across_baselines` — in-tree, pure NumPy + scikit-learn, no external statistical dependency.
 
 **Decision rule:** H1 / H1b supported iff 95% CI excludes zero AND lies in the favorable direction for ALL FIVE baselines simultaneously.
 
@@ -259,7 +259,7 @@ Linear regression on log(per-kernel-entry compute time) vs log(problem size) acr
 
 ### 8.4 Bootstrap procedure
 
-10,000 resamples, deterministic seed (`BOOTSTRAP_SEED = 20260504`, locked in `utils/preregistered_constants.py`). The paired-bootstrap primitives live in `utils/bootstrap_ci.py` in this repository; the originally drafted preregistration referenced an external `qgg_shared.statistics` package, which is not used.
+10,000 resamples, deterministic seed (`BOOTSTRAP_SEED = 20260504`, locked in `utils/preregistered_constants.py`). The paired-bootstrap primitives live in-tree at `utils/bootstrap_ci.py`. See §12.1 for the methodology mapping from the initial scaffold draft, including why no external statistics package is taken as a dependency.
 
 ### 8.5 Multiple comparison correction
 
@@ -358,7 +358,7 @@ The initial scaffold of this preregistration (drafted from the `qgg-hybrid-qml-k
 | Negative sampling | 1:1 random, stratified by edge type | **Hard negative sampling** (1:1) |
 | Headline classifier | QSVC alone (H1 only) | **Stacking ensemble** of QSVC + tuned classical learners (H1b headline), with QSVC alone retained as H1 |
 | Embedding training | None (metapaths are the features) | **Full-graph RotatE**, 128D, 200 epochs (PyKEEN) |
-| Statistical-analysis dependency | `qgg_shared.statistics` (external) | `utils/bootstrap_ci.py` (this repository) |
+| Statistical-analysis dependency | External `qgg_shared.statistics` (QGG monorepo, not on PyPI) | In-tree `utils/bootstrap_ci.py` — pure NumPy + scikit-learn, no extra dep |
 
 The reconciliation was made because the initial scaffold draft did not match what the project had already executed. Per the retroactive-disclosure framing, the right move is to document what was *actually* run rather than re-run experiments to match a draft. The honest disclosure block in §"Critical disclosure" identifies all data-aware decisions that informed this reconciliation.
 

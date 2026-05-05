@@ -65,7 +65,7 @@ This script runs six checks:
 3. `AerSimulator.available_devices()` — must include `'GPU'`
 4. Aer backends listing
 5. A 1-shot statevector simulation actually executing on the GPU device
-6. The project's `QuantumExecutor.gpu_available()` heuristic
+6. The project's `QuantumExecutor.gpu_available()` (strict — `AerSimulator.available_devices()` membership check)
 
 Exit code 0 means everything is wired up. Non-zero exits print specific remediation per failed check.
 

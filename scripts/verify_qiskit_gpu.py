@@ -126,7 +126,8 @@ def main() -> int:
             failures.append(
                 "QuantumExecutor.gpu_available() returned False — "
                 "scripts/run_bootstrap_ci.py --gpu will NOT use the GPU. "
-                "Investigate the GPU-detection logic in quantum_layer/quantum_executor.py."
+                "(Helper is strict: it agrees with check #3 above. Fix that "
+                "and this will follow.)"
             )
     except Exception as e:
         failures.append(f"QuantumExecutor.gpu_available() probe failed: {e}")

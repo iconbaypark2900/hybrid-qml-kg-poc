@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import subprocess
@@ -207,6 +208,64 @@ def _git_commit() -> str:
         ).strip()
     except Exception:
         return "unknown"
+
+
+def _pip_freeze() -> str:
+    """Capture the installed-package set as a deterministic string."""
+    try:
+        out = subprocess.check_output(
+            [sys.executable, "-m", "pip", "freeze", "--disable-pip-version-check"],
+            text=True, stderr=subprocess.DEVNULL, timeout=60,
+        )
+        return out
+    except Exception:
+        return ""
+
+
+def _os_fingerprint() -> str:
+    """Return a one-line OS fingerprint."""
+    import platform
+    return f"{platform.platform()} | python {platform.python_version()}"
+
+
+def _capture_run_metadata(cache_dir: str) -> dict:
+    """Capture per-run reproducibility metadata once and persist alongside the
+    cached fold predictions.
+
+    Records (per preregistration §9.4): code commit hash, environment hash
+    (SHA-256 of `pip freeze`), OS fingerprint, Python version. The full
+    `pip freeze` output is written to ``<cache_dir>/env.txt`` so the
+    environment is reconstructible bit-identically; the report references
+    the hash, not the full content.
+
+    Idempotent within a single run: if the metadata file already exists
+    (e.g. mid-run resume), reads and returns it instead of regenerating.
+    """
+    os.makedirs(cache_dir, exist_ok=True)
+    meta_path = os.path.join(cache_dir, "run_metadata.json")
+    env_path = os.path.join(cache_dir, "env.txt")
+
+    if os.path.isfile(meta_path):
+        with open(meta_path, encoding="utf-8") as f:
+            return json.load(f)
+
+    freeze = _pip_freeze()
+    env_sha = hashlib.sha256(freeze.encode("utf-8")).hexdigest() if freeze else "unknown"
+    if freeze:
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write(freeze)
+
+    meta = {
+        "captured_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "git_commit": _git_commit(),
+        "env_sha256": env_sha,
+        "env_artifact_path": os.path.relpath(env_path, REPO_ROOT) if freeze else None,
+        "os_fingerprint": _os_fingerprint(),
+        "hetionet_edges_sha256": _hetionet_sha(),
+    }
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2, sort_keys=True)
+    return meta
 
 
 def _hetionet_sha() -> str:
@@ -472,14 +531,18 @@ def emit_report(
     has_ensemble: bool,
     has_qsvc: bool,
     quantum_config_path: str | None = None,
+    run_metadata: dict | None = None,
 ) -> None:
     """Compute H1 / H1b CIs and emit the markdown report."""
     from sklearn.metrics import average_precision_score
 
     os.makedirs(os.path.dirname(REPORT_PATH), exist_ok=True)
     today = dt.date.today().isoformat()
-    commit = _git_commit()
-    sha_edges = _hetionet_sha()
+    # Prefer fields from the captured run_metadata (locks the environment
+    # that actually ran the CV); fall back to live probes for ad-hoc runs.
+    meta = run_metadata or {}
+    commit = meta.get("git_commit") or _git_commit()
+    sha_edges = meta.get("hetionet_edges_sha256") or _hetionet_sha()
 
     pr_aucs = {name: float(average_precision_score(oof_labels, scores)) for name, scores in oof_scores.items()}
 
@@ -495,6 +558,13 @@ def emit_report(
         f"**Quantum backend:** {quantum_config_path or 'default (CPU statevector)'}",
         f"**Bootstrap:** {n_resamples:,} resamples, seed `{BOOTSTRAP_SEED}`, "
         f"{int(BOOTSTRAP_CONFIDENCE * 100)}% confidence",
+        "",
+        "**Reproducibility (per preregistration §9.4):**",
+        f"- Environment hash (SHA-256 of `pip freeze`): `{meta.get('env_sha256', 'unknown')}`",
+        f"- Environment artifact: "
+        + (f"`{meta.get('env_artifact_path')}`" if meta.get('env_artifact_path') else "_unavailable_"),
+        f"- OS / Python: {meta.get('os_fingerprint', 'unknown')}",
+        f"- Run metadata captured: {meta.get('captured_utc', 'unknown')}",
         "",
         "## OOF point estimates (PR-AUC)",
         "",
@@ -622,6 +692,13 @@ def main() -> int:
     # Fail-fast on missing RotatE embeddings before kicking off CV.
     _preflight_data_check(args)
 
+    # Capture per-run reproducibility metadata once; persist alongside the
+    # cached fold predictions so a resume run reads the same env hash that
+    # actually trained the folds.
+    run_metadata = _capture_run_metadata(args.cache_dir)
+    print(f"[repro] git_commit={run_metadata.get('git_commit', 'unknown')[:12]} "
+          f"env_sha256={run_metadata.get('env_sha256', 'unknown')[:12]}…")
+
     if args.resume_from_cache:
         print(f"[resume] loading from {args.cache_dir}...")
         oof_scores, oof_labels = load_from_cache(args.cache_dir)
@@ -648,6 +725,7 @@ def main() -> int:
         has_ensemble=has_ensemble,
         has_qsvc=has_qsvc,
         quantum_config_path=args._quantum_config_path,
+        run_metadata=run_metadata,
     )
     return 0
 

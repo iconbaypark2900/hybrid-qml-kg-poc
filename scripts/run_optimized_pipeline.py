@@ -43,6 +43,22 @@ from utils.evaluation import (
     train_random_forest, train_logistic_regression, train_rbf_svm
 )
 from utils.calibration import CalibratedModel
+from utils.preregistered_constants import (
+    EMBEDDING_DIM,
+    EMBEDDING_EPOCHS,
+    EMBEDDING_METHOD,
+    ENSEMBLE_METHOD,
+    NEGATIVE_SAMPLING,
+    QSVC_C_BEST,
+    QSVC_FEATURE_MAP_REPS,
+    QSVC_FEATURE_MAP_TYPE,
+    QSVC_PRE_PCA_DIM,
+    QSVC_QML_DIM,
+)
+
+# Map the formal feature-map class name to the argparse short form.
+# QSVC_FEATURE_MAP_TYPE is "PauliFeatureMap" / "ZZFeatureMap"; the CLI takes "Pauli" / "ZZ".
+_QSVC_FEATURE_MAP_CHOICE = QSVC_FEATURE_MAP_TYPE.replace("FeatureMap", "")
 
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier, ExtraTreesClassifier, HistGradientBoostingClassifier
 from sklearn.svm import SVC
@@ -724,12 +740,17 @@ def main():
     parser.add_argument("--evidence_weight_alpha", type=float, default=1.0,
                        help="Positive sample weight = 1 + alpha*log1p(shared_genes).")
 
-    # Embedding args
-    parser.add_argument("--embedding_method", type=str, default="ComplEx",
+    # Embedding args.
+    # Defaults sourced from utils/preregistered_constants.py (locked by
+    # preregistration §4). Override with CLI flags for sensitivity sweeps;
+    # any deviation from the locked values requires a §12 amendment.
+    parser.add_argument("--embedding_method", type=str, default=EMBEDDING_METHOD,
                        choices=['TransE', 'ComplEx', 'RotatE', 'DistMult'],
-                       help="KG embedding method")
-    parser.add_argument("--embedding_dim", type=int, default=64, help="Embedding dimension")
-    parser.add_argument("--embedding_epochs", type=int, default=100, help="Embedding training epochs")
+                       help=f"KG embedding method (preregistered default: {EMBEDDING_METHOD})")
+    parser.add_argument("--embedding_dim", type=int, default=EMBEDDING_DIM,
+                       help=f"Embedding dimension (preregistered default: {EMBEDDING_DIM})")
+    parser.add_argument("--embedding_epochs", type=int, default=EMBEDDING_EPOCHS,
+                       help=f"Embedding training epochs (preregistered default: {EMBEDDING_EPOCHS})")
     parser.add_argument("--use_cached_embeddings", action="store_true", help="Use cached embeddings if available")
     parser.add_argument("--allow_cached_embeddings_with_holdout", action="store_true",
                        help="Allow cached embeddings even when a hold-out test set exists (can produce optimistic/leaky metrics).")
@@ -743,8 +764,11 @@ def main():
                        help="Include mechanism-of-action features (binding targets, pathway overlap, "
                             "drug class, chemical/disease similarity to known treatments)")
 
-    # Quantum args
-    parser.add_argument("--qml_dim", type=int, default=12, help="Number of qubits (default: 12, was 10)")
+    # Quantum args.
+    # Defaults sourced from utils/preregistered_constants.py (locked by
+    # preregistration §5.1, §5.3, §5.6).
+    parser.add_argument("--qml_dim", type=int, default=QSVC_QML_DIM,
+                       help=f"Number of qubits (preregistered default: {QSVC_QML_DIM})")
     parser.add_argument("--qml_encoding", type=str, default="hybrid",
                        choices=['amplitude', 'phase', 'hybrid', 'optimized_diff', 'tensor_product'],
                        help="Quantum encoding strategy")
@@ -757,16 +781,17 @@ def main():
                        help="Explicit number of features to select before reduction (0 = auto).")
     parser.add_argument("--qml_feature_select_k_mult", type=float, default=4.0,
                        help="Multiplier for auto feature selection size (k = num_qubits * mult).")
-    parser.add_argument("--qml_pre_pca_dim", type=int, default=0,
-                       help="Optional intermediate PCA dimension before final QML reduction (0 = disabled).")
+    parser.add_argument("--qml_pre_pca_dim", type=int, default=QSVC_PRE_PCA_DIM,
+                       help=f"Optional intermediate PCA dimension before final QML reduction "
+                            f"(preregistered default: {QSVC_PRE_PCA_DIM}; pass 0 to disable).")
     parser.add_argument("--qml_reduction_method", type=str, default="pca",
                        choices=["pca", "kpca", "lda"],
                        help="Dimensionality reduction for QML features (pca|kpca|lda).")
-    parser.add_argument("--qml_feature_map", type=str, default="ZZ",
+    parser.add_argument("--qml_feature_map", type=str, default=_QSVC_FEATURE_MAP_CHOICE,
                        choices=['ZZ', 'Z', 'Pauli', 'custom_link_prediction'],
-                       help="Quantum feature map type (ZZ, Z, Pauli, or custom_link_prediction)")
-    parser.add_argument("--qml_feature_map_reps", type=int, default=2,
-                       help="Number of feature map repetitions (default: 2)")
+                       help=f"Quantum feature map type (preregistered default: {_QSVC_FEATURE_MAP_CHOICE})")
+    parser.add_argument("--qml_feature_map_reps", type=int, default=QSVC_FEATURE_MAP_REPS,
+                       help=f"Number of feature map repetitions (preregistered default: {QSVC_FEATURE_MAP_REPS})")
     parser.add_argument("--qml_entanglement", type=str, default="full",
                        choices=['linear', 'full', 'circular'],
                        help="Entanglement pattern for feature map (linear, full, circular)")
@@ -795,17 +820,19 @@ def main():
                        help="Enable Nyström kernel approximation for QSVC with m landmark points (reduces O(n^2) to O(n*m))")
     parser.add_argument("--nystrom_ridge", type=float, default=1e-6,
                        help="Ridge added to K_mm before pseudo-inverse for Nyström (stability)")
-    parser.add_argument("--qsvc_C", type=float, default=1.0,
-                       help="QSVC regularization parameter C (smaller = more regularization, may reduce overfitting)")
+    parser.add_argument("--qsvc_C", type=float, default=QSVC_C_BEST,
+                       help=f"QSVC regularization parameter C (preregistered default: {QSVC_C_BEST}; "
+                            f"smaller = more regularization)")
     parser.add_argument("--nystrom_max_pairs", type=int, default=20000,
                        help="Safety cap: if n_train*m exceeds this, landmark mitigation may be reduced/skipped")
     parser.add_argument("--no_nystrom_landmark_mitigation", action="store_true",
                        help="Disable mitigation on landmark evaluations (default: enabled when possible)")
 
-    # Negative sampling args
-    parser.add_argument("--negative_sampling", type=str, default="random",
+    # Negative sampling args. Default sourced from utils/preregistered_constants.py
+    # (locked by preregistration §7.1).
+    parser.add_argument("--negative_sampling", type=str, default=NEGATIVE_SAMPLING,
                        choices=['random', 'hard', 'diverse'],
-                       help="Negative sampling strategy")
+                       help=f"Negative sampling strategy (preregistered default: {NEGATIVE_SAMPLING})")
     parser.add_argument("--diversity_weight", type=float, default=0.5,
                        help="Diversity weight for 'diverse' sampling (0.0-1.0)")
 
@@ -877,9 +904,9 @@ def main():
     # Quantum-classical ensemble
     parser.add_argument("--run_ensemble", action="store_true",
                        help="Run quantum-classical ensemble after individual model training")
-    parser.add_argument("--ensemble_method", type=str, default="weighted_average",
+    parser.add_argument("--ensemble_method", type=str, default=ENSEMBLE_METHOD,
                        choices=['weighted_average', 'voting', 'stacking'],
-                       help="Ensemble combination method (default: weighted_average)")
+                       help=f"Ensemble combination method (preregistered default: {ENSEMBLE_METHOD})")
     parser.add_argument("--ensemble_quantum_weight", type=float, default=0.5,
                        help="Weight for quantum model in weighted_average ensemble (0.0-1.0, classical gets 1-this)")
     parser.add_argument("--run_fusion", action="store_true",

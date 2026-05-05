@@ -6,6 +6,8 @@
 **Anticipated manuscript submission:** Q1 2027
 **Target venue:** *Quantum Machine Intelligence* (primary), *npj Quantum Information* (backup), *Bioinformatics* (tertiary)
 
+> **Provisional — edit when final:** The venue **order** (QMI → *npj Quantum Information* → *Bioinformatics*), the **OSF filing quarter** (Q3 2026), and the **manuscript submission quarter** (Q1 2027) are the current working plan. **Replace this block** once co-authors lock the definitive venue sequence, calendar dates, and licensing posture. Same for Elsayed’s affiliation and every ORCID below.
+
 ---
 
 ## Authors
@@ -18,9 +20,16 @@ Abdulrehman Elsayed⁴
 ¹ Quantum Global Group
 ² Florida Agricultural and Mechanical University, Department of Physics
 ³ EdAdvance / QuantumCT
-⁴ [Affiliation to be confirmed]
+⁴ *[Affiliation TBD — add final text before OSF submission.]*
 
-ORCIDs: to be added before submission.
+**ORCIDs (TBD — edit when final):**
+
+| Author | ORCID |
+|--------|--------|
+| Jonathan Beale | *pending* |
+| Mark A. Jack | *pending* |
+| Kevin Robinson | *pending* |
+| Abdulrehman Elsayed | *pending* |
 
 ## Critical disclosure: retroactive pre-registration
 

@@ -100,9 +100,11 @@ Tentative author list:
 - **Jonathan Beale** — corresponding author, lead author. Methodology, software, evaluation, manuscript.
 - **Mark A. Jack** (Florida A&M, Physics) — review of quantum-kernel methodology and hardware-experiment design.
 - **Kevin Robinson** (EdAdvance) — review of methodology accessibility for non-QML readers.
-- **Abdulrehman Elsayed** — review.
+- **Abdulrehman Elsayed** — review. *(Affiliation and ORCID: **TBD** — see `preregistration/osf_preregistration_v1.md` authors table; update before OSF / manuscript submission.)*
 
 CRediT roles will be filed at manuscript submission per Gate 4 commitment.
+
+**Venue order and submission calendar** in the charter and pre-registration (**QMI → *npj Quantum Information* → *Bioinformatics***; OSF **Q3 2026**, manuscript **Q1 2027**) are **provisional** until all authors sign off — edit the pre-registration header block in one place when final.
 
 ## What this project is not
 

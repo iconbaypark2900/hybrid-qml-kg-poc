@@ -339,13 +339,21 @@ The preregistration is **retroactive**: H1 and H1b are formalized after PR-AUC 0
 - **Launch script**: `scripts/launch_dashboard.sh` finds the first available port (8501, 8502, …) and runs the Streamlit app, so multiple instances or a busy port do not block startup.
 - **Hugging Face Space**: The app is deployed at [QGG-HYBRID-PROJECT](https://huggingface.co/spaces/rocRevyAreGoals15/QGG-HYBRID-PROJECT). Push to the Space with `git push hf <your-branch>:main` (see `docs/deployment/DEPLOY_HUGGINGFACE.md`).
 - **Documentation**: README updated with current results, pipeline features, project structure, and dashboard description. `docs/planning/NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` and `docs/overview/IMPLEMENTATION_RECAP.md` document the experiment log, recommended commands, and GPU/configuration options.
-- **Reproducibility & preregistration scaffolding (2026-05-04, branch `roc/preregistration-followups`)**: Added an OSF-style retroactive preregistration with H1/H1b/H2/H3 hypotheses + paired-bootstrap conjunction-across-baselines decision rule (`preregistration/`), three charter gates (`charter/`), locked methodological constants (`utils/preregistered_constants.py`, `BOOTSTRAP_SEED = 20260504`), an in-tree paired-bootstrap CI helper (`utils/bootstrap_ci.py`), a deterministic synthetic-KG fixture (`tests/fixtures/`) for Hetionet-free CI smoke tests, a Hetionet snapshot SHA-256 record (`docs/reproducibility/hetionet_snapshot.md`), a headline bootstrap driver with `--gpu` support and strict abort gate (`scripts/run_bootstrap_ci.py`), a 6-check qiskit-aer-gpu verifier (`scripts/verify_qiskit_gpu.py`), and a one-shot DGX wrapper + workflow guide (`scripts/run_bootstrap_ci_dgx.sh` + `docs/deployment/DGX_BOOTSTRAP_CI.md`). Strict-checked the upstream `QuantumExecutor.gpu_available()` helper at the same time. Headline GPU run on the DGX is the next gate before the manuscript-ready H1/H1b numbers land.
+- **Reproducibility & preregistration scaffolding (2026-05-04, branch `roc/preregistration-followups`)**: Added an OSF-style retroactive preregistration with H1/H1b/H2/H3 hypotheses + paired-bootstrap conjunction-across-baselines decision rule (`preregistration/`), three charter gates (`charter/`), locked methodological constants (`utils/preregistered_constants.py`, `BOOTSTRAP_SEED = 20260504`), an in-tree paired-bootstrap CI helper (`utils/bootstrap_ci.py`), a deterministic synthetic-KG fixture (`tests/fixtures/`) for Hetionet-free CI smoke tests, a Hetionet snapshot SHA-256 record (`docs/reproducibility/hetionet_snapshot.md`), a headline bootstrap driver with `--gpu` support and strict abort gate (`scripts/run_bootstrap_ci.py`), a 6-check qiskit-aer-gpu verifier (`scripts/verify_qiskit_gpu.py`), and a one-shot DGX wrapper + workflow guide (`scripts/run_bootstrap_ci_dgx.sh` + `docs/deployment/DGX_BOOTSTRAP_CI.md`). Strict-checked the upstream `QuantumExecutor.gpu_available()` helper at the same time. Headline GPU run on the DGX is the next gate before the manuscript-ready H1/H1b numbers land. **Venue calendar, affiliation, ORCIDs, and license** are flagged *provisional* in the preregistration header and README §Publication metadata until authors finalize.
 
 ---
 
 ## License
 
-MIT
+MIT — *confirm with all co-authors before publication. If the team re-licenses (e.g. Apache-2.0), replace this line and add the standard `LICENSE` file.*
+
+---
+
+## Publication metadata (provisional)
+
+**Venue order**, **OSF / manuscript dates**, **Elsayed affiliation**, and **author ORCIDs** are documented with explicit *edit when final* notes at the top of [`preregistration/osf_preregistration_v1.md`](preregistration/osf_preregistration_v1.md) and in [`charter/01_phase_alignment.md`](charter/01_phase_alignment.md).
+
+Optional **GPU** packages for Aer on CUDA: [`requirements-gpu.txt`](requirements-gpu.txt) (after `requirements-full.txt`); see [`docs/deployment/DGX_BOOTSTRAP_CI.md`](docs/deployment/DGX_BOOTSTRAP_CI.md).
 
 ---
 

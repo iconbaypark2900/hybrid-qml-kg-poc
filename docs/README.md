@@ -86,6 +86,7 @@ Iteration summaries: [improvements/](improvements/).
 | [deployment/DOCKER_INSTALL.md](deployment/DOCKER_INSTALL.md) | Docker install notes |
 | [deployment/README_FEATUREMAP_TESTING.md](deployment/README_FEATUREMAP_TESTING.md) | Feature-map Docker testing index |
 | [deployment/FEATUREMAP_TESTING_GUIDE.md](deployment/FEATUREMAP_TESTING_GUIDE.md), [deployment/FEATUREMAP_DOCKERFILE_ANALYSIS.md](deployment/FEATUREMAP_DOCKERFILE_ANALYSIS.md), … | Feature-map build & test notes |
+| [deployment/DGX_BOOTSTRAP_CI.md](deployment/DGX_BOOTSTRAP_CI.md) | NVIDIA DGX Spark / cuStateVec workflow for the H1/H1b paired-bootstrap CI run on real Hetionet (qiskit-aer-gpu install, data sync, verification, launch, troubleshooting) |
 
 The **`deployment/`** directory at the **repo root** holds Dockerfiles, `docker-compose.yml`, and image-specific requirements. Prose for deployment lives under **`docs/deployment/`** (above).
 

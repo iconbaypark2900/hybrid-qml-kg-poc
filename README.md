@@ -309,6 +309,7 @@ The repository ships an OSF-style retroactive preregistration, three charter gat
 | [`utils/preregistered_constants.py`](utils/preregistered_constants.py) | Locked thresholds — feature map type/reps, embedding method/dim/epochs, pre-PCA dim, qubits, C-values, bootstrap seed (`20260504`), split fractions, hardware problem sizes, ZNE noise scales. Modifying any value requires a §12 amendment. |
 | [`utils/bootstrap_ci.py`](utils/bootstrap_ci.py) | `paired_bootstrap_pr_auc_difference` and `conjunction_across_baselines` — H1/H1b decision rule with 10,000 resamples |
 | [`tests/fixtures/synthetic_kg.py`](tests/fixtures/synthetic_kg.py) + [`tests/conftest.py`](tests/conftest.py) | Deterministic Hetionet-flavored synthetic KG (Compounds/Diseases/Genes, four edge types) for CI smoke tests without Hetionet downloads |
+| [`docs/deployment/DGX_BOOTSTRAP_CI.md`](docs/deployment/DGX_BOOTSTRAP_CI.md) + [`scripts/run_bootstrap_ci_dgx.sh`](scripts/run_bootstrap_ci_dgx.sh) | DGX Spark / cuStateVec workflow for the H1/H1b paired-bootstrap CI run — `qiskit-aer-gpu` install, data sync, GPU verification, launch, troubleshooting |
 
 The preregistration is **retroactive**: H1 and H1b are formalized after PR-AUC 0.7987 was observed, and that disclosure is explicit. H2 and H3 (hardware experiments) are blinded.
 

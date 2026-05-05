@@ -345,7 +345,7 @@ The preregistration is **retroactive**: H1 and H1b are formalized after PR-AUC 0
 
 ## License
 
-MIT — *confirm with all co-authors before publication. If the team re-licenses (e.g. Apache-2.0), replace this line and add the standard `LICENSE` file.*
+MIT — *confirm with all co-authors before publication. If the team re-licenses (e.g. Apache-2.0), replace this line and the root [`LICENSE`](LICENSE) file with the Apache 2.0 text.* Full MIT text: [`LICENSE`](LICENSE).
 
 ---
 
@@ -353,7 +353,11 @@ MIT — *confirm with all co-authors before publication. If the team re-licenses
 
 **Venue order**, **OSF / manuscript dates**, **Elsayed affiliation**, and **author ORCIDs** are documented with explicit *edit when final* notes at the top of [`preregistration/osf_preregistration_v1.md`](preregistration/osf_preregistration_v1.md) and in [`charter/01_phase_alignment.md`](charter/01_phase_alignment.md).
 
-Optional **GPU** packages for Aer on CUDA: [`requirements-gpu.txt`](requirements-gpu.txt) (after `requirements-full.txt`); see [`docs/deployment/DGX_BOOTSTRAP_CI.md`](docs/deployment/DGX_BOOTSTRAP_CI.md).
+Optional **GPU** packages for Aer on CUDA: [`requirements-gpu.txt`](requirements-gpu.txt) (after `requirements-full.txt`).
+
+**DGX workflows:** train/cache RotatE embeddings with [`docs/deployment/DGX_SPARK.md`](docs/deployment/DGX_SPARK.md); run paired-bootstrap H1/H1b with GPU Aer via [`docs/deployment/DGX_BOOTSTRAP_CI.md`](docs/deployment/DGX_BOOTSTRAP_CI.md).
+
+Verification scripts (`scripts/run_bootstrap_ci.py --dry_run`, `scripts/verify_qiskit_gpu.py`) need the **project venv** and installed deps — e.g. `.venv/bin/python` after `pip install -r requirements-full.txt` (bare system `python3` will miss `sklearn` / Qiskit).
 
 ---
 
@@ -363,7 +367,7 @@ Optional **GPU** packages for Aer on CUDA: [`requirements-gpu.txt`](requirements
 @software{hybrid_qml_kg,
   title  = {Hybrid Quantum-Classical Knowledge Graph Link Prediction},
   year   = {2026},
-  url    = {https://github.com/yourusername/hybrid-qml-kg-poc}
+  url    = {https://github.com/Quantum-Global-Group/hybrid-qml-kg-poc}
 }
 ```
 

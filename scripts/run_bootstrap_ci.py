@@ -540,9 +540,16 @@ def emit_report(
     today = dt.date.today().isoformat()
     # Prefer fields from the captured run_metadata (locks the environment
     # that actually ran the CV); fall back to live probes for ad-hoc runs.
-    meta = run_metadata or {}
+    meta = dict(run_metadata or {})
     commit = meta.get("git_commit") or _git_commit()
     sha_edges = meta.get("hetionet_edges_sha256") or _hetionet_sha()
+    env_sha = meta.get("env_sha256")
+    if not env_sha or env_sha == "unknown":
+        fz = _pip_freeze()
+        env_sha = hashlib.sha256(fz.encode("utf-8")).hexdigest() if fz else "unknown"
+    os_fp = meta.get("os_fingerprint") or _os_fingerprint()
+    captured = meta.get("captured_utc", "unknown")
+    env_art = meta.get("env_artifact_path")
 
     pr_aucs = {name: float(average_precision_score(oof_labels, scores)) for name, scores in oof_scores.items()}
 
@@ -560,11 +567,11 @@ def emit_report(
         f"{int(BOOTSTRAP_CONFIDENCE * 100)}% confidence",
         "",
         "**Reproducibility (per preregistration §9.4):**",
-        f"- Environment hash (SHA-256 of `pip freeze`): `{meta.get('env_sha256', 'unknown')}`",
+        f"- Environment hash (SHA-256 of `pip freeze`): `{env_sha}`",
         f"- Environment artifact: "
-        + (f"`{meta.get('env_artifact_path')}`" if meta.get('env_artifact_path') else "_unavailable_"),
-        f"- OS / Python: {meta.get('os_fingerprint', 'unknown')}",
-        f"- Run metadata captured: {meta.get('captured_utc', 'unknown')}",
+        + (f"`{env_art}`" if env_art else "_unavailable_"),
+        f"- OS / Python: {os_fp}",
+        f"- Run metadata captured: {captured}",
         "",
         "## OOF point estimates (PR-AUC)",
         "",

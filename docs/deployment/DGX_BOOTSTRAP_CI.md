@@ -1,8 +1,6 @@
 # Running the H1/H1b bootstrap CI on NVIDIA DGX Spark
 
-This document covers the end-to-end workflow for computing the **paired-bootstrap confidence intervals** that operationalize hypotheses **H1** (QSVC alone vs each baseline) and **H1b** (stacking ensemble vs each baseline) from `preregistration/osf_preregistration_v1.md` §8.1, on real Hetionet, with QSVC kernel evaluation accelerated via `qiskit-aer-gpu` (cuStateVec).
-
-For the orthogonal workflow of **training** the RotatE 128D embeddings on the DGX, see [DGX_SPARK.md](DGX_SPARK.md). That step writes the `data/rotate_128d_*.npy` files this workflow consumes.
+This document covers the end-to-end workflow for computing the **paired-bootstrap confidence intervals** that operationalize hypotheses **H1** (QSVC alone vs each baseline) and **H1b** (stacking ensemble vs each baseline) from `preregistration/osf_preregistration_v1.md` §8.1, on real Hetionet, with QSVC kernel evaluation accelerated via `qiskit-aer-gpu` (cuStateVec). **Training** the RotatE 128D cache (`data/rotate_128d_*`) is in [DGX_SPARK.md](DGX_SPARK.md); this guide assumes those files exist. The root **README** links both workflows under [Publication metadata (provisional)](../README.md#publication-metadata-provisional).
 
 ## 1. One-shot script (recommended)
 
@@ -33,6 +31,8 @@ SKIP_QSVC=1 ./scripts/run_bootstrap_ci_dgx.sh           # debug: classical basel
 The wrapper picks `$PYTHON` if set, else `.venv/bin/python` if present, else `python3`.
 
 ## 2. Prerequisites
+
+Use the **same Python environment** as the main pipeline (`pip install -r requirements-full.txt` from the repo root, or `.venv/bin/python`). On a bare system Python, `scripts/verify_qiskit_gpu.py` and `run_bootstrap_ci.py --dry_run` will fail with missing `sklearn` / Qiskit.
 
 ### 2.1 CUDA-enabled PyTorch (already covered)
 

@@ -162,6 +162,42 @@ def _gate_gpu_or_abort(args: argparse.Namespace) -> None:
     print("[gpu] AerSimulator confirmed GPU device — proceeding with GPU CV.")
 
 
+def _preflight_data_check(args: argparse.Namespace) -> None:
+    """Fail-fast if the inputs the headline run needs aren't on disk.
+
+    Catches the most common DGX setup failure (rsync didn't include
+    the RotatE 128D embeddings) at process startup, BEFORE any model
+    training. Without this, the missing-file error surfaces ~minutes
+    in (after Hetionet download + feature extraction begin).
+
+    Skipped under --dry_run (verifying imports only) and
+    --resume_from_cache (no fresh data load needed).
+    """
+    if args.dry_run or args.resume_from_cache:
+        return
+
+    required = [
+        os.path.join(REPO_ROOT, "data", f"rotate_{EMBEDDING_DIM}d_entity_embeddings.npy"),
+        os.path.join(REPO_ROOT, "data", f"rotate_{EMBEDDING_DIM}d_entity_ids.json"),
+    ]
+    missing = [p for p in required if not os.path.isfile(p)]
+    if missing:
+        rels = "\n".join(f"         {os.path.relpath(p, REPO_ROOT)}" for p in missing)
+        print(
+            "[preflight] ABORT: required input files missing:\n"
+            f"{rels}\n"
+            "         These are the cached RotatE 128D embeddings the driver needs.\n"
+            "         They are NOT auto-downloaded. Two options:\n"
+            "           (a) rsync them from another machine that has them, or\n"
+            "           (b) regenerate via `./scripts/run_full_embedding_dgx.sh`\n"
+            "               (uses GPU PyKEEN; ~hour of training time).\n"
+            "         See docs/deployment/DGX_BOOTSTRAP_CI.md §3 for details.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    print(f"[preflight] OK — RotatE {EMBEDDING_DIM}D embeddings present in data/")
+
+
 def _git_commit() -> str:
     try:
         return subprocess.check_output(
@@ -580,6 +616,9 @@ def main() -> int:
         _gate_gpu_or_abort(args)
         if args._quantum_config_path:
             print(f"[gpu] quantum_config_path={args._quantum_config_path}")
+
+    # Fail-fast on missing RotatE embeddings before kicking off CV.
+    _preflight_data_check(args)
 
     if args.resume_from_cache:
         print(f"[resume] loading from {args.cache_dir}...")

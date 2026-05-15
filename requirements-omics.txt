@@ -1,0 +1,35 @@
+# Omics processing dependencies for single_cell_layer and perturbation_layer.
+# Install with: pip install -r requirements-omics.txt
+# For GPU acceleration (DGX): also run scripts/dgx/install_gpu_omics.sh
+
+# Single-cell data formats
+anndata>=0.10.0
+h5py>=3.9.0
+
+# Single-cell analysis (CPU path)
+scanpy>=1.9.8
+
+# Clustering and graph algorithms
+leidenalg>=0.10.2
+igraph>=0.11.0
+
+# Batch correction
+harmonypy>=0.0.9
+
+# Doublet detection
+scrublet>=0.2.3
+
+# Gene set enrichment
+gseapy>=1.1.0
+
+# Biological ID mapping and pathway databases
+biopython>=1.81
+
+# HTTP for external validators (validation_layer)
+requests>=2.31.0
+
+# Pydantic for evidence_schema
+pydantic>=2.0.0
+
+# Optional: GPU-accelerated omics (install separately on DGX)
+# rapids-singlecell  — see scripts/dgx/install_gpu_omics.sh

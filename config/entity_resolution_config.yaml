@@ -1,0 +1,17 @@
+entity_resolution:
+  # Path to Hetionet nodes TSV (relative to repo root)
+  nodes_tsv: data/hetionet-v1.0-nodes.tsv
+
+  # Fuzzy matching for SynonymResolver (slow on large entity sets)
+  fuzzy_matching: false
+  fuzzy_cutoff: 0.85
+
+  # Extra aliases beyond the built-in seed list.
+  # Format: "query string": "Hetionet::ID"
+  extra_aliases: {}
+
+  # Report output directory
+  report_dir: artifacts/entity_resolution
+
+  # Logging: log unresolved entities at this level
+  unresolved_log_level: DEBUG

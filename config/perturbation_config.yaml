@@ -1,0 +1,17 @@
+perturbation:
+  source: lincs              # "lincs" | "cmap"
+  compound_id_namespace: drugbank   # primary namespace for compound IDs
+  gene_id_namespace: symbol         # "symbol" | "entrez"
+
+signature:
+  top_n_genes: 250           # number of genes per signature (up + down combined)
+  include_dose: true
+  include_timepoint: true
+
+reversal:
+  method: rank_correlation   # "rank_correlation" | "connectivity_score"
+  cell_type_weighting: true
+  pathway_weighting: true
+
+output:
+  artifacts_dir: artifacts/perturbations

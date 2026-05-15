@@ -1,0 +1,54 @@
+single_cell:
+  backend: auto         # "auto" | "cpu" | "gpu"
+  prefer_gpu: true
+  fallback_to_cpu: true
+  log_backend: true
+
+input:
+  format: h5ad          # "h5ad" | "10x"
+  path: data/single_cell/demo.h5ad
+  condition_key: condition       # obs column: disease | control
+  batch_key: sample_id           # obs column for batch correction
+  cell_type_key: cell_type       # obs column for cell-type labels
+  tissue_key: tissue             # obs column (optional)
+
+qc:
+  min_genes_per_cell: 200
+  max_genes_per_cell: 6000
+  max_mito_pct: 20.0
+  min_cells_per_gene: 3
+  mito_prefix: "MT-"            # prefix for mitochondrial genes
+
+normalization:
+  target_sum: 10000              # counts per cell after normalization
+  log1p: true
+
+feature_selection:
+  n_top_genes: 3000              # highly variable genes
+
+dimensionality:
+  n_pcs: 50
+  neighbors: 15
+  umap_min_dist: 0.3
+  umap_n_components: 2
+
+clustering:
+  method: leiden
+  resolution: 1.0
+
+batch_correction:
+  enabled: true
+  method: harmony               # "harmony" | "none"
+  batch_key: sample_id
+  condition_key: condition
+  preserve_biology_keys:
+    - condition
+    - tissue
+    - cell_type
+
+doublet_detection:
+  enabled: true
+  expected_doublet_rate: 0.06
+
+output:
+  artifacts_dir: artifacts/single_cell

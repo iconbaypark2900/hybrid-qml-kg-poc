@@ -1,0 +1,26 @@
+evidence_fusion:
+  method: stacking
+
+  # Feature names that the fusion model may receive.
+  # Omics features are zero-filled in --mode kg-only.
+  include_features:
+    - kg_rotate_score
+    - kg_complex_score
+    - graph_topology_score
+    - qsvc_score
+    - classical_ensemble_score
+    - signature_reversal_score
+    - cell_type_reversal_score
+    - pathway_reversal_score
+    - moa_alignment_score
+    - clinical_evidence_score
+
+confidence_tiers:
+  tier_1_threshold: 0.90
+  tier_2_threshold: 0.80
+  tier_3_threshold: 0.70
+  tier_4_threshold: 0.60
+
+output:
+  artifacts_dir: artifacts/predictions
+  top_n: 50                  # candidates to include in report

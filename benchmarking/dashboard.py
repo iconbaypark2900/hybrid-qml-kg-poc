@@ -268,6 +268,10 @@ page = st.sidebar.radio(
         "Comparison (classical vs quantum)",
         "Knowledge graph (inventory)",
         "Findings (ranked hypotheses)",
+        "Disease explorer",
+        "Drug candidate rankings",
+        "Evidence breakdown",
+        "Clinical validation",
         "Run benchmarks",
         "Hardware readiness (backend status)",
     ]
@@ -1486,6 +1490,329 @@ elif page == "Hardware readiness (backend status)":
                         st.warning(f"`{backend_hint}` not found in your accessible backends list.")
         except Exception as e:
             st.error(f"Backend status check failed: {e}")
+
+# ==============================
+# PAGE: DISEASE EXPLORER
+# ==============================
+elif page == "Disease explorer":
+    from benchmarking.components.data_loader import (
+        load_top_candidates,
+        load_disease_signature,
+        load_cell_type_signatures,
+        list_diseases,
+        filter_by_disease,
+    )
+    from benchmarking.components.signature_view import render_signature_view
+
+    st.header("Disease explorer")
+    st.caption(
+        "Pick a disease to see its single-cell signature (up/down genes, ranked, "
+        "pathways) alongside the top-ranked drug candidates from the latest pipeline run."
+    )
+
+    candidates_df = load_top_candidates()
+    diseases = list_diseases(candidates_df)
+
+    if not diseases:
+        st.info(
+            "No ranked candidates found. Run "
+            "`python scripts/run_full_repurposing_pipeline.py --mode kg+omics` "
+            "to populate `artifacts/predictions/top_candidates.csv`."
+        )
+    else:
+        selected = st.selectbox("Disease", diseases, index=0)
+        st.markdown(f"### {selected}")
+
+        col_left, col_right = st.columns([3, 2])
+
+        with col_left:
+            st.subheader("Top candidates")
+            sub = filter_by_disease(candidates_df, selected).sort_values(
+                "final_score", ascending=False
+            ).head(15)
+            if sub.empty:
+                st.info("No candidates ranked for this disease.")
+            else:
+                display_cols = [c for c in [
+                    "rank", "compound", "final_score", "confidence_tier",
+                    "kg_rotate_score", "qsvc_score", "signature_reversal_score",
+                    "clinical_evidence_score",
+                ] if c in sub.columns]
+                st.dataframe(sub[display_cols], use_container_width=True, hide_index=True)
+
+        with col_right:
+            st.subheader("Tier distribution (this disease)")
+            if not sub.empty and "confidence_tier" in sub.columns:
+                tier_counts = sub["confidence_tier"].value_counts().sort_index()
+                tier_df = pd.DataFrame({
+                    "Tier": [f"Tier {t}" for t in tier_counts.index],
+                    "Count": tier_counts.values,
+                })
+                st.bar_chart(tier_df.set_index("Tier"))
+
+        st.markdown("---")
+        st.subheader("Single-cell disease signature")
+        signature = load_disease_signature()
+        if not signature:
+            st.info(
+                "No disease signature found at `artifacts/signatures/disease_signature.json`. "
+                "Run `bash scripts/dgx/run_single_cell_pipeline.sh` to generate one."
+            )
+        else:
+            render_signature_view(signature)
+
+            cell_type_sigs = load_cell_type_signatures()
+            if cell_type_sigs:
+                st.markdown("---")
+                st.subheader("Per-cell-type signatures")
+                ct_pick = st.selectbox("Cell type", list(cell_type_sigs.keys()))
+                render_signature_view(cell_type_sigs[ct_pick])
+
+
+# ==============================
+# PAGE: DRUG CANDIDATE RANKINGS
+# ==============================
+elif page == "Drug candidate rankings":
+    from benchmarking.components.data_loader import (
+        load_top_candidates,
+        load_run_summary,
+    )
+
+    st.header("Drug candidate rankings")
+    st.caption(
+        "Full ranked list of compound–disease pairs from the latest "
+        "`run_full_repurposing_pipeline.py` run."
+    )
+
+    summary = load_run_summary()
+    candidates_df = load_top_candidates()
+
+    if candidates_df.empty:
+        st.info(
+            "No candidates available. Run "
+            "`python scripts/run_full_repurposing_pipeline.py --mode kg+omics` first."
+        )
+    else:
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Mode", summary.get("mode", "—"))
+        col2.metric("Candidates", summary.get("n_candidates", len(candidates_df)))
+        col3.metric("Top compound", summary.get("top_compound") or "—")
+        top_score = summary.get("top_score")
+        col4.metric("Top score", f"{top_score:.4f}" if isinstance(top_score, (int, float)) else "—")
+
+        st.markdown("---")
+
+        ctrl1, ctrl2, ctrl3 = st.columns([2, 2, 1])
+        with ctrl1:
+            tier_filter = st.multiselect(
+                "Confidence tier",
+                options=[1, 2, 3, 4],
+                default=[1, 2, 3, 4],
+                format_func=lambda t: f"Tier {t}",
+            )
+        with ctrl2:
+            min_score = st.slider("Minimum final score", 0.0, 1.0, 0.0, 0.05)
+        with ctrl3:
+            top_k = st.number_input("Show top", min_value=5, max_value=200, value=25, step=5)
+
+        view = candidates_df.copy()
+        if "confidence_tier" in view.columns and tier_filter:
+            view = view[view["confidence_tier"].isin(tier_filter)]
+        if "final_score" in view.columns:
+            view = view[view["final_score"] >= min_score]
+        view = view.sort_values("final_score", ascending=False).head(int(top_k))
+
+        display_cols = [c for c in [
+            "rank", "compound", "disease", "final_score", "confidence_tier",
+            "kg_rotate_score", "qsvc_score", "classical_ensemble_score",
+            "signature_reversal_score", "cell_type_reversal_score",
+            "pathway_reversal_score", "clinical_evidence_score",
+        ] if c in view.columns]
+        st.dataframe(view[display_cols], use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.subheader("Tier distribution")
+        if "confidence_tier" in view.columns:
+            tier_counts = view["confidence_tier"].value_counts().sort_index()
+            tier_df = pd.DataFrame({
+                "Tier": [f"Tier {t}" for t in tier_counts.index],
+                "Count": tier_counts.values,
+            })
+            st.bar_chart(tier_df.set_index("Tier"))
+
+        st.download_button(
+            "Download ranked CSV",
+            data=view.to_csv(index=False).encode("utf-8"),
+            file_name="drug_candidate_rankings.csv",
+            mime="text/csv",
+        )
+
+
+# ==============================
+# PAGE: EVIDENCE BREAKDOWN
+# ==============================
+elif page == "Evidence breakdown":
+    from benchmarking.components.data_loader import (
+        load_top_candidates,
+        load_top_candidates_json,
+        candidate_to_dict,
+    )
+    from benchmarking.components.evidence_card import render_evidence_card
+    from benchmarking.components.reversal_view import render_reversal_view
+
+    st.header("Evidence breakdown")
+    st.caption(
+        "Drill into a single candidate: KG score, QSVC score, reversal evidence, "
+        "clinical signals, and the auto-generated explanation."
+    )
+
+    candidates_df = load_top_candidates()
+    candidates_json = load_top_candidates_json()
+
+    if candidates_df.empty:
+        st.info(
+            "No candidates available. Run "
+            "`python scripts/run_full_repurposing_pipeline.py --mode kg+omics` first."
+        )
+    else:
+        labels = candidates_df.apply(
+            lambda r: f"{r.get('compound', '?')} → {r.get('disease', '?')} "
+                      f"(score={r.get('final_score', 0.0):.3f}, tier={int(r.get('confidence_tier', 4))})",
+            axis=1,
+        ).tolist()
+        idx = st.selectbox("Candidate", range(len(labels)),
+                           format_func=lambda i: labels[i])
+
+        row = candidates_df.iloc[idx]
+        cdict = candidate_to_dict(row)
+
+        if candidates_json and idx < len(candidates_json):
+            # JSON has the explanation field; CSV does not
+            cdict["explanation"] = candidates_json[idx].get("explanation", "")
+
+        render_evidence_card(cdict)
+
+        st.markdown("---")
+        st.subheader("Reversal breakdown")
+        # Use the per-candidate scores as cell-type / pathway proxies until
+        # the full cell-type breakdown is wired into the artifact.
+        render_reversal_view(
+            compound=cdict["compound"],
+            overall_score=cdict["signature_reversal_score"],
+            cell_type_scores={"average": cdict["cell_type_reversal_score"]},
+            pathway_scores={"average": cdict["pathway_reversal_score"]},
+        )
+
+        st.markdown("---")
+        st.subheader("Raw feature vector")
+        raw = pd.DataFrame({
+            "feature": [
+                "kg_rotate_score", "kg_complex_score", "graph_topology_score",
+                "qsvc_score", "classical_ensemble_score",
+                "signature_reversal_score", "cell_type_reversal_score",
+                "pathway_reversal_score", "moa_alignment_score",
+                "clinical_evidence_score",
+            ],
+            "value": [
+                cdict.get("kg_rotate_score", 0.0),
+                cdict.get("kg_complex_score", 0.0),
+                float(row.get("graph_topology_score", 0.0)),
+                cdict.get("qsvc_score", 0.0),
+                cdict.get("classical_ensemble_score", 0.0),
+                cdict.get("signature_reversal_score", 0.0),
+                cdict.get("cell_type_reversal_score", 0.0),
+                cdict.get("pathway_reversal_score", 0.0),
+                float(row.get("moa_alignment_score", 0.0)),
+                cdict.get("clinical_evidence_score", 0.0),
+            ],
+        })
+        st.dataframe(raw, use_container_width=True, hide_index=True)
+
+
+# ==============================
+# PAGE: CLINICAL VALIDATION
+# ==============================
+elif page == "Clinical validation":
+    from benchmarking.components.data_loader import (
+        load_top_candidates,
+        load_top_candidates_json,
+    )
+    from benchmarking.components.clinical_validation_view import render_clinical_validation_view
+
+    st.header("Clinical validation")
+    st.caption(
+        "Top candidates annotated with known indications, clinical trial status, "
+        "and literature support (when the pipeline was run with `--validate`)."
+    )
+
+    candidates_df = load_top_candidates()
+    candidates_json = load_top_candidates_json()
+
+    if candidates_df.empty:
+        st.info(
+            "No candidates available. Run "
+            "`python scripts/run_full_repurposing_pipeline.py --mode kg+omics --validate` first."
+        )
+    else:
+        top_n = st.slider("Show top-N", 5, min(len(candidates_df), 50), 10)
+
+        # Build dicts in the shape clinical_validation_view expects
+        rows: list = []
+        for i in range(min(top_n, len(candidates_df))):
+            r = candidates_df.iloc[i]
+            clinical = float(r.get("clinical_evidence_score", 0.0))
+            if clinical >= 1.0:
+                status = "known"
+            elif clinical >= 0.5:
+                status = "literature_supported"
+            else:
+                status = "exploratory"
+            rows.append({
+                "compound": r.get("compound", ""),
+                "disease": r.get("disease", ""),
+                "final_score": float(r.get("final_score", 0.0)),
+                "known_indication": clinical >= 1.0,
+                "trial_phase": (
+                    candidates_json[i].get("clinical_trial_phases", [None])[0]
+                    if i < len(candidates_json) and candidates_json[i].get("clinical_trial_phases")
+                    else None
+                ),
+                "literature_support_count": (
+                    candidates_json[i].get("literature_support_count", 0)
+                    if i < len(candidates_json)
+                    else 0
+                ),
+                "validation_status": status,
+            })
+
+        render_clinical_validation_view(rows)
+
+        st.markdown("---")
+        st.subheader("Status distribution")
+        status_counts = pd.Series([r["validation_status"] for r in rows]).value_counts()
+        status_df = pd.DataFrame({
+            "Status": status_counts.index, "Count": status_counts.values
+        })
+        st.bar_chart(status_df.set_index("Status"))
+
+        with st.expander("How to populate this page"):
+            st.markdown(
+                """
+                Run the full pipeline with the `--validate` flag to enrich the
+                top-N candidates with ClinicalTrials.gov and DrugBank evidence:
+
+                ```bash
+                python scripts/run_full_repurposing_pipeline.py \\
+                    --mode kg+omics --validate --top-n 20
+                ```
+
+                This populates `clinical_evidence_score` based on:
+                - **1.0** → known indication (seeded DrugBank table or known_indications validator)
+                - **0.5** → active clinical trial found via ClinicalTrials.gov v2 API
+                - **0.0** → no clinical signal
+                """
+            )
+
 
 # Footer
 st.markdown("---")

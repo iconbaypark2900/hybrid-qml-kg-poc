@@ -31,7 +31,10 @@ def render_evidence_card(candidate: Dict) -> None:
 
     with st.container():
         st.markdown(f"### {_TIER_COLORS.get(tier, '⚪')} {compound}")
-        st.markdown(f"**Disease:** {disease}  |  **Final score:** `{score:.4f}`  |  **{_TIER_LABELS.get(tier, 'Tier 4')}`")
+        st.markdown(
+            f"**Disease:** {disease}  |  **Final score:** `{score:.4f}`  |  "
+            f"**{_TIER_LABELS.get(tier, 'Tier 4')}**"
+        )
 
         cols = st.columns(5)
         score_fields = [

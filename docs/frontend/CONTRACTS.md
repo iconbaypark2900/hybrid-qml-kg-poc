@@ -72,7 +72,7 @@ curl -s http://localhost:8000/status | jq .
 
 | Field | Type | Required | Notes |
 |-------|------|----------|--------|
-| `hypothesis_id` | string | yes | e.g. `H-001`, `H-002`, `H-003` |
+| `hypothesis_id` | string | yes | Persisted hypothesis id from `GET /hypotheses` |
 | `disease_id` | string | yes | Name or Hetionet ID |
 | `top_k` | integer | no | Default `50` |
 
@@ -94,6 +94,42 @@ curl -s http://localhost:8000/status | jq .
 | `compound_name` | string |
 | `score` | float |
 | `mechanism_summary` | string |
+
+---
+
+## `GET /hypotheses`
+
+Returns all persisted hypotheses (`HypothesisResponse[]`) ordered by most recently updated.
+
+## `POST /hypotheses`
+
+Creates a persisted hypothesis.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|--------|
+| `name` | string | yes | Human-readable title |
+| `description` | string | yes | Research intent / mechanism text |
+| `disease_focus` | string | no | Optional default disease for ranking |
+| `mechanism_type` | string | no | Optional category |
+| `notes` | string | no | Free-form context |
+| `status` | string | no | `draft`, `active`, `tested` |
+
+## `GET /hypotheses/{id}`
+
+Returns one persisted hypothesis.
+
+## `PATCH /hypotheses/{id}`
+
+Partial update for editable fields (`name`, `description`, `disease_focus`, `mechanism_type`, `notes`, `status`, `last_tested_run_id`).
+
+## `GET /experiments/history`
+
+Returns linked experiment records (`ExperimentHistoryResponse[]`).  
+Optional query param: `hypothesis_id`.
+
+## `GET /hypotheses/{id}/experiments`
+
+Returns experiment history for one hypothesis.
 
 ---
 
@@ -131,6 +167,9 @@ curl -s http://localhost:8000/status | jq .
 | `tune_classical` | boolean | `false` | |
 | `results_dir` | string | `"results"` | |
 | `quantum_config_path` | string | `"config/quantum_config.yaml"` | |
+| `hypothesis_id` | string \| null | `null` | Optional link to persisted hypothesis |
+| `experiment_note` | string \| null | `null` | Optional run annotation |
+| `experiment_tags` | string[] | `[]` | Optional tag list |
 
 **Response** (`JobResponse`) — same schema as `GET /jobs/{id}`.
 
@@ -145,6 +184,9 @@ curl -s http://localhost:8000/status | jq .
 | `id` | string | 12-char hex |
 | `status` | string | `queued`, `running`, `success`, `failed` |
 | `created_at` | float | Unix epoch |
+| `hypothesis_id` | string \| null | Linked hypothesis, when provided |
+| `experiment_metadata` | object | Includes `note` and `tags` |
+| `flags` | object | Effective pipeline flags for this run |
 | `started_at` | float \| null | |
 | `finished_at` | float \| null | |
 | `exit_code` | integer \| null | |
@@ -233,14 +275,6 @@ Binary download (path traversal protected, allowlisted extensions: `.json`, `.cs
 | `shots` | integer \| null | |
 | `quantum_model_loaded` | boolean | |
 | `config` | object \| null | Raw YAML as JSON |
-
----
-
-## Planned (not in `api.py` yet)
-
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /runs/{id}` | Specific run metadata |
 
 ## See also
 

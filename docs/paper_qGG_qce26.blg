@@ -1,0 +1,57 @@
+This is BibTeX, Version 0.99d (TeX Live 2023/Debian)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: paper_qGG_qce26.aux
+The style file: IEEEtran.bst
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated wiz_functions (elt_size=4) to 6000 items from 3000.
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Database file #1: references_qce26.bib
+-- IEEEtran.bst version 1.12 (2007/01/11) by Michael Shell.
+-- http://www.michaelshell.org/tex/ieeetran/bibtex/
+-- See the "IEEEtran_bst_HOWTO.pdf" manual for usage information.
+** IEEEtran BST control entry "IEEEtran:BSTcontrol" detected.
+
+Done.
+You've used 20 entries,
+            4024 wiz_defined-function locations,
+            912 strings with 10284 characters,
+and the built_in function-call counts, 12268 in all, are:
+= -- 1026
+> -- 243
+< -- 84
++ -- 131
+- -- 43
+* -- 566
+:= -- 1946
+add.period$ -- 39
+call.type$ -- 20
+change.case$ -- 21
+chr.to.int$ -- 186
+cite$ -- 20
+duplicate$ -- 930
+empty$ -- 1025
+format.name$ -- 58
+if$ -- 2791
+int.to.chr$ -- 0
+int.to.str$ -- 19
+missing$ -- 155
+newline$ -- 88
+num.names$ -- 21
+pop$ -- 368
+preamble$ -- 1
+purify$ -- 0
+quote$ -- 4
+skip$ -- 979
+stack$ -- 0
+substring$ -- 480
+swap$ -- 695
+text.length$ -- 22
+text.prefix$ -- 0
+top$ -- 6
+type$ -- 20
+warning$ -- 0
+while$ -- 55
+width$ -- 21
+write$ -- 205

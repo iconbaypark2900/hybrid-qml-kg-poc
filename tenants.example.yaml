@@ -1,0 +1,22 @@
+# tenants.example.yaml — committed, used in local dev when secrets/tenants.yaml is absent.
+#
+# Real tenant records live in secrets/tenants.yaml (gitignored). To add a tenant:
+#   1. python -m service.tenants generate-key
+#   2. Copy the printed plaintext to the tenant out-of-band (1Password, etc.).
+#   3. Paste the sha256 into a new entry below or in secrets/tenants.yaml.
+#
+# api_key_sha256 below corresponds to plaintext "dev-local-key-do-not-use-in-prod".
+# Anyone with this file can authenticate as `dev` — never deploy with this active.
+
+tenants:
+  - tenant_id: dev
+    name: Local development
+    # sha256 of "dev-local-key-do-not-use-in-prod"
+    api_key_sha256: 8c84a8d7f8a8e3c2c4d52d8efaf0e26b80dde81a08f0a8b90cd70fc8e0a8a571
+    created_at: 1735689600
+    quota:
+      requests_per_minute: 60
+      requests_per_day: 5000
+      can_use_quantum_strict: true
+      can_use_ibm_hardware: false
+      max_batch_size: 50

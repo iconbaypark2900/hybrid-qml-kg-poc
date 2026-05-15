@@ -93,6 +93,7 @@ fi
 echo "API OK. Starting Next.js on port ${FRONTEND_PORT} (NEXT_PUBLIC_API_URL=${API_URL})"
 cd "$PROJECT_ROOT/frontend"
 export NEXT_PUBLIC_API_URL="${API_URL}"
+export API_ORIGIN="${API_URL}"
 # Use `pnpm exec` so we pass `-p` to `next` directly. `pnpm dev -- -p …` becomes
 # `next dev -- -p …` and Next treats `-p` as the project directory.
 pnpm exec next dev -p "${FRONTEND_PORT}"

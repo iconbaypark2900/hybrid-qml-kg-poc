@@ -1,20 +1,44 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  if (pathname.startsWith("/v2")) {
+    return <>{children}</>;
+  }
+
   return (
-    <div className="flex min-h-screen flex-col bg-background md:flex-row">
-      <aside className="shrink-0 border-outline/10 bg-surface-container-low md:w-60 md:border-r md:border-b-0 border-b p-4">
-        <div className="mb-8">
-          <p className="font-headline text-lg font-semibold tracking-tight text-primary">
-            Hybrid QML-KG
-          </p>
-          <p className="text-xs text-on-surface-variant">
-            Biomedical link prediction
-          </p>
-        </div>
+    <div className="journey-shell">
+      <aside className="journey-sidebar">
         <Sidebar />
       </aside>
-      <main className="min-h-0 flex-1 overflow-auto p-6 md:p-10">{children}</main>
+      <main className="journey-main">
+        <div className="journey-topbar mb-4">
+          <p className="text-xs text-on-surface-variant">
+            Guided discovery playground: choose a starting point, change the setup,
+            validate the evidence, then inspect the visuals.
+          </p>
+          <div className="hidden gap-2 lg:flex">
+            <Link className="journey-button" href="/">
+              Start
+            </Link>
+            <Link className="journey-button" href="/experiments">
+              Experiment
+            </Link>
+            <Link className="journey-button" href="/validation">
+              Validation
+            </Link>
+            <Link className="journey-button primary" href="/visualization">
+              Visual
+            </Link>
+          </div>
+        </div>
+        {children}
+      </main>
     </div>
   );
 }

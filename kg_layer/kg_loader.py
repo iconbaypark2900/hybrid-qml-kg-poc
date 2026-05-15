@@ -293,15 +293,18 @@ def get_negative_samples(
 
     neg_sources = []
     neg_targets = []
+    seen: set = set()
     attempts = 0
     max_attempts = num_negatives * 10
 
     while len(neg_sources) < num_negatives and attempts < max_attempts:
         s = np.random.choice(unique_sources)
         t = np.random.choice(unique_targets)
-        if (s, t) not in existing_pairs and (s, t) not in zip(neg_sources, neg_targets):
+        pair = (s, t)
+        if pair not in existing_pairs and pair not in seen:
             neg_sources.append(s)
             neg_targets.append(t)
+            seen.add(pair)
         attempts += 1
 
     logger.info(f"Generated {len(neg_sources)} negative samples.")

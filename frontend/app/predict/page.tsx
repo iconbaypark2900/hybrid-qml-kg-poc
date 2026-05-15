@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { PredictForm } from "@/components/predict-form";
+import { ResearchNextActions } from "@/components/research-next-actions";
 
 export default function PredictPage() {
   return (
@@ -81,6 +83,20 @@ export default function PredictPage() {
           </div>
         </aside>
       </div>
+
+      <div className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest/60 p-4 text-xs text-on-surface-variant">
+        Use this for single pair validation. For cohort-level discovery and ranking, open{" "}
+        <Link href="/hypotheses/new" className="text-primary underline-offset-2 hover:underline">
+          Ranked candidates
+        </Link>{" "}
+        or{" "}
+        <Link href="/visualization?tab=predictions" className="text-primary underline-offset-2 hover:underline">
+          Charts &amp; exploration
+        </Link>
+        .
+      </div>
+
+      <ResearchNextActions context="predict" />
     </div>
   );
 }

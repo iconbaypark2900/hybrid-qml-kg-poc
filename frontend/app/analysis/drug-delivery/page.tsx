@@ -1,8 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { AnalysisSummaryResponse } from "@/lib/api";
-import { fetchAnalysisSummary, getApiBaseUrl } from "@/lib/api";
+import { fetchAnalysisSummary } from "@/lib/api";
+import { ApiRecoveryCard } from "@/components/api-recovery-card";
+import { LoadingBlock } from "@/components/spinner";
+import { NoPipelineResultsCta } from "@/components/no-pipeline-results-cta";
+import { ResearchNextActions } from "@/components/research-next-actions";
 
 export default function DrugDeliveryAnalysisPage() {
   const [data, setData] = useState<AnalysisSummaryResponse | null>(null);
@@ -36,33 +41,24 @@ export default function DrugDeliveryAnalysisPage() {
     <div className="space-y-6">
       <header>
         <h1 className="font-headline text-2xl font-semibold tracking-tight text-on-surface">
-          Analysis: drug delivery
+          Drug delivery analysis
         </h1>
         <p className="mt-1 text-sm text-on-surface-variant">
-          Aggregated model performance and drug-disease coverage from the latest
-          pipeline run.
+          Aggregated model performance and drug-disease coverage from the latest pipeline run.
+          Based on the same summary as{" "}
+          <Link href="/analysis/next-steps" className="text-primary underline-offset-2 hover:underline">
+            Recommendations
+          </Link>
+          {" "}— that page derives actionable next steps from the same data.
         </p>
       </header>
 
       {loading ? (
-        <p className="text-sm text-on-surface-variant" role="status">
-          Sequencing&hellip;
-        </p>
+        <LoadingBlock text="Loading analysis summary…" />
       ) : error ? (
-        <div className="rounded-lg border border-error/40 bg-error-container/20 p-4">
-          <p className="text-sm font-medium text-error">
-            Could not load analysis
-          </p>
-          <p className="mt-1 text-xs text-on-surface-variant">{error}</p>
-          <p className="mt-3 text-xs text-on-surface-variant">
-            Base URL:{" "}
-            <code className="text-on-surface">{getApiBaseUrl()}</code>
-          </p>
-        </div>
+        <ApiRecoveryCard title="Could not load analysis" error={error} />
       ) : data?.status === "no_results" ? (
-        <div className="rounded-lg border border-outline-variant/15 bg-surface-container-high/60 p-5 text-sm text-on-surface-variant">
-          No pipeline results yet. Run the pipeline first.
-        </div>
+        <NoPipelineResultsCta />
       ) : data ? (
         <div className="space-y-6">
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -126,6 +122,8 @@ export default function DrugDeliveryAnalysisPage() {
               </div>
             </div>
           ) : null}
+
+          <ResearchNextActions context="analysis" />
         </div>
       ) : null}
     </div>

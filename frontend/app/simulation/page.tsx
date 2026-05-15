@@ -4,6 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import type { JobResponse } from "@/lib/api";
 import { fetchJobs } from "@/lib/api";
+import { ApiRecoveryCard } from "@/components/api-recovery-card";
+import { ResearchNextActions } from "@/components/research-next-actions";
+import { LoadingBlock } from "@/components/spinner";
 
 export default function SimulationPage() {
   const [jobs, setJobs] = useState<JobResponse[]>([]);
@@ -33,10 +36,10 @@ export default function SimulationPage() {
       <header className="flex items-end justify-between gap-4">
         <div>
           <h1 className="font-headline text-2xl font-semibold tracking-tight text-on-surface">
-            Simulation control
+            Pipeline jobs
           </h1>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Pipeline jobs and their status.
+            Queue and monitor experiment runs; open results when jobs complete.
           </p>
         </div>
         <Link
@@ -48,25 +51,38 @@ export default function SimulationPage() {
       </header>
 
       {loading ? (
-        <p className="text-sm text-on-surface-variant" role="status">
-          Sequencing&hellip;
-        </p>
+        <LoadingBlock text="Loading jobs…" />
       ) : error ? (
-        <p className="text-sm text-error">{error}</p>
+        <ApiRecoveryCard title="Could not load jobs" error={error} />
       ) : jobs.length === 0 ? (
         <div className="rounded-lg border border-outline-variant/15 bg-surface-container-high/60 p-5 text-sm text-on-surface-variant">
-          No jobs yet. Start one from the{" "}
+          No jobs yet. Start one from{" "}
           <Link href="/simulation/parameters" className="text-primary underline">
-            parameters
-          </Link>{" "}
-          page.
+            New run
+          </Link>
+          , then return here to track progress and open results.
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="space-y-4">
+          {jobs.some((j) => j.status === "success") ? (
+            <div className="rounded-lg border border-tertiary/30 bg-tertiary/10 p-3 text-xs text-on-surface">
+              At least one run completed successfully. Open{" "}
+              <Link href="/experiments" className="text-primary underline">
+                Latest run &amp; models
+              </Link>{" "}
+              or{" "}
+              <Link href="/visualization?tab=comparison" className="text-primary underline">
+                Charts &amp; exploration
+              </Link>
+              .
+            </div>
+          ) : null}
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-surface-container-high text-left text-xs uppercase tracking-wide text-on-surface-variant">
                 <th className="px-3 py-2">ID</th>
+                <th className="px-3 py-2">Hypothesis</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">Created</th>
                 <th className="px-3 py-2">Duration</th>
@@ -88,6 +104,15 @@ export default function SimulationPage() {
                     </Link>
                   </td>
                   <td className="px-3 py-2">
+                    {j.hypothesis_id ? (
+                      <Link href="/hypotheses/new" className="text-primary underline">
+                        {j.hypothesis_id}
+                      </Link>
+                    ) : (
+                      <span className="text-on-surface-variant">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
                     <StatusBadge status={j.status} />
                   </td>
                   <td className="px-3 py-2 text-on-surface-variant">
@@ -104,7 +129,10 @@ export default function SimulationPage() {
             </tbody>
           </table>
         </div>
+        </div>
       )}
+
+      <ResearchNextActions context="simulation" />
     </div>
   );
 }

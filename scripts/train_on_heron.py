@@ -57,6 +57,37 @@ def _resolve_token() -> str:
     return ""
 
 
+def _backend_name(backend) -> str:
+    return getattr(backend, "name", None) or getattr(backend, "backend_name", None) or str(backend)
+
+
+def _backend_pending_jobs(backend) -> int:
+    try:
+        status = backend.status()
+        if hasattr(status, "operational") and status.operational is False:
+            return 10**9
+        return int(getattr(status, "pending_jobs", 10**6))
+    except Exception:
+        return 10**6
+
+
+def _select_backend_name(backends, requested: str) -> str:
+    """Resolve an explicit backend or choose the lowest-queue operational backend."""
+    names = [_backend_name(b) for b in backends]
+    if requested != "auto":
+        if requested not in names:
+            raise ValueError(
+                f"Backend '{requested}' not found. Available: {', '.join(names)}. "
+                "Use --backend auto to select the lowest-queue visible backend."
+            )
+        return requested
+
+    if not backends:
+        raise ValueError("No IBM Quantum backends are visible for this account.")
+    ranked = sorted(backends, key=lambda b: (_backend_pending_jobs(b), _backend_name(b)))
+    return _backend_name(ranked[0])
+
+
 def _preflight(args) -> None:
     """Validate token, backend reachability, and print cost estimate.
 
@@ -81,14 +112,18 @@ def _preflight(args) -> None:
 
     logger.info("Connecting to IBM Quantum...")
     service = QiskitRuntimeService(channel="ibm_quantum_platform", token=token)
-    available = [b.name for b in service.backends()]
+    backends = service.backends()
+    available = [_backend_name(b) for b in backends]
     logger.info("Available backends (%d): %s", len(available), ", ".join(available))
 
-    if args.backend not in available:
-        logger.error(
-            "Backend '%s' not found. Available: %s", args.backend, ", ".join(available)
-        )
+    try:
+        selected_backend = _select_backend_name(backends, args.backend)
+    except ValueError as exc:
+        logger.error("%s", exc)
         sys.exit(1)
+    if args.backend == "auto":
+        logger.info("Auto-selected backend '%s'.", selected_backend)
+    args.backend = selected_backend
 
     logger.info("Backend '%s' reachable.", args.backend)
 
@@ -182,7 +217,7 @@ def main():
     circ.add_argument("--shots", type=int, default=2000)
 
     hw = parser.add_argument_group("Backend")
-    hw.add_argument("--backend", default="ibm_torino")
+    hw.add_argument("--backend", default="auto")
 
     flags = parser.add_argument_group("Flags")
     flags.add_argument("--dry_run", action="store_true")

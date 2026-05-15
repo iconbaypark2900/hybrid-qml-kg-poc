@@ -338,22 +338,25 @@ def generate_comparison_report(classical_metrics: Dict[str, float],
     report += f"Parameter Ratio:      {param_ratio:.2f}x\n"
 
     if param_ratio < 1.0:
-        report += "✅ Quantum model is more parameter-efficient\n"
+        report += f"Quantum uses {param_ratio:.2f}x classical parameters (fewer)\n"
+    elif param_ratio > 1.0:
+        report += f"Quantum uses {param_ratio:.2f}x classical parameters (more)\n"
     else:
-        report += "⚠️  Quantum model uses more parameters\n"
+        report += "Quantum and classical use the same parameter count\n"
 
-    # Conclusion
+    # Conclusion — describe what the numbers say, not what we hope they say.
     pr_auc_classical = classical_metrics.get('pr_auc', 0.0)
     pr_auc_quantum = quantum_metrics.get('pr_auc', 0.0)
+    pr_auc_diff = pr_auc_quantum - pr_auc_classical
 
     report += f"\nCONCLUSION:\n"
     report += "-"*30 + "\n"
-    if pr_auc_quantum >= pr_auc_classical:
-        report += "✅ Quantum model matches or exceeds classical performance\n"
+    if pr_auc_diff > 0:
+        report += f"Quantum PR-AUC > classical by {pr_auc_diff:+.4f}\n"
+    elif pr_auc_diff < 0:
+        report += f"Quantum PR-AUC < classical by {pr_auc_diff:+.4f}\n"
     else:
-        report += "⚠️  Quantum model performance is lower, but may scale better\n"
-
-    report += "📈 Parameter efficiency suggests better scalability for large KGs\n"
+        report += "Quantum and classical PR-AUC tie\n"
 
     return report
 

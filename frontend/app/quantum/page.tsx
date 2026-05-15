@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import type { QuantumConfigResponse } from "@/lib/api";
-import {
-  fetchQuantumConfig,
-  getApiBaseUrl,
-  verifyQuantumRuntime,
-} from "@/lib/api";
+import { fetchQuantumConfig, verifyQuantumRuntime } from "@/lib/api";
+import { ApiRecoveryCard } from "@/components/api-recovery-card";
+import { ResearchNextActions } from "@/components/research-next-actions";
+import { LoadingBlock, Spinner } from "@/components/spinner";
+import { QuantumCircuitDiagram } from "@/components/quantum-circuit";
 
 export default function QuantumPage() {
   const [data, setData] = useState<QuantumConfigResponse | null>(null);
@@ -88,12 +88,53 @@ export default function QuantumPage() {
     <div className="space-y-6">
       <header>
         <h1 className="font-headline text-2xl font-semibold tracking-tight text-on-surface">
-          Quantum logic
+          Quantum config
         </h1>
         <p className="mt-1 text-sm text-on-surface-variant">
-          Quantum execution configuration and model status.
+          Quantum execution configuration, IBM Quantum runtime verification, and model status.
+          To see the live circuit diagram alongside predictions and embeddings, use the{" "}
+          <a href="/visualization?tab=circuit" className="text-primary underline-offset-2 hover:underline">
+            Quantum Circuit tab in Charts &amp; exploration
+          </a>.
         </p>
       </header>
+
+      <section className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest/70 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
+            Simulator path
+          </p>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Fast iteration loop for debugging feature maps, qubit dimensions, and ranking changes.
+          </p>
+          <a
+            href="/simulation/parameters?preset=quantum-heavy"
+            className="mt-3 inline-flex items-center gap-1 rounded-lg border border-outline/20 bg-surface-container-lowest px-3 py-1.5 text-xs font-medium text-on-surface hover:bg-surface-container"
+          >
+            <span className="material-symbols-outlined text-sm" aria-hidden>
+              play_circle
+            </span>
+            Start quantum-heavy simulator run
+          </a>
+        </div>
+        <div className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest/70 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
+            Hardware path
+          </p>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Validate IBM Runtime access below, then launch hardware-ready runs and inspect circuit behavior in charts.
+          </p>
+          <a
+            href="/simulation/parameters?preset=hardware-ready"
+            className="mt-3 inline-flex items-center gap-1 rounded-lg border border-outline/20 bg-surface-container-lowest px-3 py-1.5 text-xs font-medium text-on-surface hover:bg-surface-container"
+          >
+            <span className="material-symbols-outlined text-sm" aria-hidden>
+              memory
+            </span>
+            Open hardware-ready preset
+          </a>
+        </div>
+      </section>
 
       <section
         className="rounded-lg border border-outline-variant/40 bg-surface-container-lowest/50 p-4"
@@ -159,9 +200,16 @@ export default function QuantumPage() {
           <button
             type="submit"
             disabled={verifyLoading}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-on-primary disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-on-primary disabled:opacity-50"
           >
-            {verifyLoading ? "Checking…" : "Verify connection"}
+            {verifyLoading ? (
+              <>
+                <Spinner />
+                <span>Checking…</span>
+              </>
+            ) : (
+              "Verify connection"
+            )}
           </button>
         </form>
         {verifyError ? (
@@ -177,20 +225,9 @@ export default function QuantumPage() {
       </section>
 
       {loading ? (
-        <p className="text-sm text-on-surface-variant" role="status">
-          Resolving probability&hellip;
-        </p>
+        <LoadingBlock text="Loading quantum config…" />
       ) : error ? (
-        <div className="rounded-lg border border-error/40 bg-error-container/20 p-4">
-          <p className="text-sm font-medium text-error">
-            Could not load quantum config
-          </p>
-          <p className="mt-1 text-xs text-on-surface-variant">{error}</p>
-          <p className="mt-3 text-xs text-on-surface-variant">
-            Base URL:{" "}
-            <code className="text-on-surface">{getApiBaseUrl()}</code>
-          </p>
-        </div>
+        <ApiRecoveryCard title="Could not load quantum config" error={error} />
       ) : data ? (
         <div className="space-y-6">
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -206,6 +243,20 @@ export default function QuantumPage() {
               highlight={data.quantum_model_loaded}
             />
           </dl>
+
+          <section aria-labelledby="circuit-heading">
+            <h2
+              id="circuit-heading"
+              className="mb-2 font-headline text-lg font-semibold text-on-surface"
+            >
+              Feature-map circuit
+            </h2>
+            <p className="mb-3 text-xs text-on-surface-variant">
+              Schematic of the quantum feature map used by the QSVC kernel.
+              Each column is a circuit layer; repetitions are shaded.
+            </p>
+            <QuantumCircuitDiagram />
+          </section>
 
           {data.config ? (
             <div>
@@ -223,6 +274,8 @@ export default function QuantumPage() {
           ) : null}
         </div>
       ) : null}
+
+      <ResearchNextActions context="quantum" />
     </div>
   );
 }

@@ -1,0 +1,1625 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hybrid QML-KG Four Page Dashboard Mockup</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --surface: #101827;
+        --panel: #152033;
+        --panel-2: #202b40;
+        --ink: #eef4ff;
+        --muted: #aebbd0;
+        --soft: #74839b;
+        --line: rgba(190, 205, 232, 0.16);
+        --primary: #73d4ff;
+        --teal: #32dbc4;
+        --violet: #c5b4ff;
+        --amber: #ffd166;
+        --rose: #ff7a90;
+        --green: #7ee787;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 16% 0%, rgba(115, 212, 255, 0.14), transparent 28rem),
+          radial-gradient(circle at 100% 10%, rgba(197, 180, 255, 0.1), transparent 28rem),
+          linear-gradient(135deg, #0b1020, #101427 54%, #15101d);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 76px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      aside {
+        background: rgba(12, 18, 34, 0.84);
+        border-right: 1px solid var(--line);
+        height: 100vh;
+        padding: 24px 18px;
+        position: sticky;
+        top: 0;
+        transition: width 160ms ease, padding 160ms ease;
+        width: 76px;
+        z-index: 40;
+      }
+
+      aside:hover,
+      aside:focus-within {
+        width: 280px;
+      }
+
+      .brand {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+        margin-bottom: 28px;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+
+      .mark {
+        background: linear-gradient(135deg, rgba(115, 212, 255, 0.24), rgba(50, 219, 196, 0.16));
+        border: 1px solid rgba(115, 212, 255, 0.35);
+        border-radius: 10px;
+        color: var(--primary);
+        display: grid;
+        font-weight: 900;
+        height: 42px;
+        place-items: center;
+        width: 42px;
+      }
+
+      .brand strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .brand span {
+        color: var(--muted);
+        display: block;
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      aside:not(:hover):not(:focus-within) .brand div:last-child,
+      aside:not(:hover):not(:focus-within) .nav-label,
+      aside:not(:hover):not(:focus-within) .nav-note {
+        opacity: 0;
+        pointer-events: none;
+        width: 0;
+      }
+
+      aside:not(:hover):not(:focus-within) .nav-link {
+        color: transparent;
+        overflow: hidden;
+        padding-left: 14px;
+        position: relative;
+        white-space: nowrap;
+      }
+
+      aside:not(:hover):not(:focus-within) .nav-link::before {
+        color: var(--muted);
+        content: attr(data-short);
+        left: 16px;
+        position: absolute;
+      }
+
+      aside:not(:hover):not(:focus-within) .nav-link.active::before {
+        color: var(--ink);
+      }
+
+      .nav-label {
+        color: var(--soft);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        margin: 22px 0 8px 10px;
+        text-transform: uppercase;
+      }
+
+      .nav-link {
+        border-radius: 8px;
+        color: var(--muted);
+        display: block;
+        font-size: 14px;
+        margin: 4px 0;
+        padding: 11px 12px;
+      }
+
+      .nav-link:hover,
+      .nav-link.active {
+        background: rgba(115, 212, 255, 0.12);
+        color: var(--ink);
+        outline: 1px solid rgba(115, 212, 255, 0.2);
+      }
+
+      .nav-note {
+        border-top: 1px solid var(--line);
+        color: var(--soft);
+        font-size: 12px;
+        line-height: 1.5;
+        margin-top: 28px;
+        padding-top: 18px;
+      }
+
+      main {
+        padding: 28px;
+      }
+
+      .topbar {
+        align-items: center;
+        background: rgba(16, 24, 39, 0.82);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 22px;
+        padding: 12px 14px;
+      }
+
+      .topbar p {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 0;
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .btn {
+        align-items: center;
+        background: rgba(238, 244, 255, 0.06);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--ink);
+        display: inline-flex;
+        font-size: 12px;
+        font-weight: 900;
+        gap: 8px;
+        min-height: 34px;
+        padding: 8px 11px;
+      }
+
+      .btn.primary {
+        background: linear-gradient(135deg, rgba(115, 212, 255, 0.27), rgba(50, 219, 196, 0.18));
+        border-color: rgba(115, 212, 255, 0.42);
+      }
+
+      .page {
+        background: rgba(16, 24, 39, 0.62);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin-bottom: 24px;
+        overflow: hidden;
+      }
+
+      .page-head {
+        align-items: start;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        gap: 20px;
+        justify-content: space-between;
+        padding: 22px;
+      }
+
+      .page-head.compact {
+        padding: 18px 22px;
+      }
+
+      .page-head.compact h1 {
+        font-size: clamp(26px, 2.8vw, 38px);
+        max-width: 920px;
+      }
+
+      .page-head.compact .sub {
+        max-width: 760px;
+      }
+
+      .page-head.start-head {
+        padding: 18px 22px;
+      }
+
+      .page-head.start-head h1 {
+        font-size: clamp(28px, 3vw, 42px);
+        max-width: 900px;
+      }
+
+      .eyebrow {
+        color: var(--primary);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        margin: 0 0 8px;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        letter-spacing: 0;
+      }
+
+      h1 {
+        font-size: clamp(32px, 4.2vw, 58px);
+        line-height: 1.05;
+        margin: 0;
+        max-width: 1020px;
+      }
+
+      h2 {
+        font-size: 18px;
+        margin: 0;
+      }
+
+      h3 {
+        font-size: 14px;
+        margin: 0;
+      }
+
+      .sub {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+        margin: 10px 0 0;
+        max-width: 860px;
+      }
+
+      .page-body {
+        display: grid;
+        gap: 16px;
+        padding: 18px;
+      }
+
+      .cols-2 {
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+      }
+
+      .cols-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .cols-4 {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .card {
+        background: rgba(21, 32, 51, 0.82);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      .card-header {
+        align-items: baseline;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+
+      .title-with-help {
+        align-items: center;
+        display: inline-flex;
+        gap: 8px;
+        position: relative;
+      }
+
+      .help-dot {
+        align-items: center;
+        background: rgba(115, 212, 255, 0.13);
+        border: 1px solid rgba(115, 212, 255, 0.42);
+        border-radius: 999px;
+        color: var(--primary);
+        cursor: help;
+        display: inline-flex;
+        font-size: 11px;
+        font-weight: 900;
+        height: 20px;
+        justify-content: center;
+        line-height: 1;
+        position: relative;
+        width: 20px;
+      }
+
+      .help-dot::after {
+        background: #0f1728;
+        border: 1px solid rgba(115, 212, 255, 0.36);
+        border-radius: 8px;
+        bottom: calc(100% + 10px);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+        color: var(--ink);
+        content: attr(data-tip);
+        font-size: 12px;
+        font-weight: 500;
+        left: 50%;
+        line-height: 1.45;
+        max-width: min(360px, 70vw);
+        opacity: 0;
+        padding: 10px 12px;
+        pointer-events: none;
+        position: absolute;
+        text-transform: none;
+        transform: translate(-50%, 6px);
+        transition: opacity 120ms ease, transform 120ms ease;
+        visibility: hidden;
+        width: max-content;
+        z-index: 20;
+      }
+
+      .help-dot:hover::after,
+      .help-dot:focus::after {
+        opacity: 1;
+        transform: translate(-50%, 0);
+        visibility: visible;
+      }
+
+      .field .help-dot::after {
+        bottom: auto;
+        left: calc(100% + 10px);
+        top: 50%;
+        transform: translate(6px, -50%);
+      }
+
+      .field .help-dot:hover::after,
+      .field .help-dot:focus::after {
+        transform: translate(0, -50%);
+      }
+
+      .step .help-dot::after {
+        bottom: auto;
+        left: calc(100% + 10px);
+        top: 50%;
+        transform: translate(6px, -50%);
+      }
+
+      .step .help-dot:hover::after,
+      .step .help-dot:focus::after {
+        transform: translate(0, -50%);
+      }
+
+      .card-header p {
+        color: var(--soft);
+        font-size: 12px;
+        margin: 0;
+      }
+
+      .metric small {
+        color: var(--soft);
+        display: block;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .metric strong {
+        display: block;
+        font-size: 25px;
+        margin-top: 8px;
+      }
+
+      .metric span {
+        color: var(--muted);
+        display: block;
+        font-size: 12px;
+        margin-top: 5px;
+      }
+
+      .journey {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .step {
+        background: rgba(238, 244, 255, 0.05);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+      }
+
+      .step b {
+        color: var(--primary);
+        display: block;
+        font-size: 11px;
+        margin-bottom: 8px;
+      }
+
+      .step strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .step p {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        margin: 6px 0 0;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+
+      th {
+        color: var(--soft);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        padding: 9px 8px;
+        text-align: left;
+        text-transform: uppercase;
+      }
+
+      td {
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+        padding: 11px 8px;
+      }
+
+      td strong {
+        color: var(--ink);
+      }
+
+      .tag {
+        border-radius: 999px;
+        display: inline-flex;
+        font-size: 11px;
+        font-weight: 900;
+        padding: 4px 8px;
+      }
+
+      .teal { background: rgba(50, 219, 196, 0.13); color: var(--teal); }
+      .violet { background: rgba(197, 180, 255, 0.14); color: var(--violet); }
+      .amber { background: rgba(255, 209, 102, 0.14); color: var(--amber); }
+      .rose { background: rgba(255, 122, 144, 0.13); color: var(--rose); }
+      .green { background: rgba(126, 231, 135, 0.13); color: var(--green); }
+
+      .field {
+        display: grid;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+
+      label {
+        color: var(--soft);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .input {
+        background: rgba(238, 244, 255, 0.05);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--ink);
+        font-size: 14px;
+        min-height: 42px;
+        padding: 11px 12px;
+      }
+
+      .combo {
+        position: relative;
+      }
+
+      .combo .input {
+        align-items: center;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .combo .input::after {
+        color: var(--soft);
+        content: "⌄";
+        font-size: 16px;
+      }
+
+      .suggestions {
+        background: #111a2b;
+        border: 1px solid rgba(115, 212, 255, 0.28);
+        border-radius: 8px;
+        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+        display: grid;
+        gap: 4px;
+        margin-top: 8px;
+        padding: 8px;
+      }
+
+      .suggestion {
+        align-items: center;
+        border-radius: 6px;
+        color: var(--muted);
+        display: flex;
+        font-size: 12px;
+        justify-content: space-between;
+        padding: 8px 9px;
+      }
+
+      .suggestion.active {
+        background: rgba(50, 219, 196, 0.12);
+        color: var(--ink);
+      }
+
+      .suggestion small {
+        color: var(--soft);
+        font-size: 11px;
+      }
+
+      .route-hint {
+        background: rgba(50, 219, 196, 0.08);
+        border: 1px solid rgba(50, 219, 196, 0.22);
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        margin-top: 10px;
+        padding: 10px 12px;
+      }
+
+      .route-hint strong {
+        color: var(--ink);
+      }
+
+      .evidence-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .evidence-item {
+        align-items: start;
+        background: rgba(238, 244, 255, 0.05);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 34px minmax(0, 1fr);
+        padding: 11px;
+      }
+
+      .evidence-item b {
+        align-items: center;
+        background: rgba(115, 212, 255, 0.12);
+        border-radius: 8px;
+        color: var(--primary);
+        display: inline-flex;
+        font-size: 12px;
+        height: 28px;
+        justify-content: center;
+        width: 28px;
+      }
+
+      .evidence-item strong {
+        display: block;
+        font-size: 13px;
+        margin-bottom: 3px;
+      }
+
+      .evidence-item span {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .preset {
+        display: grid;
+        gap: 7px;
+      }
+
+      .preset + .preset {
+        border-top: 1px solid var(--line);
+        margin-top: 12px;
+        padding-top: 12px;
+      }
+
+      .preset strong {
+        font-size: 14px;
+      }
+
+      .preset p {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        margin: 0;
+      }
+
+      .playground-panel {
+        background: rgba(115, 212, 255, 0.07);
+        border: 1px solid rgba(115, 212, 255, 0.22);
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .chip {
+        background: rgba(238, 244, 255, 0.06);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        display: inline-flex;
+        font-size: 12px;
+        font-weight: 800;
+        padding: 7px 10px;
+      }
+
+      .chip.help-chip {
+        cursor: help;
+        position: relative;
+      }
+
+      .chip.help-chip::after {
+        background: #0f1728;
+        border: 1px solid rgba(115, 212, 255, 0.36);
+        border-radius: 8px;
+        bottom: calc(100% + 10px);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+        color: var(--ink);
+        content: attr(data-tip);
+        font-size: 12px;
+        font-weight: 500;
+        left: 50%;
+        line-height: 1.45;
+        max-width: min(340px, 70vw);
+        opacity: 0;
+        padding: 10px 12px;
+        pointer-events: none;
+        position: absolute;
+        transform: translate(-50%, 6px);
+        transition: opacity 120ms ease, transform 120ms ease;
+        visibility: hidden;
+        width: max-content;
+        z-index: 30;
+      }
+
+      .chip-row .chip.help-chip::after {
+        bottom: auto;
+        left: calc(100% + 10px);
+        top: 50%;
+        transform: translate(6px, -50%);
+      }
+
+      .chip-row .chip.help-chip:hover::after,
+      .chip-row .chip.help-chip:focus::after {
+        transform: translate(0, -50%);
+      }
+
+      .chip.help-chip:hover::after,
+      .chip.help-chip:focus::after {
+        opacity: 1;
+        transform: translate(-50%, 0);
+        visibility: visible;
+      }
+
+      .chip.active {
+        background: rgba(50, 219, 196, 0.15);
+        border-color: rgba(50, 219, 196, 0.38);
+        color: var(--teal);
+      }
+
+      .slider-row {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .slider-track {
+        background: rgba(238, 244, 255, 0.08);
+        border-radius: 999px;
+        height: 10px;
+        overflow: hidden;
+      }
+
+      .slider-fill {
+        background: linear-gradient(90deg, var(--primary), var(--teal));
+        border-radius: inherit;
+        height: 100%;
+      }
+
+      .lens-grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .lens {
+        background: rgba(238, 244, 255, 0.05);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+      }
+
+      .lens strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .lens p {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        margin: 6px 0 0;
+      }
+
+      .score {
+        align-items: center;
+        display: grid;
+        gap: 16px;
+        grid-template-columns: 130px minmax(0, 1fr);
+      }
+
+      .ring {
+        align-items: center;
+        aspect-ratio: 1;
+        background:
+          radial-gradient(circle at center, var(--panel) 55%, transparent 56%),
+          conic-gradient(var(--teal) 0 76%, rgba(238, 244, 255, 0.1) 76% 100%);
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+      }
+
+      .ring strong {
+        font-size: 26px;
+      }
+
+      .mini-chart {
+        align-items: end;
+        display: grid;
+        gap: 9px;
+        grid-template-columns: repeat(8, 1fr);
+        height: 150px;
+      }
+
+      .bar {
+        background: linear-gradient(180deg, rgba(115, 212, 255, 0.8), rgba(50, 219, 196, 0.28));
+        border-radius: 6px 6px 2px 2px;
+        min-height: 22px;
+      }
+
+      .studio-grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .scene {
+        background:
+          radial-gradient(circle at 30% 25%, rgba(115, 212, 255, 0.16), transparent 12rem),
+          linear-gradient(145deg, rgba(238, 244, 255, 0.06), rgba(238, 244, 255, 0.02));
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        min-height: 220px;
+        overflow: hidden;
+        padding: 14px;
+        position: relative;
+      }
+
+      .scene-title {
+        position: relative;
+        z-index: 2;
+      }
+
+      .scene-title h3 {
+        margin-bottom: 5px;
+      }
+
+      .scene-title p {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        margin: 0;
+      }
+
+      .scene-note {
+        bottom: 12px;
+        color: var(--soft);
+        font-size: 11px;
+        left: 14px;
+        position: absolute;
+        right: 14px;
+      }
+
+      .atom,
+      .protein-dot,
+      .path-node,
+      .organ-zone {
+        position: absolute;
+      }
+
+      .atom {
+        border-radius: 999px;
+        height: 18px;
+        width: 18px;
+      }
+
+      .atom.c { background: var(--teal); box-shadow: 0 0 22px rgba(50, 219, 196, 0.48); }
+      .atom.o { background: var(--rose); box-shadow: 0 0 22px rgba(255, 122, 144, 0.45); }
+      .atom.n { background: var(--primary); box-shadow: 0 0 22px rgba(115, 212, 255, 0.45); }
+      .atom.h { background: rgba(238, 244, 255, 0.7); height: 10px; width: 10px; }
+
+      .bond {
+        background: rgba(238, 244, 255, 0.4);
+        height: 2px;
+        position: absolute;
+        transform-origin: left center;
+      }
+
+      .protein-ribbon {
+        border: 3px solid rgba(197, 180, 255, 0.56);
+        border-left-color: transparent;
+        border-radius: 42% 58% 48% 52%;
+        height: 122px;
+        left: 46px;
+        position: absolute;
+        top: 74px;
+        transform: rotate(-18deg);
+        width: 170px;
+      }
+
+      .protein-ribbon.second {
+        border-color: rgba(50, 219, 196, 0.42);
+        border-right-color: transparent;
+        height: 96px;
+        left: 104px;
+        top: 88px;
+        transform: rotate(24deg);
+        width: 128px;
+      }
+
+      .protein-dot {
+        background: var(--amber);
+        border-radius: 999px;
+        box-shadow: 0 0 24px rgba(255, 209, 102, 0.45);
+        height: 12px;
+        width: 12px;
+      }
+
+      .pocket {
+        border: 1px solid rgba(115, 212, 255, 0.42);
+        border-radius: 999px;
+        height: 96px;
+        left: 96px;
+        position: absolute;
+        top: 86px;
+        width: 126px;
+      }
+
+      .path-node {
+        align-items: center;
+        border-radius: 999px;
+        display: flex;
+        font-size: 10px;
+        font-weight: 900;
+        height: 44px;
+        justify-content: center;
+        width: 44px;
+      }
+
+      .path-node.drug { background: rgba(50, 219, 196, 0.2); color: var(--teal); }
+      .path-node.gene { background: rgba(197, 180, 255, 0.18); color: var(--violet); }
+      .path-node.pathway { background: rgba(255, 209, 102, 0.16); color: var(--amber); }
+      .path-node.disease { background: rgba(255, 122, 144, 0.16); color: var(--rose); }
+
+      .arrow-line {
+        background: linear-gradient(90deg, rgba(115, 212, 255, 0.15), rgba(115, 212, 255, 0.7));
+        height: 2px;
+        position: absolute;
+        transform-origin: left center;
+      }
+
+      .organ {
+        border: 2px solid rgba(255, 122, 144, 0.38);
+        border-radius: 54% 46% 48% 52%;
+        height: 142px;
+        left: 90px;
+        position: absolute;
+        top: 70px;
+        transform: rotate(11deg);
+        width: 116px;
+      }
+
+      .organ-zone {
+        background: rgba(255, 122, 144, 0.28);
+        border-radius: 999px;
+        height: 38px;
+        width: 38px;
+      }
+
+      .circuit {
+        bottom: 46px;
+        display: grid;
+        gap: 20px;
+        left: 24px;
+        position: absolute;
+        right: 24px;
+        top: 92px;
+      }
+
+      .q-wire {
+        background: linear-gradient(90deg, rgba(115, 212, 255, 0.1), rgba(115, 212, 255, 0.55), rgba(115, 212, 255, 0.1));
+        height: 2px;
+        position: relative;
+      }
+
+      .q-label {
+        color: var(--soft);
+        font-size: 10px;
+        font-weight: 900;
+        left: 0;
+        position: absolute;
+        top: -17px;
+      }
+
+      .q-gate {
+        align-items: center;
+        background: rgba(197, 180, 255, 0.18);
+        border: 1px solid rgba(197, 180, 255, 0.5);
+        border-radius: 7px;
+        box-shadow: 0 0 20px rgba(197, 180, 255, 0.2);
+        color: var(--violet);
+        display: inline-flex;
+        font-size: 11px;
+        font-weight: 900;
+        height: 28px;
+        justify-content: center;
+        position: absolute;
+        top: -13px;
+        width: 36px;
+      }
+
+      .q-gate.teal {
+        background: rgba(50, 219, 196, 0.15);
+        border-color: rgba(50, 219, 196, 0.44);
+        color: var(--teal);
+      }
+
+      .q-gate.amber {
+        background: rgba(255, 209, 102, 0.14);
+        border-color: rgba(255, 209, 102, 0.38);
+        color: var(--amber);
+      }
+
+      .q-control {
+        background: var(--primary);
+        border-radius: 999px;
+        box-shadow: 0 0 18px rgba(115, 212, 255, 0.5);
+        height: 10px;
+        position: absolute;
+        top: -4px;
+        width: 10px;
+      }
+
+      .q-link {
+        background: rgba(115, 212, 255, 0.45);
+        height: 44px;
+        position: absolute;
+        top: -2px;
+        width: 2px;
+      }
+
+      .footer {
+        color: var(--soft);
+        font-size: 12px;
+        margin: 4px 0 0;
+      }
+
+      @media (max-width: 1040px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        aside {
+          height: auto;
+          position: static;
+        }
+
+        .cols-2,
+        .cols-3,
+        .cols-4,
+        .journey,
+        .studio-grid,
+        .lens-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .page-head,
+        .topbar {
+          display: grid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside>
+        <div class="brand">
+          <div class="mark">QG</div>
+          <div>
+            <strong>Hybrid QML-KG</strong>
+            <span>Four page UI mockup</span>
+          </div>
+        </div>
+
+        <p class="nav-label">Pages</p>
+        <a class="nav-link active" href="#dashboard" data-short="S">Start</a>
+        <a class="nav-link" href="#experiment" data-short="E">Experiment</a>
+        <a class="nav-link" href="#validation" data-short="V">Validation</a>
+        <a class="nav-link" href="#visual" data-short="3D">Visual</a>
+
+        <p class="nav-note">
+          Proposed order: Start, Experiment, Validation, Visual. The older pages are now grouped into these four work areas.
+        </p>
+      </aside>
+
+      <main>
+        <div class="topbar">
+          <p>Static mockup for a guided discovery playground: ask a question, change assumptions, inspect evidence, and form your own conclusion.</p>
+          <div class="button-row">
+            <a class="btn" href="#dashboard">Start</a>
+            <a class="btn" href="#experiment">Experiment</a>
+            <a class="btn" href="#validation">Validation</a>
+            <a class="btn primary" href="#visual">Visual</a>
+          </div>
+        </div>
+
+        <section class="page" id="dashboard">
+          <div class="page-head start-head">
+            <div>
+              <p class="eyebrow">Start</p>
+              <h1>Start with your own biomedical question and explore what the graph suggests.</h1>
+            </div>
+            <div class="button-row">
+              <a class="btn primary" href="#experiment">Open experiment</a>
+              <a class="btn" href="#visual">Open visual evidence</a>
+            </div>
+          </div>
+
+          <div class="page-body">
+            <div class="journey">
+              <div class="step"><b>01</b><strong class="title-with-help">Start <span class="help-dot" tabindex="0" data-tip="Start is where a user chooses the biomedical thing to investigate, sets broad parameters, and decides which type of experiment should run next.">?</span></strong><p>Pick your disease, mechanism lens, and confidence threshold.</p></div>
+              <div class="step"><b>02</b><strong class="title-with-help">Experiment <span class="help-dot" tabindex="0" data-tip="Experiment compares the selected classical, hybrid, or quantum path and shows how those choices change model performance and candidate matches.">?</span></strong><p>Choose classical, hybrid, or quantum hardware paths and see how conclusions change.</p></div>
+              <div class="step"><b>03</b><strong class="title-with-help">Validation <span class="help-dot" tabindex="0" data-tip="Validation is where a user tests one candidate pair, ranks alternatives, and turns exploration into a clear hypothesis.">?</span></strong><p>Create a hypothesis, test pairs, and rank candidates.</p></div>
+              <div class="step"><b>04</b><strong class="title-with-help">Visual <span class="help-dot" tabindex="0" data-tip="Visual explains a candidate with molecule, target, pathway, disease, and graph context so the user can understand why it might matter.">?</span></strong><p>Use 3D evidence scenes to understand why a candidate is plausible.</p></div>
+            </div>
+          </div>
+
+          <div class="page-body cols-2">
+            <div class="card playground-panel">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Choose a starting point
+                  <span
+                    class="help-dot"
+                    tabindex="0"
+                    data-tip="This card defines the disease/topic and run mode that will be carried into Experiment. The next section uses this to choose which pipeline path to run and compare."
+                  >?</span>
+                </h2>
+                <p>User-controlled</p>
+              </div>
+              <div class="field">
+                <label class="title-with-help">
+                  Disease or topic
+                  <span
+                    class="help-dot"
+                    tabindex="0"
+                    data-tip="Choose what you want to start from. Disease starts drug-repurposing search. Compound asks what diseases it may treat. Gene/protein asks which drugs and diseases connect through that target. Pathway asks for compounds that may influence that mechanism."
+                  >?</span>
+                </label>
+                <div class="combo">
+                  <div class="input">Parkinson disease</div>
+                  <div class="suggestions">
+                    <div class="suggestion active"><span>Parkinson disease</span><small>Disease</small></div>
+                    <div class="suggestion"><span>Hypertension</span><small>Disease</small></div>
+                    <div class="suggestion"><span>Metformin</span><small>Compound</small></div>
+                    <div class="suggestion"><span>DRD2</span><small>Gene / protein</small></div>
+                  </div>
+                </div>
+                <div class="route-hint">
+                  <strong>Current route:</strong> disease selected, so Experiment will search for candidate compounds that may treat or mechanistically connect to Parkinson disease.
+                </div>
+              </div>
+              <div class="chip-row">
+                <span class="chip help-chip" tabindex="0" data-tip="Classical path: after Hetionet CtD extraction, RotatE embeddings, hard negatives, and pair features, Experiment trains RF, ExtraTrees, and LogisticRegression with optional tuning.">Classical</span>
+                <span class="chip help-chip active" tabindex="0" data-tip="Hybrid path: runs the classical models plus the quantum QSVC path, then uses a stacking ensemble meta-learner to combine out-of-fold probabilities.">Hybrid</span>
+                <span class="chip help-chip" tabindex="0" data-tip="Quantum hardware path: keeps the quantum branch visible and prepares the QSVC/fidelity-kernel workflow for backend or IBM Quantum-style execution checks.">Quantum hardware</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Control the Parameters
+                  <span
+                    class="help-dot"
+                    tabindex="0"
+                    data-tip="This card adjusts the parameters that shape the next Experiment view. Score threshold, mechanism weight, and evidence toggles change which candidates appear and how they are explained."
+                  >?</span>
+                </h2>
+                <p>Make the graph answer differently</p>
+              </div>
+              <div class="slider-row">
+                <label class="title-with-help">
+                  Minimum prediction score: 0.65
+                  <span
+                    class="help-dot"
+                    tabindex="0"
+                    data-tip="Filters candidate drug-disease pairs by model score. Raising it makes Experiment show fewer, higher-confidence matches; lowering it reveals more speculative possibilities."
+                  >?</span>
+                </label>
+                <div class="slider-track"><div class="slider-fill" style="width: 65%"></div></div>
+              </div>
+              <div class="slider-row">
+                <label class="title-with-help">
+                  Mechanism evidence weight: high
+                  <span
+                    class="help-dot"
+                    tabindex="0"
+                    data-tip="Controls how much biological explanation matters. Higher weight favors candidates with target, pathway, or mechanism support; lower weight lets raw prediction score dominate."
+                  >?</span>
+                </label>
+                <div class="slider-track"><div class="slider-fill" style="width: 82%"></div></div>
+              </div>
+              <div class="chip-row">
+                <span class="chip help-chip active" tabindex="0" data-tip="Includes gene/protein target context in Experiment and Visual so candidates can be inspected beyond graph score alone.">Include protein targets</span>
+                <span class="chip help-chip active" tabindex="0" data-tip="Shows pathway-level context so Experiment can explain how a compound might connect to the disease mechanism.">Show pathways</span>
+                <span class="chip help-chip" tabindex="0" data-tip="Filters out lower-confidence relationships. Experiment becomes cleaner, but may hide speculative discoveries.">Hide weak links</span>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <section class="page" id="experiment">
+          <div class="page-head compact">
+            <div>
+              <p class="eyebrow">Experiment</p>
+              <h1>Compare what your setup produced.</h1>
+              <p class="sub">
+                Experiment receives the choices from Start and shows the consequences: which method judged the task best, which candidates surfaced, what changed between run paths, and what follow-up work can be launched.
+              </p>
+            </div>
+            <div class="button-row">
+              <a class="btn primary" href="#validation">Send candidate to validation</a>
+              <a class="btn" href="#visual">Inspect visually</a>
+            </div>
+          </div>
+
+          <div class="page-body cols-4">
+            <div class="card metric"><small>Starting point</small><strong>Parkinson</strong><span>Disease route from Start</span></div>
+            <div class="card metric"><small>Run path</small><strong>Hybrid</strong><span>Classical + quantum comparison</span></div>
+            <div class="card metric"><small>Score filter</small><strong>&ge; 0.65</strong><span>Minimum prediction score</span></div>
+            <div class="card metric"><small>Evidence rule</small><strong>High</strong><span>Mechanism evidence weight</span></div>
+          </div>
+
+          <div class="page-body cols-2">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Method comparison
+                  <span
+                    class="help-dot"
+                    tabindex="0"
+                    data-tip="This is the model leaderboard for the active setup. It answers which method was the strongest judge for this task, not which drug is best."
+                  >?</span>
+                </h2>
+                <p>Which judge handled this setup best?</p>
+              </div>
+              <table>
+                <thead><tr><th>Method</th><th>Type</th><th>PR-AUC</th><th>What it means</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>ExtraTrees</strong></td><td><span class="tag teal">Classical</span></td><td>0.7987</td><td>Best whole-run CtD judge</td></tr>
+                  <tr><td><strong>Weighted ensemble</strong></td><td><span class="tag amber">Hybrid</span></td><td>0.7824</td><td>Combines classical and quantum signals</td></tr>
+                  <tr><td><strong>QSVC Pauli</strong></td><td><span class="tag violet">Quantum</span></td><td>0.7210</td><td>Useful comparison branch</td></tr>
+                  <tr><td><strong>Logistic regression</strong></td><td><span class="tag teal">Classical</span></td><td>0.6813</td><td>Simple served predictor baseline</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Candidate response
+                  <span
+                    class="help-dot"
+                    tabindex="0"
+                    data-tip="These are the candidate matches produced by the active setup. They are the rows a researcher can validate, compare, or inspect visually."
+                  >?</span>
+                </h2>
+                <p>What the setup surfaced</p>
+              </div>
+              <table>
+                <thead><tr><th>Candidate</th><th>Why it surfaced</th><th>Score</th><th>Next</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Nilotinib &rarr; Parkinson</strong></td><td>Mechanism and target support</td><td>0.84</td><td>Validate</td></tr>
+                  <tr><td><strong>Rapamycin &rarr; Parkinson</strong></td><td>Pathway evidence increased rank</td><td>0.79</td><td>Compare</td></tr>
+                  <tr><td><strong>Ambroxol &rarr; Parkinson</strong></td><td>Known disease biology nearby</td><td>0.72</td><td>Open 3D</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="page-body cols-2">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Launch follow-up
+                  <span class="help-dot" tabindex="0" data-tip="This turns the active setup into work: rerun the pipeline, compare another run path, or send the strongest candidate into Validation.">?</span>
+                </h2>
+                <p>Next action from this setup</p>
+              </div>
+              <div class="evidence-list">
+                <div class="evidence-item"><b>1</b><div><strong>Validate top candidate</strong><span>Take Nilotinib &rarr; Parkinson disease into a focused belief check.</span></div></div>
+                <div class="evidence-item"><b>2</b><div><strong>Compare another path</strong><span>Switch between classical, hybrid, and quantum hardware branches without returning to Start.</span></div></div>
+                <div class="evidence-item"><b>3</b><div><strong>Run follow-up</strong><span>Launch a focused run using the active threshold and mechanism evidence settings.</span></div></div>
+              </div>
+              <div class="chip-row">
+                <a class="btn primary" href="#validation">Validate Nilotinib</a>
+                <a class="btn" href="#visual">Inspect visually</a>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Run monitor
+                  <span class="help-dot" tabindex="0" data-tip="Jobs show whether a run is queued, running, successful, or failed. This helps the user connect their setup choices to generated results.">?</span>
+                </h2>
+                <p>Work generated from Experiment</p>
+              </div>
+              <table>
+                <thead><tr><th>ID</th><th>Setup</th><th>Status</th><th>Duration</th><th>Next</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>job_0424_001</strong></td><td>Hybrid, score 0.65</td><td><span class="tag green">ready</span></td><td>18m 12s</td><td>Validate</td></tr>
+                  <tr><td><strong>job_0424_002</strong></td><td>Quantum hardware</td><td><span class="tag amber">running</span></td><td>4m 33s</td><td>Watch</td></tr>
+                  <tr><td><strong>job_0423_017</strong></td><td>Classical baseline</td><td><span class="tag rose">failed</span></td><td>1m 09s</td><td>Inspect</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="validation">
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">Validation</p>
+              <h1>Decide whether one candidate is worth believing.</h1>
+              <p class="sub">
+                Validation is where the user moves from possible answer to provisional conclusion: inspect one candidate, weigh the evidence for and against it, compare alternatives, and choose a next step.
+              </p>
+            </div>
+            <a class="btn primary" href="#visual">Open visual evidence</a>
+          </div>
+
+          <div class="page-body cols-2">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Candidate under review
+                  <span class="help-dot" tabindex="0" data-tip="This is the selected match from Experiment. Validation focuses on one candidate so the user can decide whether the signal is believable.">?</span>
+                </h2>
+                <p>Selected from Experiment</p>
+              </div>
+              <div class="field"><label>Candidate</label><div class="input">Nilotinib &rarr; Parkinson disease</div></div>
+              <div class="field"><label>Why it was selected</label><div class="input">High hybrid score with target and pathway evidence</div></div>
+              <div class="field"><label>Active setup</label><div class="input">Hybrid run, score &ge; 0.65, mechanism evidence high</div></div>
+              <div class="chip-row">
+                <span class="chip active">Review evidence</span>
+                <span class="chip">Compare alternatives</span>
+                <span class="chip">Open 3D</span>
+              </div>
+            </div>
+
+            <div class="card score">
+              <div class="ring"><strong>76%</strong></div>
+              <div>
+                <h2 class="title-with-help">
+                  Provisional confidence
+                  <span class="help-dot" tabindex="0" data-tip="This is a decision aid, not proof. It combines model score, mechanism evidence, graph support, and uncertainty so the user can decide what to do next.">?</span>
+                </h2>
+                <p class="sub">
+                  Strong enough to keep investigating, but still needs visual inspection, literature review, and comparison against alternatives.
+                </p>
+                <p><span class="tag green">Keep investigating</span> <span class="tag teal">CtD</span></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="page-body cols-2">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Evidence checklist
+                  <span class="help-dot" tabindex="0" data-tip="This breaks the candidate down into plain evidence categories so the user knows what supports the claim and where the uncertainty lives.">?</span>
+                </h2>
+                <p>What supports the candidate?</p>
+              </div>
+              <div class="evidence-list">
+                <div class="evidence-item"><b>✓</b><div><strong>Model agreement</strong><span>Hybrid and ensemble views keep the candidate near the top.</span></div></div>
+                <div class="evidence-item"><b>✓</b><div><strong>Mechanism support</strong><span>Target and pathway context points toward lysosomal/autophagy biology.</span></div></div>
+                <div class="evidence-item"><b>?</b><div><strong>Literature gap</strong><span>Evidence looks plausible, but the user still needs outside references before claiming confidence.</span></div></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  For and against
+                  <span class="help-dot" tabindex="0" data-tip="Validation should not only sell the candidate. This panel shows evidence that supports the idea and evidence that should make the user cautious.">?</span>
+                </h2>
+                <p>Balanced reasoning</p>
+              </div>
+              <table>
+                <thead><tr><th>Side</th><th>Signal</th><th>Meaning</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="tag green">For</span></td><td>Target/pathway link</td><td>Biology gives the score a plausible story</td></tr>
+                  <tr><td><span class="tag green">For</span></td><td>Model consistency</td><td>Not only one model family is supporting it</td></tr>
+                  <tr><td><span class="tag amber">Caution</span></td><td>Clinical distance</td><td>Graph evidence is not direct therapeutic proof</td></tr>
+                  <tr><td><span class="tag rose">Unknown</span></td><td>Safety context</td><td>Requires review before follow-up claims</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="page-body cols-2">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Compare alternatives
+                  <span class="help-dot" tabindex="0" data-tip="This helps the user avoid tunnel vision. A candidate is stronger when it beats plausible alternatives under the same validation rules.">?</span>
+                </h2>
+                <p>Why this one over another?</p>
+              </div>
+              <table>
+                <thead><tr><th>Candidate</th><th>Strength</th><th>Concern</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Nilotinib</strong></td><td>Best mechanism support</td><td>Needs safety review</td></tr>
+                  <tr><td><strong>Rapamycin</strong></td><td>Strong pathway rationale</td><td>Lower model agreement</td></tr>
+                  <tr><td><strong>Ambroxol</strong></td><td>Known disease context</td><td>Less novel signal</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Conclusion builder
+                  <span class="help-dot" tabindex="0" data-tip="This is the end of Validation: the user chooses whether to reject, keep as speculative, promote to visual evidence, or launch a follow-up experiment.">?</span>
+                </h2>
+                <p>What should happen next?</p>
+              </div>
+              <div class="field"><label>Working conclusion</label><div class="input">Nilotinib is plausible enough for visual inspection and literature review.</div></div>
+              <div class="chip-row">
+                <span class="chip">Reject</span>
+                <span class="chip active">Keep as speculative</span>
+                <span class="chip">Promote to follow-up</span>
+              </div>
+              <div class="chip-row">
+                <a class="btn primary" href="#visual">Open visual evidence</a>
+                <a class="btn" href="#experiment">Tune experiment</a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="visual">
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">Visual</p>
+              <h1>See the evidence from multiple angles.</h1>
+              <p class="sub">
+                Visual is the understanding stage. Instead of only showing a graph, it lets the user move between molecule, target, binding pocket, pathway, quantum circuit, disease context, and the original Hetionet neighborhood.
+              </p>
+            </div>
+            <a class="btn primary" href="#experiment">Back to experiment</a>
+          </div>
+
+          <div class="page-body cols-3">
+            <div class="card metric"><small>3D molecule</small><strong>Compound</strong><span>SMILES, SDF, RDKit, PubChem</span></div>
+            <div class="card metric"><small>Protein target</small><strong>Gene</strong><span>UniProt, PDB, AlphaFold</span></div>
+            <div class="card metric"><small>Quantum model</small><strong>Circuit</strong><span>Feature map, kernel, QSVC branch</span></div>
+          </div>
+
+          <div class="page-body">
+            <div class="card playground-panel">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Evidence lenses
+                  <span class="help-dot" tabindex="0" data-tip="Evidence lenses let the user inspect the same candidate from different angles: chemistry, target biology, mechanism, graph context, and model disagreement.">?</span>
+                </h2>
+                <p>Switch how the same candidate is explained</p>
+              </div>
+              <div class="lens-grid">
+                <div class="lens"><strong class="title-with-help">Molecular shape <span class="help-dot" tabindex="0" data-tip="Use this lens when the selected entity is a compound or drug and the user needs to inspect molecular geometry.">?</span></strong><p>Inspect compound geometry, atom types, and conformer hints.</p></div>
+                <div class="lens"><strong class="title-with-help">Target biology <span class="help-dot" tabindex="0" data-tip="Use this lens when target proteins, genes, or binding context matter for the candidate explanation.">?</span></strong><p>Map the candidate to protein structures and binding context.</p></div>
+                <div class="lens"><strong class="title-with-help">Mechanism story <span class="help-dot" tabindex="0" data-tip="Use this lens to follow the reasoning chain from drug to target to pathway to disease.">?</span></strong><p>Follow drug to target to pathway to disease.</p></div>
+                <div class="lens"><strong class="title-with-help">Graph evidence <span class="help-dot" tabindex="0" data-tip="Use this lens to see Hetionet neighbors, edge types, and the relationships that support or weaken the candidate.">?</span></strong><p>Show Hetionet neighbors, relation types, and weak links.</p></div>
+                <div class="lens"><strong class="title-with-help">Model disagreement <span class="help-dot" tabindex="0" data-tip="Use this lens to see whether classical, hybrid, quantum, and ensemble methods agree or disagree on the candidate.">?</span></strong><p>Compare classical, quantum, and ensemble scores.</p></div>
+                <div class="lens"><strong class="title-with-help">Quantum circuit <span class="help-dot" tabindex="0" data-tip="Use this lens to inspect how pair features are encoded into a quantum feature map before the QSVC or fidelity-kernel comparison.">?</span></strong><p>Show feature encoding, entanglement, and measurement path.</p></div>
+                <div class="lens"><strong class="title-with-help">What changed? <span class="help-dot" tabindex="0" data-tip="Use this lens after changing parameters or hypotheses to understand why a candidate moved up or down.">?</span></strong><p>Explain why changing a threshold or hypothesis changed the ranking.</p></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="page-body">
+            <div class="studio-grid">
+              <div class="scene">
+                <div class="scene-title"><h3>Molecule</h3><p>Compound conformer with atom, bond, charge, polarity, and pharmacophore overlays.</p></div>
+                <div class="bond" style="left: 76px; top: 124px; width: 70px; transform: rotate(24deg)"></div>
+                <div class="bond" style="left: 140px; top: 150px; width: 62px; transform: rotate(-34deg)"></div>
+                <div class="bond" style="left: 102px; top: 92px; width: 66px; transform: rotate(75deg)"></div>
+                <div class="atom c" style="left: 70px; top: 116px"></div>
+                <div class="atom n" style="left: 136px; top: 143px"></div>
+                <div class="atom c" style="left: 191px; top: 108px"></div>
+                <div class="atom o" style="left: 99px; top: 84px"></div>
+                <div class="scene-note">Best for compounds, drugs, and candidate shortlists.</div>
+              </div>
+
+              <div class="scene">
+                <div class="scene-title"><h3>Protein target</h3><p>AlphaFold/PDB-style target structure with disease residues and binding sites highlighted.</p></div>
+                <div class="protein-ribbon"></div>
+                <div class="protein-ribbon second"></div>
+                <div class="protein-dot" style="left: 138px; top: 111px"></div>
+                <div class="protein-dot" style="left: 184px; top: 144px"></div>
+                <div class="protein-dot" style="left: 93px; top: 150px"></div>
+                <div class="scene-note">Best for genes, proteins, and drug-target relations.</div>
+              </div>
+
+              <div class="scene">
+                <div class="scene-title"><h3>Binding pocket</h3><p>Ligand pose inside target pocket with contact and evidence score overlays.</p></div>
+                <div class="protein-ribbon" style="left: 54px; top: 86px; width: 190px; height: 108px"></div>
+                <div class="pocket"></div>
+                <div class="bond" style="left: 118px; top: 132px; width: 42px; transform: rotate(20deg); background: rgba(50,219,196,.7)"></div>
+                <div class="bond" style="left: 158px; top: 146px; width: 40px; transform: rotate(-30deg); background: rgba(50,219,196,.7)"></div>
+                <div class="atom c" style="left: 112px; top: 124px"></div>
+                <div class="atom n" style="left: 154px; top: 139px"></div>
+                <div class="atom o" style="left: 190px; top: 116px"></div>
+                <div class="scene-note">Best for compound-target evidence and docking-ready views.</div>
+              </div>
+
+              <div class="scene">
+                <div class="scene-title"><h3>Mechanism cascade</h3><p>Drug to target to pathway to disease as a spatial mechanism path.</p></div>
+                <div class="arrow-line" style="left: 68px; top: 130px; width: 60px; transform: rotate(-8deg)"></div>
+                <div class="arrow-line" style="left: 132px; top: 123px; width: 58px; transform: rotate(20deg)"></div>
+                <div class="arrow-line" style="left: 190px; top: 143px; width: 58px; transform: rotate(-16deg)"></div>
+                <div class="path-node drug" style="left: 32px; top: 111px">Drug</div>
+                <div class="path-node gene" style="left: 116px; top: 100px">Gene</div>
+                <div class="path-node pathway" style="left: 190px; top: 128px">Path</div>
+                <div class="path-node disease" style="left: 256px; top: 108px">Dx</div>
+                <div class="scene-note">Best for disease hypotheses and explainable candidate rationale.</div>
+              </div>
+
+              <div class="scene">
+                <div class="scene-title"><h3>Disease context</h3><p>Organ or tissue context with affected mechanism regions and confidence overlays.</p></div>
+                <div class="organ"></div>
+                <div class="organ-zone" style="left: 132px; top: 106px"></div>
+                <div class="organ-zone" style="left: 105px; top: 151px; background: rgba(255,209,102,.25)"></div>
+                <div class="organ-zone" style="left: 170px; top: 157px; background: rgba(50,219,196,.22)"></div>
+                <div class="scene-note">Best for diseases, tissue expression, and phenotype context.</div>
+              </div>
+
+              <div class="scene">
+                <div class="scene-title"><h3>Quantum circuit</h3><p>Feature-map view of the hybrid branch with rotations, entanglement, kernel comparison, and measurement.</p></div>
+                <div class="circuit" aria-hidden="true">
+                  <div class="q-wire">
+                    <span class="q-label">q0</span>
+                    <span class="q-gate teal" style="left: 45px">Rx</span>
+                    <span class="q-control" style="left: 132px"></span>
+                    <span class="q-gate" style="left: 195px">ZZ</span>
+                    <span class="q-gate amber" style="left: 270px">M</span>
+                  </div>
+                  <div class="q-wire">
+                    <span class="q-label">q1</span>
+                    <span class="q-gate teal" style="left: 86px">Ry</span>
+                    <span class="q-link" style="left: 136px"></span>
+                    <span class="q-control" style="left: 132px"></span>
+                    <span class="q-gate" style="left: 195px">ZZ</span>
+                    <span class="q-gate amber" style="left: 270px">M</span>
+                  </div>
+                  <div class="q-wire">
+                    <span class="q-label">q2</span>
+                    <span class="q-gate teal" style="left: 45px">Rz</span>
+                    <span class="q-gate" style="left: 154px">H</span>
+                    <span class="q-gate" style="left: 226px">K</span>
+                    <span class="q-gate amber" style="left: 270px">M</span>
+                  </div>
+                </div>
+                <div class="scene-note">Best for explaining the Pauli/ZZ feature map, QSVC comparison, and quantum hardware path.</div>
+              </div>
+
+              <div class="scene">
+                <div class="scene-title"><h3>Evidence scene</h3><p>A combined story: molecule, target, mechanism, disease, and model score.</p></div>
+                <div class="path-node drug" style="left: 30px; top: 92px">Mol</div>
+                <div class="protein-ribbon" style="left: 100px; top: 86px; width: 96px; height: 82px"></div>
+                <div class="path-node pathway" style="left: 210px; top: 112px">Path</div>
+                <div class="path-node disease" style="left: 258px; top: 156px">Dx</div>
+                <div class="arrow-line" style="left: 74px; top: 114px; width: 52px; transform: rotate(8deg)"></div>
+                <div class="arrow-line" style="left: 174px; top: 126px; width: 45px; transform: rotate(5deg)"></div>
+                <div class="scene-note">Best for presentation-quality explanation of a selected candidate.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="page-body cols-2">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  What can become 3D?
+                  <span class="help-dot" tabindex="0" data-tip="This maps Hetionet concepts to visual forms. Compounds can become molecules, proteins can become structures, and relationships can become binding or mechanism scenes.">?</span>
+                </h2>
+                <p>Hetionet concept to visual</p>
+              </div>
+              <table>
+                <thead><tr><th>Concept</th><th>3D visual</th><th>Data needed</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Compound / drug</strong></td><td>Molecular conformer</td><td>SMILES, SDF, PubChem, DrugBank</td></tr>
+                  <tr><td><strong>Gene / protein</strong></td><td>Protein structure</td><td>UniProt, PDB, AlphaFold</td></tr>
+                  <tr><td><strong>Drug-target edge</strong></td><td>Binding pocket scene</td><td>Known pocket or docking pose</td></tr>
+                  <tr><td><strong>Pathway</strong></td><td>3D mechanism cascade</td><td>Pathway membership and layout</td></tr>
+                  <tr><td><strong>Quantum branch</strong></td><td>Quantum circuit scene</td><td>Feature map, qubit count, kernel/QSVC metadata</td></tr>
+                  <tr><td><strong>Disease</strong></td><td>Tissue/mechanism landscape</td><td>Disease genes and tissue maps</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="title-with-help">
+                  Knowledge graph context
+                  <span class="help-dot" tabindex="0" data-tip="The knowledge graph still explains relationships and evidence provenance, while the 3D scenes make molecules, targets, mechanisms, and disease context easier to reason about.">?</span>
+                </h2>
+                <p>Still useful, but no longer the only visual</p>
+              </div>
+              <p class="sub">
+                The graph should explain relationships, while 3D scenes make the evidence easier to inspect: molecule shape, protein target, binding pocket, mechanism path, and disease context.
+              </p>
+              <div class="mini-chart" aria-hidden="true">
+                <div class="bar" style="height: 32%"></div>
+                <div class="bar" style="height: 54%"></div>
+                <div class="bar" style="height: 78%"></div>
+                <div class="bar" style="height: 63%"></div>
+                <div class="bar" style="height: 86%"></div>
+                <div class="bar" style="height: 70%"></div>
+                <div class="bar" style="height: 45%"></div>
+                <div class="bar" style="height: 92%"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <p class="footer">
+          Static mockup only. Proposed page order: Start, Experiment, Validation, Visual.
+        </p>
+      </main>
+    </div>
+  </body>
+</html>

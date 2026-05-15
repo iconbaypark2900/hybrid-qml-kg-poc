@@ -1,0 +1,97 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{IEEEtran:BSTcontrol}
+\citation{himmelstein2017}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\citation{himmelstein2017}
+\citation{mayers2023}
+\citation{llmrag2025}
+\citation{quantum2026}
+\citation{havlicek2019,schuld2019}
+\citation{schuld2021}
+\citation{wolpert1992}
+\citation{havlicek2019,schuld2019,liu2021,abbas2021,incudini2023}
+\citation{mayers2023,llmrag2025,quantum2026}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Contributions}{2}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Background}{2}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Hetionet and KG-Based Drug Repurposing}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Quantum Kernel Methods}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Stacking Ensembles and Model Diversity}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Prior quantum drug discovery vs.\ KG embeddings}{2}{subsection.2.4}\protected@file@percent }
+\newlabel{sec:critical_distinction}{{2.4}{2}{Prior quantum drug discovery vs.\ KG embeddings}{subsection.2.4}{}}
+\citation{pykeen2021}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Hetionet CtD Dataset Statistics}}{3}{table.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:dataset}{{1}{3}{Hetionet CtD Dataset Statistics}{table.caption.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Dataset}{3}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Methods Overview}{3}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Hybrid Pipeline}{3}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Pipeline Overview}{3}{subsection.5.1}\protected@file@percent }
+\citation{rotate2019}
+\citation{qiskit2023}
+\citation{qiskit_aer2023}
+\citation{williams2001nystrom,qiskit_ml2023}
+\citation{qiskit_ml2023}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Full-Graph KG Embeddings}{4}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Pair Feature Construction}{4}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Classical Base Models}{4}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Quantum Kernel Classifier}{4}{subsection.5.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Hybrid quantum-classical pipeline for CtD link prediction on Hetionet. Full-graph RotatE embeddings feed a stacking ensemble combining tuned RF/ET/LR (classical path) and a 16-qubit Pauli fidelity-kernel QSVC (quantum path).}}{5}{figure.caption.2}\protected@file@percent }
+\newlabel{fig:pipeline}{{1}{5}{Hybrid quantum-classical pipeline for CtD link prediction on Hetionet. Full-graph RotatE embeddings feed a stacking ensemble combining tuned RF/ET/LR (classical path) and a 16-qubit Pauli fidelity-kernel QSVC (quantum path)}{figure.caption.2}{}}
+\citation{platt1999}
+\citation{qiskit_ml2023}
+\citation{optuna2019}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.6}Stacking Ensemble}{6}{subsection.5.6}\protected@file@percent }
+\newlabel{eq:stack}{{1}{6}{Stacking Ensemble}{equation.5.1}{}}
+\newlabel{eq:ensemble_var}{{2}{6}{Stacking Ensemble}{equation.5.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Mechanism-of-Action Feature Module}{6}{section.6}\protected@file@percent }
+\newlabel{sec:moa}{{6}{6}{Mechanism-of-Action Feature Module}{section.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Primary short-paper result: RotatE-128D, Pauli-16Q QSVC, stacking. \textit  {Full-graph RotatE 128D (200 ep.), Pauli reps=2, PCA$\to $24D$\to $16Q, $C=0.1$, hard negatives 1:1, tuned classical. Kernel time 2,619~s.}}}{7}{table.caption.4}\protected@file@percent }
+\newlabel{tab:primary}{{2}{7}{Primary short-paper result: RotatE-128D, Pauli-16Q QSVC, stacking. \textit {Full-graph RotatE 128D (200 ep.), Pauli reps=2, PCA$\to $24D$\to $16Q, $C=0.1$, hard negatives 1:1, tuned classical. Kernel time 2,619~s.}}{table.caption.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Experimental Setup}{7}{section.7}\protected@file@percent }
+\newlabel{sec:experimental}{{7}{7}{Experimental Setup}{section.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {8}Results}{7}{section.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.1}Primary Results}{7}{subsection.8.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Feature map ablation (RotatE-128D constant).}}{8}{table.caption.5}\protected@file@percent }
+\newlabel{tab:ablation}{{3}{8}{Feature map ablation (RotatE-128D constant)}{table.caption.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Pauli vs.\ ZZ feature map: switching to Pauli lowers standalone QSVC by 8.7 pp while raising ensemble PR-AUC by 5.8 pp. Dashed line: best classical baseline (RF, 0.7838).}}{8}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:pauli_zz}{{2}{8}{Pauli vs.\ ZZ feature map: switching to Pauli lowers standalone QSVC by 8.7 pp while raising ensemble PR-AUC by 5.8 pp. Dashed line: best classical baseline (RF, 0.7838)}{figure.caption.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.2}Feature Map Analysis: The Pauli Inversion Effect}{8}{subsection.8.2}\protected@file@percent }
+\newlabel{sec:results_feature_map}{{8.2}{8}{Feature Map Analysis: The Pauli Inversion Effect}{subsection.8.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.3}Hardware Validation: IBM Quantum Heron}{8}{subsection.8.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces ClinicalTrials.gov validation of top novel predictions.}}{9}{table.caption.7}\protected@file@percent }
+\newlabel{tab:clinical}{{4}{9}{ClinicalTrials.gov validation of top novel predictions}{table.caption.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {9}Clinical Validation}{9}{section.9}\protected@file@percent }
+\newlabel{sec:clinical}{{9}{9}{Clinical Validation}{section.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Score-validity inversion: high model score need not imply clinical support; lower-scoring Losartan and Mitomycin links have trial evidence.}}{9}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:clinical}{{3}{9}{Score-validity inversion: high model score need not imply clinical support; lower-scoring Losartan and Mitomycin links have trial evidence}{figure.caption.8}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {10}Discussion}{9}{section.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.1}Why the Ensemble Beats Classical-Only}{9}{subsection.10.1}\protected@file@percent }
+\bibstyle{IEEEtran}
+\bibdata{references_qce26}
+\bibcite{himmelstein2017}{1}
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.2}Embedding Quality}{10}{subsection.10.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.3}Quantum Kernel Scaling}{10}{subsection.10.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.4}Score-Validity Inversion and MoA}{10}{subsection.10.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11}Conclusion}{10}{section.11}\protected@file@percent }
+\bibcite{mayers2023}{2}
+\bibcite{llmrag2025}{3}
+\bibcite{quantum2026}{4}
+\bibcite{havlicek2019}{5}
+\bibcite{schuld2019}{6}
+\bibcite{schuld2021}{7}
+\bibcite{wolpert1992}{8}
+\bibcite{liu2021}{9}
+\bibcite{abbas2021}{10}
+\bibcite{incudini2023}{11}
+\bibcite{pykeen2021}{12}
+\bibcite{rotate2019}{13}
+\bibcite{qiskit2023}{14}
+\bibcite{qiskit_aer2023}{15}
+\bibcite{williams2001nystrom}{16}
+\bibcite{qiskit_ml2023}{17}
+\bibcite{platt1999}{18}
+\bibcite{optuna2019}{19}
+\gdef \@abspage@last{12}

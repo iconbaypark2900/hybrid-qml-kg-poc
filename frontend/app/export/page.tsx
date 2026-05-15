@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import type { ExportFileInfo } from "@/lib/api";
-import { fetchExports, exportDownloadUrl, getApiBaseUrl } from "@/lib/api";
+import { fetchExports, exportDownloadUrl } from "@/lib/api";
+import { ApiRecoveryCard } from "@/components/api-recovery-card";
+import { NoPipelineResultsCta } from "@/components/no-pipeline-results-cta";
+import { ResearchNextActions } from "@/components/research-next-actions";
+import { LoadingBlock } from "@/components/spinner";
 
 export default function ExportPage() {
   const [files, setFiles] = useState<ExportFileInfo[]>([]);
@@ -43,24 +47,11 @@ export default function ExportPage() {
       </header>
 
       {loading ? (
-        <p className="text-sm text-on-surface-variant" role="status">
-          Sequencing&hellip;
-        </p>
+        <LoadingBlock text="Loading export files…" />
       ) : error ? (
-        <div className="rounded-lg border border-error/40 bg-error-container/20 p-4">
-          <p className="text-sm font-medium text-error">
-            Could not list exports
-          </p>
-          <p className="mt-1 text-xs text-on-surface-variant">{error}</p>
-          <p className="mt-3 text-xs text-on-surface-variant">
-            Base URL:{" "}
-            <code className="text-on-surface">{getApiBaseUrl()}</code>
-          </p>
-        </div>
+        <ApiRecoveryCard title="Could not list exports" error={error} />
       ) : files.length === 0 ? (
-        <div className="rounded-lg border border-outline-variant/15 bg-surface-container-high/60 p-5 text-sm text-on-surface-variant">
-          No exportable files found. Run the pipeline first.
-        </div>
+        <NoPipelineResultsCta />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -102,6 +93,8 @@ export default function ExportPage() {
           </table>
         </div>
       )}
+
+      <ResearchNextActions context="export" />
     </div>
   );
 }

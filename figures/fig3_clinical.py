@@ -70,36 +70,39 @@ predictions = [
     },
 ]
 
-# ── Palette ────────────────────────────────────────────────────────────────────
-BG      = "#0f1117"
-CARD    = "#1a1d2e"
-WHITE   = "#f1f5f9"
-GRAY_LT = "#94a3b8"
+# ── Palette (light theme — dark text, saturated point colors) ─────────────────
+BG      = "#f4f4f5"
+CARD    = "#ffffff"
+WHITE   = "#0f172a"   # axis titles
+AXLBL   = "#334155"   # tick labels
+GRAY_LT = "#475569"
 GRAY    = "#64748b"
-RED     = "#ef4444"
-AMBER   = "#f59e0b"
-GREEN   = "#22c55e"
-BLUE    = "#4a9eff"
+RED     = "#b91c1c"
+AMBER   = "#b45309"
+GREEN   = "#047857"
+BLUE    = "#1d4ed8"
+GRID    = "#cbd5e1"
 
 # ── Figure ─────────────────────────────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(10, 6.5), facecolor=BG)
 ax.set_facecolor(CARD)
 for spine in ax.spines.values():
-    spine.set_edgecolor("#2d3748")
-    spine.set_linewidth(0.8)
+    spine.set_edgecolor("#64748b")
+    spine.set_linewidth(1.0)
 
 # ── "Ideal zone" shading ────────────────────────────────────────────────────────
 ideal = FancyBboxPatch((0.72, 5.5), 0.12, 2.3,
                        boxstyle="round,pad=0.02",
-                       facecolor=GREEN, edgecolor="none", alpha=0.08, zorder=1)
+                       facecolor="#d1fae5", edgecolor=GREEN, alpha=0.55,
+                       linewidth=1.2, zorder=1)
 ax.add_patch(ideal)
 ax.text(0.775, 7.95, "Ideal zone\n(high score + high trials)",
-        ha="center", va="center", color=GREEN, fontsize=7.5,
-        alpha=0.65, zorder=2, style="italic")
+        ha="center", va="center", color=GREEN, fontsize=10,
+        fontweight="bold", zorder=2)
 
 # ── Grid ───────────────────────────────────────────────────────────────────────
-ax.grid(axis="y", color="#2d3748", linewidth=0.7, zorder=1)
-ax.grid(axis="x", color="#2d3748", linewidth=0.4, zorder=1, alpha=0.5)
+ax.grid(axis="y", color=GRID, linewidth=0.85, zorder=1)
+ax.grid(axis="x", color=GRID, linewidth=0.55, zorder=1, alpha=0.85)
 
 # ── Plot points ────────────────────────────────────────────────────────────────
 # Size proportional to trial count (with a minimum for zero-trial points)
@@ -124,10 +127,10 @@ for p in predictions:
     dx, dy = label_offsets[p["label"]]
     ax.text(p["score"] + dx, p["trials"] + dy,
             p["label"],
-            color=p["color"], fontsize=8.5, fontweight="bold",
+            color=p["color"], fontsize=10, fontweight="bold",
             ha="center", va="bottom", zorder=6,
-            bbox=dict(facecolor=CARD, edgecolor="none", alpha=0.6,
-                      boxstyle="round,pad=0.2"))
+            bbox=dict(facecolor="#fafafa", edgecolor="#e2e8f0", alpha=0.98,
+                      boxstyle="round,pad=0.25", linewidth=0.8))
 
 # ── Verdict chips ───────────────────────────────────────────────────────────────
 verdict_x = 0.800
@@ -141,8 +144,8 @@ for p in predictions:
     if p["label"] in verdict_positions:
         vx, vy = verdict_positions[p["label"]]
         ax.text(vx, vy, p["verdict"],
-                color=p["color"], fontsize=7.5, ha="left", va="center",
-                zorder=6, alpha=0.85, style="italic")
+                color=p["color"], fontsize=9.5, ha="left", va="center",
+                zorder=6, fontweight="bold")
 
 # ── Score-validity inversion arrow ─────────────────────────────────────────────
 # Draw a curved arrow from Abacavir (high score, 0 trials) toward Losartan (low score, 7 trials)
@@ -152,9 +155,9 @@ ax.annotate(
     xytext=(0.785, 0.45),
     arrowprops=dict(
         arrowstyle="-|>",
-        color="#94a3b8",
-        lw=1.6,
-        mutation_scale=14,
+        color="#64748b",
+        lw=2.0,
+        mutation_scale=15,
         connectionstyle="arc3,rad=0.35",
         linestyle="dashed"
     ),
@@ -162,19 +165,20 @@ ax.annotate(
 )
 ax.text(0.635, 3.8,
         "score-validity\ninversion",
-        color=GRAY_LT, fontsize=9, ha="center", va="center",
-        rotation=-52, zorder=5, style="italic",
-        bbox=dict(facecolor=CARD, edgecolor="none", alpha=0.7, pad=2))
+        color=WHITE, fontsize=11, ha="center", va="center",
+        rotation=-52, zorder=5, fontweight="bold",
+        bbox=dict(facecolor="#f1f5f9", edgecolor="#94a3b8", alpha=0.98,
+                  pad=4, linewidth=1.0))
 
 # ── Axes formatting ────────────────────────────────────────────────────────────
 ax.set_xlim(0.46, 0.86)
 ax.set_ylim(-0.8, 9.2)
 ax.set_yticks([0, 1, 2, 3, 4, 5, 6, 7, 8])
-ax.tick_params(axis="both", colors=GRAY_LT, labelsize=9)
+ax.tick_params(axis="both", colors=AXLBL, labelsize=10)
 ax.set_xlabel("Model Prediction Score  (CtD probability estimate)",
-              color=WHITE, fontsize=11, labelpad=10)
+              color=WHITE, fontsize=12, labelpad=10, fontweight="bold")
 ax.set_ylabel("ClinicalTrials.gov Registrations  (any phase/status)",
-              color=WHITE, fontsize=11, labelpad=10)
+              color=WHITE, fontsize=12, labelpad=10, fontweight="bold")
 
 # ── Rank strip on right ─────────────────────────────────────────────────────────
 ax2 = ax.twinx()
@@ -196,8 +200,8 @@ legend_patches = [
                    label="No clinical support"),
 ]
 leg = ax.legend(handles=legend_patches, loc="upper left",
-                facecolor="#1e2235", edgecolor="#2d3748",
-                labelcolor=WHITE, fontsize=8.5, framealpha=0.95)
+                facecolor="#fafafa", edgecolor="#94a3b8",
+                labelcolor=WHITE, fontsize=10, framealpha=1.0)
 
 # ── Size legend ─────────────────────────────────────────────────────────────────
 for n_trials, label in [(0, "0 trials"), (7, "7 trials")]:
@@ -205,34 +209,33 @@ for n_trials, label in [(0, "0 trials"), (7, "7 trials")]:
     ax.scatter([], [], s=size, color=GRAY_LT, alpha=0.5,
                label=label, edgecolors="white", linewidths=0.8)
 leg2 = ax.legend(
-    *[*zip(*[(plt.scatter([], [], s=max(n*90+120,120), color=GRAY_LT,
-                          alpha=0.5, edgecolors="white", linewidths=0.8), f"{n} trials")
+    *[*zip(*[(plt.scatter([], [], s=max(n*90+120,120), color="#94a3b8",
+                          alpha=0.85, edgecolors="#0f172a", linewidths=0.9), f"{n} trials")
               for n in [0, 7]])],
     loc="center left",
-    title="Point size", title_fontsize=8,
-    facecolor="#1e2235", edgecolor="#2d3748",
-    labelcolor=WHITE, fontsize=8.5, framealpha=0.95
+    title="Point size", title_fontsize=10,
+    facecolor="#fafafa", edgecolor="#94a3b8",
+    labelcolor=WHITE, fontsize=10, framealpha=1.0
 )
 ax.add_artist(leg)
 
-# ── Titles ─────────────────────────────────────────────────────────────────────
-ax.set_title(
+# ── Titles (suptitle + subtitle via set_title avoids text bleeding) ─────────────
+fig.suptitle(
     "Score-Validity Inversion: Clinical Trial Validation of Top Predictions",
-    color=WHITE, fontsize=12.5, fontweight="bold", pad=14
+    color=WHITE, fontsize=15, fontweight="bold", y=1.0
 )
-ax.text(
-    0.5, 1.022,
+ax.set_title(
     "Highest model score ≠ most clinically validated  ·  "
     "Motivates the mechanism-of-action (MoA) feature module",
-    transform=ax.transAxes,
-    ha="center", va="bottom", color=GRAY_LT, fontsize=8.5
+    color=AXLBL, fontsize=10.5, pad=8
 )
 
 plt.tight_layout(pad=1.4)
+plt.subplots_adjust(top=0.88)
 
 for ext in ("png", "pdf"):
     plt.savefig(f"figures/fig3_clinical.{ext}",
-                dpi=200, bbox_inches="tight",
+                dpi=220, bbox_inches="tight",
                 facecolor=BG, edgecolor="none")
 
 print("Saved: figures/fig3_clinical.png  +  figures/fig3_clinical.pdf")

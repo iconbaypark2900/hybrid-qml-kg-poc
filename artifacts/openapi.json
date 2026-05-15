@@ -1,0 +1,1410 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "hetqml-service",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Healthz Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/status": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "Get Status",
+        "operationId": "get_status_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/predict": {
+      "post": {
+        "tags": [
+          "predict"
+        ],
+        "summary": "Predict",
+        "operationId": "predict_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/predict/batch": {
+      "post": {
+        "tags": [
+          "predict"
+        ],
+        "summary": "Predict Batch",
+        "operationId": "predict_batch_predict_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchPredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchPredictResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Submit Job",
+        "operationId": "submit_job_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Job",
+        "operationId": "get_job_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifest/active": {
+      "get": {
+        "tags": [
+          "manifest"
+        ],
+        "summary": "Get Active Chain",
+        "operationId": "get_active_chain_manifest_active_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManifestChain"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifest/embedding/{manifest_id}": {
+      "get": {
+        "tags": [
+          "manifest"
+        ],
+        "summary": "Read Embedding Manifest",
+        "operationId": "read_embedding_manifest_manifest_embedding__manifest_id__get",
+        "parameters": [
+          {
+            "name": "manifest_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Manifest Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingManifest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifest/feature-pipeline/{manifest_id}": {
+      "get": {
+        "tags": [
+          "manifest"
+        ],
+        "summary": "Read Feature Pipeline Manifest",
+        "operationId": "read_feature_pipeline_manifest_manifest_feature_pipeline__manifest_id__get",
+        "parameters": [
+          {
+            "name": "manifest_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Manifest Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeaturePipelineManifest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifest/model/{manifest_id}": {
+      "get": {
+        "tags": [
+          "manifest"
+        ],
+        "summary": "Read Model Manifest",
+        "operationId": "read_model_manifest_manifest_model__manifest_id__get",
+        "parameters": [
+          {
+            "name": "manifest_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Manifest Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelManifest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluations": {
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "List Evals",
+        "operationId": "list_evals_evaluations_get",
+        "parameters": [
+          {
+            "name": "model_manifest_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Manifest Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EvaluationRecord"
+                  },
+                  "title": "Response List Evals Evaluations Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluations/{evaluation_id}": {
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Read Evaluation",
+        "operationId": "read_evaluation_evaluations__evaluation_id__get",
+        "parameters": [
+          {
+            "name": "evaluation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evaluation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ArtifactRef": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "sha256",
+          "size_bytes"
+        ],
+        "title": "ArtifactRef"
+      },
+      "BatchItemResult": {
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/PredictRequest"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PredictResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "request"
+        ],
+        "title": "BatchItemResult"
+      },
+      "BatchPredictRequest": {
+        "properties": {
+          "pairs": {
+            "items": {
+              "$ref": "#/components/schemas/PredictRequest"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Pairs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pairs"
+        ],
+        "title": "BatchPredictRequest"
+      },
+      "BatchPredictResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BatchItemResult"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "summary": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results",
+          "summary"
+        ],
+        "title": "BatchPredictResponse"
+      },
+      "ComponentHealth": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HealthState"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "last_checked": {
+            "type": "number",
+            "title": "Last Checked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "state",
+          "last_checked"
+        ],
+        "title": "ComponentHealth"
+      },
+      "EmbeddingManifest": {
+        "properties": {
+          "manifest_id": {
+            "type": "string",
+            "title": "Manifest Id"
+          },
+          "kind": {
+            "type": "string",
+            "const": "embedding",
+            "title": "Kind",
+            "default": "embedding"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "git_sha": {
+            "type": "string",
+            "title": "Git Sha"
+          },
+          "seed": {
+            "type": "integer",
+            "title": "Seed"
+          },
+          "relation": {
+            "type": "string",
+            "title": "Relation"
+          },
+          "max_entities": {
+            "type": "integer",
+            "title": "Max Entities"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "dim": {
+            "type": "integer",
+            "title": "Dim"
+          },
+          "epochs": {
+            "type": "integer",
+            "title": "Epochs"
+          },
+          "artifacts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "type": "object",
+            "title": "Artifacts"
+          },
+          "config_files": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Config Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "manifest_id",
+          "created_at",
+          "git_sha",
+          "seed",
+          "relation",
+          "max_entities",
+          "method",
+          "dim",
+          "epochs",
+          "artifacts",
+          "config_files"
+        ],
+        "title": "EmbeddingManifest"
+      },
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "auth_missing",
+          "auth_invalid",
+          "rate_limited",
+          "unknown_entity",
+          "invalid_request",
+          "quantum_unavailable",
+          "service_not_ready",
+          "manifest_missing",
+          "feature_disabled",
+          "use_jobs_endpoint",
+          "not_found",
+          "internal"
+        ],
+        "title": "ErrorCode"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorResponse"
+      },
+      "EvaluationRecord": {
+        "properties": {
+          "evaluation_id": {
+            "type": "string",
+            "title": "Evaluation Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "manifest_chain": {
+            "$ref": "#/components/schemas/ManifestChain"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "test_set_hash": {
+            "type": "string",
+            "title": "Test Set Hash"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Metrics"
+          },
+          "cv_folds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cv Folds"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluation_id",
+          "tenant_id",
+          "manifest_chain",
+          "created_at",
+          "test_set_hash",
+          "metrics"
+        ],
+        "title": "EvaluationRecord"
+      },
+      "FeaturePipelineManifest": {
+        "properties": {
+          "manifest_id": {
+            "type": "string",
+            "title": "Manifest Id"
+          },
+          "kind": {
+            "type": "string",
+            "const": "feature_pipeline",
+            "title": "Kind",
+            "default": "feature_pipeline"
+          },
+          "parent_embedding": {
+            "type": "string",
+            "title": "Parent Embedding"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "qml_dim": {
+            "type": "integer",
+            "title": "Qml Dim"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "diff",
+              "hadamard",
+              "both",
+              "classical_only"
+            ],
+            "title": "Mode"
+          },
+          "artifacts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "type": "object",
+            "title": "Artifacts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "manifest_id",
+          "parent_embedding",
+          "created_at",
+          "qml_dim",
+          "mode",
+          "artifacts"
+        ],
+        "title": "FeaturePipelineManifest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthState": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "loading",
+          "degraded",
+          "unavailable"
+        ],
+        "title": "HealthState"
+      },
+      "JobRecord": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "submitted_at": {
+            "type": "number",
+            "title": "Submitted At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "request": {
+            "$ref": "#/components/schemas/PredictRequest"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PredictResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantum_mode": {
+            "$ref": "#/components/schemas/QuantumMode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "tenant_id",
+          "status",
+          "submitted_at",
+          "request",
+          "quantum_mode"
+        ],
+        "title": "JobRecord"
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "running",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "JobStatus"
+      },
+      "JobSubmitRequest": {
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/PredictRequest"
+          },
+          "callback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request"
+        ],
+        "title": "JobSubmitRequest"
+      },
+      "ManifestChain": {
+        "properties": {
+          "embedding_id": {
+            "type": "string",
+            "title": "Embedding Id"
+          },
+          "feature_pipeline_id": {
+            "type": "string",
+            "title": "Feature Pipeline Id"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "embedding_id",
+          "feature_pipeline_id",
+          "model_id"
+        ],
+        "title": "ManifestChain",
+        "description": "Resolved chain: model \u2192 feature_pipeline \u2192 embedding."
+      },
+      "ModelManifest": {
+        "properties": {
+          "manifest_id": {
+            "type": "string",
+            "title": "Manifest Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "classical",
+              "quantum"
+            ],
+            "title": "Kind"
+          },
+          "parent_feature_pipeline": {
+            "type": "string",
+            "title": "Parent Feature Pipeline"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "model_type": {
+            "type": "string",
+            "title": "Model Type"
+          },
+          "quantum_execution_mode_at_train": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuantumMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifacts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "type": "object",
+            "title": "Artifacts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "manifest_id",
+          "kind",
+          "parent_feature_pipeline",
+          "created_at",
+          "model_type",
+          "artifacts"
+        ],
+        "title": "ModelManifest"
+      },
+      "PredictMethod": {
+        "type": "string",
+        "enum": [
+          "classical",
+          "quantum_strict",
+          "quantum_preferred",
+          "auto"
+        ],
+        "title": "PredictMethod"
+      },
+      "PredictRequest": {
+        "properties": {
+          "drug_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Drug Id",
+            "description": "Exact DrugBank ID. No fuzzy matching."
+          },
+          "disease_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Disease Id",
+            "description": "Exact DOID identifier."
+          },
+          "method": {
+            "$ref": "#/components/schemas/PredictMethod",
+            "default": "auto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drug_id",
+          "disease_id"
+        ],
+        "title": "PredictRequest"
+      },
+      "PredictResponse": {
+        "properties": {
+          "drug_id": {
+            "type": "string",
+            "title": "Drug Id"
+          },
+          "disease_id": {
+            "type": "string",
+            "title": "Disease Id"
+          },
+          "probability": {
+            "type": "number",
+            "title": "Probability"
+          },
+          "method_requested": {
+            "$ref": "#/components/schemas/PredictMethod"
+          },
+          "method_used": {
+            "$ref": "#/components/schemas/PredictMethod"
+          },
+          "quantum_mode_used": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuantumMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason"
+          },
+          "manifest_chain": {
+            "$ref": "#/components/schemas/ManifestChain"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drug_id",
+          "disease_id",
+          "probability",
+          "method_requested",
+          "method_used",
+          "manifest_chain",
+          "request_id",
+          "tenant_id"
+        ],
+        "title": "PredictResponse"
+      },
+      "QuantumMode": {
+        "type": "string",
+        "enum": [
+          "simulator",
+          "gpu_simulator",
+          "ibm_heron",
+          "unavailable"
+        ],
+        "title": "QuantumMode"
+      },
+      "QuantumStatus": {
+        "properties": {
+          "default_mode": {
+            "$ref": "#/components/schemas/QuantumMode"
+          },
+          "available_modes": {
+            "items": {
+              "$ref": "#/components/schemas/QuantumMode"
+            },
+            "type": "array",
+            "title": "Available Modes"
+          },
+          "ibm_runtime_reachable": {
+            "type": "boolean",
+            "title": "Ibm Runtime Reachable"
+          },
+          "last_calibration_check": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Calibration Check"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "default_mode",
+          "available_modes",
+          "ibm_runtime_reachable"
+        ],
+        "title": "QuantumStatus"
+      },
+      "StartupProgress": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "starting",
+              "ready",
+              "failed"
+            ],
+            "title": "State"
+          },
+          "components_loaded": {
+            "type": "integer",
+            "title": "Components Loaded"
+          },
+          "components_total": {
+            "type": "integer",
+            "title": "Components Total"
+          },
+          "elapsed_seconds": {
+            "type": "number",
+            "title": "Elapsed Seconds"
+          },
+          "last_step": {
+            "type": "string",
+            "title": "Last Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "components_loaded",
+          "components_total",
+          "elapsed_seconds",
+          "last_step"
+        ],
+        "title": "StartupProgress"
+      },
+      "StatusResponse": {
+        "properties": {
+          "service_version": {
+            "type": "string",
+            "title": "Service Version"
+          },
+          "git_sha": {
+            "type": "string",
+            "title": "Git Sha"
+          },
+          "config_hash": {
+            "type": "string",
+            "title": "Config Hash"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/HealthState"
+          },
+          "startup": {
+            "$ref": "#/components/schemas/StartupProgress"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/ComponentHealth"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "quantum": {
+            "$ref": "#/components/schemas/QuantumStatus"
+          },
+          "active_manifest_chain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestChain"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tenant": {
+            "$ref": "#/components/schemas/TenantView"
+          }
+        },
+        "type": "object",
+        "required": [
+          "service_version",
+          "git_sha",
+          "config_hash",
+          "overall",
+          "startup",
+          "components",
+          "quantum",
+          "tenant"
+        ],
+        "title": "StatusResponse"
+      },
+      "TenantQuota": {
+        "properties": {
+          "requests_per_minute": {
+            "type": "integer",
+            "title": "Requests Per Minute",
+            "default": 60
+          },
+          "requests_per_day": {
+            "type": "integer",
+            "title": "Requests Per Day",
+            "default": 5000
+          },
+          "can_use_quantum_strict": {
+            "type": "boolean",
+            "title": "Can Use Quantum Strict",
+            "default": false
+          },
+          "can_use_ibm_hardware": {
+            "type": "boolean",
+            "title": "Can Use Ibm Hardware",
+            "default": false
+          },
+          "max_batch_size": {
+            "type": "integer",
+            "title": "Max Batch Size",
+            "default": 50
+          }
+        },
+        "type": "object",
+        "title": "TenantQuota"
+      },
+      "TenantView": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "quota": {
+            "$ref": "#/components/schemas/TenantQuota"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "name",
+          "quota"
+        ],
+        "title": "TenantView",
+        "description": "Public-facing tenant projection. No api_key_sha256."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

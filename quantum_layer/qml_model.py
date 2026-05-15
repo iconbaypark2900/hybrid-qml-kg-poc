@@ -185,6 +185,7 @@ class QMLLinkPredictor:
         self.model = None
         self.is_fitted = False
         self.metrics: Dict[str, float] = {}
+        self._quantum_executor = None
 
     # ------------------------------------------------------------------
     # Sanity / builders
@@ -277,7 +278,8 @@ class QMLLinkPredictor:
             return FidelityStatevectorKernel(feature_map=fm)
         # Decompose composite feature maps so Aer/backends don't error on unknown instructions
         fm_exec = fm.decompose(reps=10)
-        fidelity = ComputeUncompute(sampler=sampler)
+        pass_manager = getattr(sampler, "_qgg_pass_manager", None)
+        fidelity = ComputeUncompute(sampler=sampler, pass_manager=pass_manager)
         return FidelityQuantumKernel(feature_map=fm_exec, fidelity=fidelity)
 
     # ------------------------------------------------------------------
@@ -308,7 +310,9 @@ class QMLLinkPredictor:
             from .quantum_executor import QuantumExecutor
             qx = QuantumExecutor(self.quantum_config_path)
             sampler, exec_mode = qx.get_sampler()
+            self._quantum_executor = qx
         except Exception as e:
+            self._quantum_executor = None
             logger.info(f"QuantumExecutor fallback to local sampler: {e}")
             try:
                 from qiskit.primitives import StatevectorSampler
@@ -355,6 +359,20 @@ class QMLLinkPredictor:
         self.is_fitted = True
         logger.info(f"{self.model_type} training completed.")
         return self
+
+    def close_quantum_resources(self) -> None:
+        """Close any owned IBM Runtime resources."""
+        if self._quantum_executor is not None:
+            try:
+                self._quantum_executor.close_session()
+            finally:
+                self._quantum_executor = None
+
+    def __del__(self):
+        try:
+            self.close_quantum_resources()
+        except Exception:
+            pass
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """

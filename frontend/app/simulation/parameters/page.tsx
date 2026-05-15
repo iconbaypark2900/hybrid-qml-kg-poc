@@ -1,11 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { JobCreateRequest } from "@/lib/api";
-import { createPipelineJob } from "@/lib/api";
+import type { Hypothesis, JobCreateRequest } from "@/lib/api";
+import { createPipelineJob, fetchHypotheses } from "@/lib/api";
+import { ResearchNextActions } from "@/components/research-next-actions";
 
-const DEFAULTS: Required<JobCreateRequest> = {
+interface RunFormState {
+  relation: string;
+  embedding_method: string;
+  embedding_dim: number;
+  embedding_epochs: number;
+  qml_dim: number;
+  qml_feature_map: string;
+  qml_feature_map_reps: number;
+  fast_mode: boolean;
+  skip_quantum: boolean;
+  run_ensemble: boolean;
+  ensemble_method: string;
+  tune_classical: boolean;
+  results_dir: string;
+  quantum_config_path: string;
+  hypothesis_id: string;
+  experiment_note: string;
+  experiment_tags: string;
+}
+
+const DEFAULTS: RunFormState = {
   relation: "CtD",
   embedding_method: "ComplEx",
   embedding_dim: 64,
@@ -20,16 +41,98 @@ const DEFAULTS: Required<JobCreateRequest> = {
   tune_classical: false,
   results_dir: "results",
   quantum_config_path: "config/quantum_config.yaml",
+  hypothesis_id: "",
+  experiment_note: "",
+  experiment_tags: "",
+};
+
+const PRESETS: Record<string, Partial<RunFormState>> = {
+  "classical-baseline": {
+    skip_quantum: true,
+    tune_classical: true,
+    run_ensemble: false,
+    embedding_method: "RotatE",
+    embedding_dim: 128,
+    embedding_epochs: 150,
+  },
+  "hybrid-default": {
+    skip_quantum: false,
+    run_ensemble: true,
+    ensemble_method: "weighted_average",
+    tune_classical: true,
+    qml_dim: 12,
+    qml_feature_map: "ZZ",
+    qml_feature_map_reps: 2,
+  },
+  "quantum-heavy": {
+    skip_quantum: false,
+    run_ensemble: true,
+    tune_classical: false,
+    qml_dim: 16,
+    qml_feature_map: "Pauli",
+    qml_feature_map_reps: 3,
+    fast_mode: false,
+  },
+  "hardware-ready": {
+    skip_quantum: false,
+    run_ensemble: false,
+    qml_dim: 8,
+    qml_feature_map: "ZZ",
+    qml_feature_map_reps: 1,
+    quantum_config_path: "config/quantum_config.yaml",
+  },
 };
 
 export default function SimulationParametersPage() {
   const router = useRouter();
-  const [params, setParams] = useState<Required<JobCreateRequest>>({ ...DEFAULTS });
+  const [params, setParams] = useState<RunFormState>({ ...DEFAULTS });
+  const [hypotheses, setHypotheses] = useState<Hypothesis[]>([]);
+  const [preset, setPreset] = useState<string>("hybrid-default");
   const [loading, setLoading] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  function set<K extends keyof JobCreateRequest>(key: K, value: JobCreateRequest[K]) {
+  function set<K extends keyof RunFormState>(key: K, value: RunFormState[K]) {
     setParams((prev) => ({ ...prev, [key]: value }));
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await fetchHypotheses().catch(() => []);
+        if (!cancelled) {
+          setHypotheses(list);
+          setParams((prev) => ({
+            ...prev,
+            hypothesis_id: prev.hypothesis_id || list[0]?.id || "",
+          }));
+          const query = new URLSearchParams(window.location.search);
+          const presetParam = query.get("preset");
+          if (presetParam && PRESETS[presetParam]) {
+            setPreset(presetParam);
+            setParams((prev) => ({ ...prev, ...PRESETS[presetParam] }));
+          } else {
+            setParams((prev) => ({ ...prev, ...PRESETS["hybrid-default"] }));
+          }
+        }
+      } finally {
+        if (!cancelled) setBootstrapping(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedHypothesis = useMemo(
+    () => hypotheses.find((h) => h.id === params.hypothesis_id) ?? null,
+    [hypotheses, params.hypothesis_id],
+  );
+
+  function applyPreset(nextPreset: string) {
+    setPreset(nextPreset);
+    setParams((prev) => ({ ...prev, ...PRESETS[nextPreset] }));
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -37,7 +140,31 @@ export default function SimulationParametersPage() {
     setLoading(true);
     setError(null);
     try {
-      await createPipelineJob(params);
+      const payload: JobCreateRequest = {
+        relation: params.relation,
+        embedding_method: params.embedding_method,
+        embedding_dim: params.embedding_dim,
+        embedding_epochs: params.embedding_epochs,
+        qml_dim: params.qml_dim,
+        qml_feature_map: params.qml_feature_map,
+        qml_feature_map_reps: params.qml_feature_map_reps,
+        fast_mode: params.fast_mode,
+        skip_quantum: params.skip_quantum,
+        run_ensemble: params.run_ensemble,
+        ensemble_method: params.ensemble_method,
+        tune_classical: params.tune_classical,
+        results_dir: params.results_dir,
+        quantum_config_path: params.quantum_config_path,
+        hypothesis_id: params.hypothesis_id || undefined,
+        experiment_note: params.experiment_note || undefined,
+        experiment_tags: params.experiment_tags
+          ? params.experiment_tags
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : undefined,
+      };
+      await createPipelineJob(payload);
       router.push("/simulation");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Job creation failed");
@@ -50,14 +177,100 @@ export default function SimulationParametersPage() {
     <div className="space-y-6">
       <header>
         <h1 className="font-headline text-2xl font-semibold tracking-tight text-on-surface">
-          Simulation parameters
+          New run
         </h1>
         <p className="mt-1 text-sm text-on-surface-variant">
-          Configure and launch a pipeline run.
+          Configure and launch a pipeline run linked to a hypothesis, then track results in Pipeline jobs.
         </p>
       </header>
 
+      <section className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest/60 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
+          Run presets
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <PresetButton
+            active={preset === "classical-baseline"}
+            onClick={() => applyPreset("classical-baseline")}
+            label="Classical baseline"
+          />
+          <PresetButton
+            active={preset === "hybrid-default"}
+            onClick={() => applyPreset("hybrid-default")}
+            label="Hybrid default"
+          />
+          <PresetButton
+            active={preset === "quantum-heavy"}
+            onClick={() => applyPreset("quantum-heavy")}
+            label="Quantum-heavy"
+          />
+          <PresetButton
+            active={preset === "hardware-ready"}
+            onClick={() => applyPreset("hardware-ready")}
+            label="Hardware-ready"
+          />
+        </div>
+      </section>
+
+      {selectedHypothesis ? (
+        <div className="rounded-lg border border-outline-variant/15 bg-surface-container-high/60 p-4">
+          <p className="text-xs uppercase tracking-wide text-on-surface-variant">
+            Active hypothesis
+          </p>
+          <p className="mt-1 text-sm font-medium text-on-surface">
+            {selectedHypothesis.id} · {selectedHypothesis.name}
+          </p>
+          <p className="mt-1 text-xs text-on-surface-variant">
+            {selectedHypothesis.description}
+          </p>
+        </div>
+      ) : null}
+
       <form onSubmit={onSubmit} className="max-w-2xl space-y-5">
+        <fieldset className="space-y-4 rounded-lg border border-outline-variant/15 bg-surface-container-high/60 p-5">
+          <legend className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
+            Experiment context
+          </legend>
+          <Row label="Hypothesis">
+            <select
+              className="w-48 rounded-lg border border-outline/20 bg-surface-container-lowest px-3 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              value={params.hypothesis_id}
+              onChange={(e) => set("hypothesis_id", e.target.value)}
+              disabled={bootstrapping}
+            >
+              <option value="">None</option>
+              {hypotheses.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.id} · {h.name}
+                </option>
+              ))}
+            </select>
+          </Row>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wide text-on-surface-variant">
+              Experiment note
+            </label>
+            <textarea
+              rows={2}
+              className="mt-1 w-full rounded-lg border border-outline/20 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              value={params.experiment_note}
+              onChange={(e) => set("experiment_note", e.target.value)}
+              placeholder="What are you testing in this run?"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wide text-on-surface-variant">
+              Tags (comma-separated)
+            </label>
+            <input
+              className="mt-1 w-full rounded-lg border border-outline/20 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              value={params.experiment_tags}
+              onChange={(e) => set("experiment_tags", e.target.value)}
+              placeholder="baseline, qsvc, follow-up"
+            />
+          </div>
+        </fieldset>
+
         <fieldset className="space-y-4 rounded-lg border border-outline-variant/15 bg-surface-container-high/60 p-5">
           <legend className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
             Embeddings
@@ -120,13 +333,39 @@ export default function SimulationParametersPage() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || bootstrapping}
           className="primary-gradient rounded-lg px-5 py-2.5 text-sm font-semibold text-on-primary shadow-glow disabled:opacity-50"
         >
           {loading ? "Submitting…" : "Launch pipeline"}
         </button>
       </form>
+
+      <ResearchNextActions context="simulation" />
     </div>
+  );
+}
+
+function PresetButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+        active
+          ? "border-primary/40 bg-primary/15 text-primary"
+          : "border-outline/20 bg-surface-container-lowest text-on-surface hover:bg-surface-container"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

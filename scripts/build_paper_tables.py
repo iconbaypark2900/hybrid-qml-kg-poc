@@ -305,8 +305,30 @@ def build_table_9(out_dir: Path) -> Optional[Path]:
 
 # ---------- Driver --------------------------------------------------------
 
+def build_table_3(out_dir: Path) -> Optional[Path]:
+    """Sensitivity table — copy the curated docs/tables/table3_sensitivity.tex.
+
+    This table is hand-maintained from the markdown sources in
+    docs/results/sensitivity_*.md because the underlying numbers come from
+    multiple experiment-log entries that don't ship as a single artifact.
+    The builder verifies the curated file exists and copies it into the
+    output directory so `--all` produces a complete bundle.
+    """
+    src = Path("docs/tables/table3_sensitivity.tex")
+    if not src.exists():
+        logger.warning(f"Table 3 skipped — curated source {src} missing")
+        return None
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "table3_sensitivity.tex"
+    if src.resolve() != out_path.resolve():
+        out_path.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    logger.info(f"Wrote {out_path}")
+    return out_path
+
+
 _BUILDERS = {
     1: build_table_1,
+    3: build_table_3,
     4: build_table_4,
     5: build_table_5,
     6: build_table_6,

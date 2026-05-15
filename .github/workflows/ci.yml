@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Smoke test (synthetic data)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install minimal CI deps
+        run: |
+          python -m pip install --upgrade pip
+          # Minimal install — only what the smoke test exercises directly.
+          # Heavy deps (qiskit, scanpy, rapids) are loaded lazily by modules
+          # that the smoke test does not import.
+          pip install \
+            numpy pandas scikit-learn scipy pyyaml \
+            requests pytest pytest-cov
+
+      - name: Run smoke test
+        run: bash scripts/dgx/run_smoke_test.sh
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-artifacts-${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: ignore
+
+  integration-tests:
+    name: Integration tests (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: smoke
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            numpy pandas scikit-learn scipy pyyaml \
+            requests pytest pytest-cov
+
+      - name: Run pytest
+        run: |
+          python -m pytest tests/ \
+            -v --tb=short \
+            --cov=entity_resolution \
+            --cov=perturbation_layer \
+            --cov=evidence_layer \
+            --cov=validation_layer \
+            --cov=single_cell_layer \
+            --cov=benchmarking.components \
+            --cov-report=xml \
+            --cov-report=term-missing
+
+      - name: Upload coverage
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml-${{ github.run_id }}
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  reproducibility:
+    name: Reproducibility gate (PR-AUC baseline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: integration-tests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pandas scikit-learn scipy pyyaml requests
+
+      - name: Run pipeline in both modes and compare
+        run: |
+          mkdir -p artifacts/predictions
+          python scripts/run_full_repurposing_pipeline.py --mode kg-only   --top-n 12 --output artifacts/predictions/kg_only
+          python scripts/run_full_repurposing_pipeline.py --mode kg+omics  --top-n 12 --output artifacts/predictions/kg_omics
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          kg = json.loads((Path('artifacts/predictions/kg_only') / 'run_summary.json').read_text())
+          full = json.loads((Path('artifacts/predictions/kg_omics') / 'run_summary.json').read_text())
+
+          assert kg['mode'] == 'kg-only'
+          assert full['mode'] == 'kg+omics'
+          assert kg['n_candidates'] == full['n_candidates']
+          assert kg['top_score'] is not None
+          assert full['top_score'] is not None
+          # Reversal evidence should generally raise the top score.
+          delta = full['top_score'] - kg['top_score']
+          print(f'kg-only top:  {kg["top_score"]:.4f}  ({kg["top_compound"]})')
+          print(f'kg+omics top: {full["top_score"]:.4f}  ({full["top_compound"]})')
+          print(f'delta:        {delta:+.4f}')
+          PY

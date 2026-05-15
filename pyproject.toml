@@ -1,0 +1,38 @@
+[tool.pytest.ini_options]
+# Default to running only the Sprint 11+ integration tests. Legacy tests that
+# depend on optional services (fastapi, IBM runtime sampler, etc.) live in the
+# repo but are not in the default collection set — they can be selected
+# explicitly with `pytest tests/test_quantum_executor_runtime_sampler.py` etc.
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Files that pull in optional / network-only dependencies are excluded from
+# the default run. Re-enable individually when those deps are installed.
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--ignore=tests/test_discovery_metrics.py",
+    "--ignore=tests/test_integration_store.py",
+    "--ignore=tests/test_ml_intern_wrapper.py",
+    "--ignore=tests/test_qml_kernel_pass_manager.py",
+    "--ignore=tests/test_qml_model_runtime_lifecycle.py",
+    "--ignore=tests/test_quantum_executor_runtime_sampler.py",
+    "--ignore=tests/test_quantum_improvements.py",
+    "--ignore=tests/test_quantum_improvements_dashboard.py",
+    "--ignore=tests/test_quantum_improvements_terminal.py",
+    "--ignore=tests/test_quantum_job_runner.py",
+    "--ignore=tests/test_research_sessions_store.py",
+    "--ignore=tests/test_train_on_heron_backend_selection.py",
+]
+
+markers = [
+    "network: tests that hit external APIs (set VALIDATION_NETWORK_TESTS=1)",
+    "slow: tests that take more than 10 seconds",
+]
+
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]

@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+
+File: .cursor/rules/dashboard-api.mdc
+description: e.g. "Streamlit dashboard and FastAPI service: how to run and where code lives."
+globs:** benchmarking//.py, middleware//.py. - alwaysApply: false.**Body – fill using:**- **Dashboard:** Entry point benchmarking/dashboard.py. Run: streamlit run benchmarking/dashboard.py (default port 8501), or ./scripts/launch_dashboard.sh (finds first free port in 8501–8551, binds 0.0.0.0). Launch script usage: ./scripts/launch_dashboard.sh or ./scripts/launch_dashboard.sh --start-port 8501. - **API:** Entry point middleware/api.py. Run: uvicorn middleware.api:app --reload from project root. Orchestrator: middleware/orchestrator.py; LinkPredictionOrchestrator(use_quantum=False) by default.## Rule 5: Tests (file-specific)**File:** .cursor/rules/tests.mdc- description: e.g. "How to run tests and smoke checks for the hybrid QML-KG project." - globs: e.g. **/test*.py, **/*_test*.py, run_tests.py, scripts/e2e_smoke.py.
+alwaysApply: false.
+Body – fill using:
+Suite: python run_tests.py (from project root). Modes: --mode terminal, --mode dashboard, --mode both; --port for dashboard. It runs tests.test_quantum_improvements_terminal.run_terminal_tests() and optionally Streamlit for tests/test_quantum_improvements_dashboard.py on port 8501.
+E2E smoke: python scripts/e2e_smoke.py from project root; uses minimal config (e.g. max_entities=50, embedding_dim=16, qml_dim=3), target &lt; 3 min.
+No pytest discovery: Project uses run_tests.py and ad-hoc test scripts, not a standard pytest tree.

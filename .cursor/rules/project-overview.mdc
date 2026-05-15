@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+
+Stack: Python 3.9+, Streamlit, FastAPI, Qiskit, PyKEEN (full pipeline), scikit-learn. Venv: .venv. Lightweight: requirements.txt; full pipeline: requirements-full.txt.
+Layout: kg_layer/ (KG + embeddings), quantum_layer/ (QSVC, VQC, quantum_executor.py), classical_baseline/, scripts/ (pipeline + Optuna), benchmarking/dashboard.py, middleware/api.py, config/*.yaml.
+Run from: Project root. Prefer referencing README and code over pasting long blocks.
+Best run: README section “Reproduce the Best Result” (full command and expected PR-AUC ~0.7987).

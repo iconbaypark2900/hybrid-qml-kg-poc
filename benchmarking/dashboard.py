@@ -30,6 +30,8 @@ st.markdown("""
 This dashboard summarizes a hybrid quantum-classical knowledge graph pipeline for
 drug-disease link prediction on **Hetionet**. It highlights what was built,
 what was tested, and how quantum models compare to classical baselines.
+
+**Preregistration framing (abridged):** **H1** asks whether QSVC with a Pauli feature map beats each classical baseline on PR-AUC (paired bootstrap on out-of-fold predictions, conjunction across all baselines). **H1b** is the same decision rule for the **stacking ensemble** (QSVC + tuned classical learners) vs each baseline — the configuration that yields the headline PR-AUC on CtD in this repo. Full hypotheses and decision rules are in `preregistration/osf_preregistration_v1.md` §1.3 and §8.1.
 """)
 
 # Paths

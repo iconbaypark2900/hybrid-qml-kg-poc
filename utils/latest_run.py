@@ -108,12 +108,21 @@ def load_latest_optimized_summary() -> Optional[Dict[str, Any]]:
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
     ranking = _ranking_from_blob(raw)
+    config = raw.get("config") if isinstance(raw.get("config"), dict) else {}
     return {
         "path": str(path.resolve()),
         "mtime_epoch": path.stat().st_mtime,
         "ranking": ranking,
         "relation": raw.get("relation"),
         "timestamp": raw.get("timestamp") or raw.get("run_timestamp"),
+        "config": config,
+        "embedding_method": config.get("embedding_method"),
+        "embedding_dim": config.get("embedding_dim") or config.get("pykeen_embedding_dim"),
+        "qml_dim": config.get("qml_dim"),
+        "qml_feature_map": config.get("qml_feature_map"),
+        "seed": config.get("seed") or raw.get("seed"),
+        "job_id": raw.get("job_id"),
+        "run_id": raw.get("run_id") or raw.get("id"),
     }
 
 

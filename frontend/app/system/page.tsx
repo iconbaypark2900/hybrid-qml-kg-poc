@@ -1,4 +1,5 @@
 import { SystemStatusPanel } from "@/components/system-status-panel";
+import { ResearchNextActions } from "@/components/research-next-actions";
 
 export default function SystemPage() {
   return (
@@ -12,6 +13,7 @@ export default function SystemPage() {
         </p>
       </header>
       <SystemStatusPanel />
+      <ResearchNextActions context="system" />
     </div>
   );
 }

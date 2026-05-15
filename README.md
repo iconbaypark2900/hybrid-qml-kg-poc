@@ -11,7 +11,7 @@ A hybrid quantum-classical machine learning system for biomedical link predictio
 ---
 
 ## Results
-
+~
 | Model | Test PR-AUC | Type |
 |-------|-------------|------|
 | Ensemble-QC-stacking (Pauli) | **0.7987** | Hybrid ensemble |
@@ -296,6 +296,25 @@ hybrid-qml-kg-poc/
 
 ---
 
+## Reproducibility & Preregistration
+
+The repository ships an OSF-style retroactive preregistration, three charter gates, locked methodological constants, a paired-bootstrap CI helper, and a deterministic synthetic-KG fixture so the test suite runs without Hetionet.
+
+| Artifact | Purpose |
+|---|---|
+| [`preregistration/osf_preregistration_v1.md`](preregistration/osf_preregistration_v1.md) | OSF preregistration §1–12, with explicit retroactive disclosure. H1 (QSVC alone), H1b (stacking ensemble headline), H2/H3 (hardware ZNE, scaling) — paired-bootstrap decision rule with conjunction-across-baselines |
+| [`charter/01_phase_alignment.md`](charter/01_phase_alignment.md) | Path A research positioning, audience, timeline (Q1 2027 submission), 12-month success criteria |
+| [`charter/02_scope_decisions.md`](charter/02_scope_decisions.md) | Forward-looking scope: four CtD-relevant edge types, R-GCN + TransE baselines, stacking-ensemble headline, hardware experiment scope |
+| [`charter/03_methodology_decisions.md`](charter/03_methodology_decisions.md) | Methodology table reconciled with the headline configuration (PauliFeatureMap reps=2 primary, RotatE 128D pair features, hard negatives, stacking ensemble) |
+| [`utils/preregistered_constants.py`](utils/preregistered_constants.py) | Locked thresholds — feature map type/reps, embedding method/dim/epochs, pre-PCA dim, qubits, C-values, bootstrap seed (`20260504`), split fractions, hardware problem sizes, ZNE noise scales. Modifying any value requires a §12 amendment. |
+| [`utils/bootstrap_ci.py`](utils/bootstrap_ci.py) | `paired_bootstrap_pr_auc_difference` and `conjunction_across_baselines` — H1/H1b decision rule with 10,000 resamples |
+| [`tests/fixtures/synthetic_kg.py`](tests/fixtures/synthetic_kg.py) + [`tests/conftest.py`](tests/conftest.py) | Deterministic Hetionet-flavored synthetic KG (Compounds/Diseases/Genes, four edge types) for CI smoke tests without Hetionet downloads |
+| [`docs/deployment/DGX_BOOTSTRAP_CI.md`](docs/deployment/DGX_BOOTSTRAP_CI.md) + [`scripts/run_bootstrap_ci_dgx.sh`](scripts/run_bootstrap_ci_dgx.sh) | DGX Spark / cuStateVec workflow for the H1/H1b paired-bootstrap CI run — `qiskit-aer-gpu` install, data sync, GPU verification, launch, troubleshooting |
+
+The preregistration is **retroactive**: H1 and H1b are formalized after PR-AUC 0.7987 was observed, and that disclosure is explicit. H2 and H3 (hardware experiments) are blinded.
+
+---
+
 ## Documentation
 
 | Document | Description |
@@ -320,12 +339,25 @@ hybrid-qml-kg-poc/
 - **Launch script**: `scripts/launch_dashboard.sh` finds the first available port (8501, 8502, …) and runs the Streamlit app, so multiple instances or a busy port do not block startup.
 - **Hugging Face Space**: The app is deployed at [QGG-HYBRID-PROJECT](https://huggingface.co/spaces/rocRevyAreGoals15/QGG-HYBRID-PROJECT). Push to the Space with `git push hf <your-branch>:main` (see `docs/deployment/DEPLOY_HUGGINGFACE.md`).
 - **Documentation**: README updated with current results, pipeline features, project structure, and dashboard description. `docs/planning/NEXT_STEPS_TO_IMPROVE_PERFORMANCE.md` and `docs/overview/IMPLEMENTATION_RECAP.md` document the experiment log, recommended commands, and GPU/configuration options.
+- **Reproducibility & preregistration scaffolding (2026-05-04, branch `roc/preregistration-followups`)**: Added an OSF-style retroactive preregistration with H1/H1b/H2/H3 hypotheses + paired-bootstrap conjunction-across-baselines decision rule (`preregistration/`), three charter gates (`charter/`), locked methodological constants (`utils/preregistered_constants.py`, `BOOTSTRAP_SEED = 20260504`), an in-tree paired-bootstrap CI helper (`utils/bootstrap_ci.py`), a deterministic synthetic-KG fixture (`tests/fixtures/`) for Hetionet-free CI smoke tests, a Hetionet snapshot SHA-256 record (`docs/reproducibility/hetionet_snapshot.md`), a headline bootstrap driver with `--gpu` support and strict abort gate (`scripts/run_bootstrap_ci.py`), a 6-check qiskit-aer-gpu verifier (`scripts/verify_qiskit_gpu.py`), and a one-shot DGX wrapper + workflow guide (`scripts/run_bootstrap_ci_dgx.sh` + `docs/deployment/DGX_BOOTSTRAP_CI.md`). Strict-checked the upstream `QuantumExecutor.gpu_available()` helper at the same time. Headline GPU run on the DGX is the next gate before the manuscript-ready H1/H1b numbers land. **Venue calendar, affiliation, ORCIDs, and license** are flagged *provisional* in the preregistration header and README §Publication metadata until authors finalize.
 
 ---
 
 ## License
 
-MIT
+MIT — *confirm with all co-authors before publication. If the team re-licenses (e.g. Apache-2.0), replace this line and the root [`LICENSE`](LICENSE) file with the Apache 2.0 text.* Full MIT text: [`LICENSE`](LICENSE).
+
+---
+
+## Publication metadata (provisional)
+
+**Venue order**, **OSF / manuscript dates**, **Elsayed affiliation**, and **author ORCIDs** are documented with explicit *edit when final* notes at the top of [`preregistration/osf_preregistration_v1.md`](preregistration/osf_preregistration_v1.md) and in [`charter/01_phase_alignment.md`](charter/01_phase_alignment.md).
+
+Optional **GPU** packages for Aer on CUDA: [`requirements-gpu.txt`](requirements-gpu.txt) (after `requirements-full.txt`).
+
+**DGX workflows:** train/cache RotatE embeddings with [`docs/deployment/DGX_SPARK.md`](docs/deployment/DGX_SPARK.md); run paired-bootstrap H1/H1b with GPU Aer via [`docs/deployment/DGX_BOOTSTRAP_CI.md`](docs/deployment/DGX_BOOTSTRAP_CI.md).
+
+Verification scripts (`scripts/run_bootstrap_ci.py --dry_run`, `scripts/verify_qiskit_gpu.py`) need the **project venv** and installed deps — e.g. `.venv/bin/python` after `pip install -r requirements-full.txt` (bare system `python3` will miss `sklearn` / Qiskit).
 
 ---
 
@@ -335,7 +367,7 @@ MIT
 @software{hybrid_qml_kg,
   title  = {Hybrid Quantum-Classical Knowledge Graph Link Prediction},
   year   = {2026},
-  url    = {https://github.com/yourusername/hybrid-qml-kg-poc}
+  url    = {https://github.com/Quantum-Global-Group/hybrid-qml-kg-poc}
 }
 ```
 

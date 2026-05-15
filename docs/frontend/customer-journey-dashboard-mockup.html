@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hybrid QML-KG Customer Journey Dashboard Mockup</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #111827;
+        --panel-2: #172033;
+        --panel-3: #202a3d;
+        --ink: #eef4ff;
+        --muted: #aab6cc;
+        --soft: #738198;
+        --line: rgba(182, 198, 226, 0.16);
+        --primary: #73d4ff;
+        --teal: #32dbc4;
+        --violet: #c5b4ff;
+        --amber: #ffd166;
+        --rose: #ff7a90;
+        --green: #7ee787;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(115, 212, 255, 0.14), transparent 28rem),
+          radial-gradient(circle at 96% 8%, rgba(255, 209, 102, 0.08), transparent 22rem),
+          linear-gradient(135deg, #0b1020 0%, #101425 54%, #15101d 100%);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--line);
+        background: rgba(12, 18, 34, 0.82);
+        padding: 24px 18px;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 26px;
+      }
+
+      .mark {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, rgba(115, 212, 255, 0.25), rgba(50, 219, 196, 0.18));
+        border: 1px solid rgba(115, 212, 255, 0.35);
+        color: var(--primary);
+        font-weight: 800;
+      }
+
+      .brand strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .brand span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      .nav-group {
+        margin-top: 24px;
+      }
+
+      .nav-heading {
+        color: var(--soft);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        margin: 0 0 8px 10px;
+        text-transform: uppercase;
+      }
+
+      .nav-item {
+        align-items: center;
+        border-radius: 8px;
+        color: var(--muted);
+        display: flex;
+        gap: 10px;
+        font-size: 13px;
+        justify-content: space-between;
+        margin: 3px 0;
+        padding: 10px 11px;
+      }
+
+      .nav-item.active {
+        background: rgba(115, 212, 255, 0.12);
+        color: var(--ink);
+        outline: 1px solid rgba(115, 212, 255, 0.2);
+      }
+
+      .nav-item small {
+        color: var(--soft);
+        font-size: 11px;
+      }
+
+      main {
+        padding: 24px;
+      }
+
+      .session {
+        align-items: center;
+        background: rgba(17, 24, 39, 0.78);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        display: flex;
+        gap: 16px;
+        justify-content: space-between;
+        margin-bottom: 22px;
+        padding: 12px 14px;
+      }
+
+      .session p {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 0;
+      }
+
+      .session strong {
+        color: var(--ink);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .btn {
+        align-items: center;
+        background: rgba(238, 244, 255, 0.06);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--ink);
+        display: inline-flex;
+        font-size: 12px;
+        font-weight: 700;
+        gap: 7px;
+        min-height: 34px;
+        padding: 8px 11px;
+      }
+
+      .btn.primary {
+        background: linear-gradient(135deg, rgba(115, 212, 255, 0.26), rgba(50, 219, 196, 0.18));
+        border-color: rgba(115, 212, 255, 0.42);
+        color: #f8fcff;
+      }
+
+      .hero {
+        display: grid;
+        gap: 22px;
+        grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+        margin-bottom: 24px;
+      }
+
+      .hero-copy {
+        padding: 18px 0 4px;
+      }
+
+      .eyebrow {
+        color: var(--primary);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        margin: 0 0 10px;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        font-size: clamp(34px, 5vw, 58px);
+        letter-spacing: 0;
+        line-height: 1.01;
+        margin: 0;
+        max-width: 850px;
+      }
+
+      .lead {
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.7;
+        margin: 18px 0 0;
+        max-width: 760px;
+      }
+
+      .state-card {
+        align-self: start;
+        background: rgba(17, 24, 39, 0.78);
+        border: 1px solid rgba(115, 212, 255, 0.22);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        padding: 18px;
+      }
+
+      .status-line {
+        align-items: center;
+        display: flex;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 99px;
+        background: var(--green);
+        box-shadow: 0 0 20px rgba(126, 231, 135, 0.7);
+      }
+
+      .status-line strong {
+        font-size: 14px;
+      }
+
+      .status-line span {
+        color: var(--muted);
+        display: block;
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      .journey {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin: 18px 0 0;
+      }
+
+      .step {
+        border-radius: 8px;
+        background: rgba(238, 244, 255, 0.05);
+        border: 1px solid var(--line);
+        padding: 12px;
+      }
+
+      .step.current {
+        background: rgba(115, 212, 255, 0.12);
+        border-color: rgba(115, 212, 255, 0.36);
+      }
+
+      .step b {
+        color: var(--primary);
+        display: block;
+        font-size: 11px;
+        margin-bottom: 8px;
+      }
+
+      .step span {
+        color: var(--ink);
+        display: block;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .step p {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        margin: 6px 0 0;
+      }
+
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .grid.metrics {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .grid.body {
+        grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+      }
+
+      .card {
+        background: rgba(17, 24, 39, 0.82);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        padding: 16px;
+      }
+
+      .metric small {
+        color: var(--soft);
+        display: block;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .metric strong {
+        display: block;
+        font-size: 24px;
+        margin-top: 8px;
+      }
+
+      .metric span {
+        color: var(--muted);
+        display: block;
+        font-size: 12px;
+        margin-top: 5px;
+      }
+
+      .section-title {
+        align-items: baseline;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+
+      .section-title h2 {
+        font-size: 18px;
+        margin: 0;
+      }
+
+      .section-title p {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 0;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+
+      th {
+        color: var(--soft);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        padding: 9px 8px;
+        text-align: left;
+        text-transform: uppercase;
+      }
+
+      td {
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+        padding: 12px 8px;
+      }
+
+      td strong {
+        color: var(--ink);
+      }
+
+      .tag {
+        border-radius: 999px;
+        display: inline-flex;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 4px 8px;
+      }
+
+      .tag.teal {
+        background: rgba(50, 219, 196, 0.13);
+        color: var(--teal);
+      }
+
+      .tag.violet {
+        background: rgba(197, 180, 255, 0.14);
+        color: var(--violet);
+      }
+
+      .tag.amber {
+        background: rgba(255, 209, 102, 0.14);
+        color: var(--amber);
+      }
+
+      .pipeline {
+        display: grid;
+        gap: 10px;
+      }
+
+      .action {
+        align-items: start;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 34px minmax(0, 1fr);
+        padding: 12px 0;
+      }
+
+      .action + .action {
+        border-top: 1px solid var(--line);
+      }
+
+      .icon {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        background: rgba(238, 244, 255, 0.06);
+        color: var(--primary);
+        font-weight: 900;
+      }
+
+      .action strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .action p {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        margin: 4px 0 0;
+      }
+
+      .viz {
+        min-height: 260px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .node {
+        border-radius: 999px;
+        position: absolute;
+      }
+
+      .node.drug {
+        background: var(--teal);
+        box-shadow: 0 0 24px rgba(50, 219, 196, 0.55);
+        height: 16px;
+        width: 16px;
+      }
+
+      .node.disease {
+        background: var(--rose);
+        box-shadow: 0 0 24px rgba(255, 122, 144, 0.5);
+        height: 12px;
+        width: 12px;
+      }
+
+      .node.model {
+        background: var(--violet);
+        box-shadow: 0 0 24px rgba(197, 180, 255, 0.5);
+        height: 10px;
+        width: 10px;
+      }
+
+      .legend {
+        bottom: 14px;
+        display: flex;
+        gap: 12px;
+        left: 16px;
+        position: absolute;
+      }
+
+      .legend span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .studio-preview {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 14px;
+      }
+
+      .studio-tile {
+        background: rgba(238, 244, 255, 0.05);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        min-height: 118px;
+        overflow: hidden;
+        padding: 10px;
+        position: relative;
+      }
+
+      .studio-tile strong {
+        display: block;
+        font-size: 12px;
+        position: relative;
+        z-index: 2;
+      }
+
+      .studio-tile span {
+        color: var(--soft);
+        display: block;
+        font-size: 10px;
+        margin-top: 4px;
+        position: relative;
+        z-index: 2;
+      }
+
+      .mini-atom,
+      .mini-node,
+      .mini-organ {
+        position: absolute;
+      }
+
+      .mini-atom {
+        border-radius: 999px;
+        height: 14px;
+        width: 14px;
+      }
+
+      .mini-atom.c { background: var(--teal); box-shadow: 0 0 18px rgba(50, 219, 196, 0.45); }
+      .mini-atom.n { background: var(--primary); box-shadow: 0 0 18px rgba(115, 212, 255, 0.45); }
+      .mini-atom.o { background: var(--rose); box-shadow: 0 0 18px rgba(255, 122, 144, 0.45); }
+
+      .mini-bond {
+        background: rgba(238, 244, 255, 0.42);
+        height: 2px;
+        position: absolute;
+        transform-origin: left center;
+      }
+
+      .mini-ribbon {
+        border: 3px solid rgba(197, 180, 255, 0.5);
+        border-left-color: transparent;
+        border-radius: 42% 58% 48% 52%;
+        height: 58px;
+        left: 40px;
+        position: absolute;
+        top: 48px;
+        transform: rotate(-18deg);
+        width: 88px;
+      }
+
+      .mini-node {
+        align-items: center;
+        border-radius: 999px;
+        display: flex;
+        font-size: 9px;
+        font-weight: 900;
+        height: 32px;
+        justify-content: center;
+        width: 32px;
+      }
+
+      .mini-node.drug { background: rgba(50, 219, 196, 0.2); color: var(--teal); }
+      .mini-node.path { background: rgba(255, 209, 102, 0.16); color: var(--amber); }
+      .mini-node.dx { background: rgba(255, 122, 144, 0.16); color: var(--rose); }
+
+      .mini-organ {
+        border: 2px solid rgba(255, 122, 144, 0.38);
+        border-radius: 54% 46% 48% 52%;
+        height: 70px;
+        left: 54px;
+        top: 42px;
+        transform: rotate(11deg);
+        width: 58px;
+      }
+
+      .footer-note {
+        color: var(--soft);
+        font-size: 12px;
+        margin: 18px 0 0;
+      }
+
+      @media (max-width: 980px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          height: auto;
+          position: static;
+        }
+
+        .hero,
+        .grid.body,
+        .grid.metrics,
+        .journey,
+        .studio-preview {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar" aria-label="Dashboard navigation mockup">
+        <div class="brand">
+          <div class="mark">QG</div>
+          <div>
+            <strong>Hybrid QML-KG</strong>
+            <span>Drug discovery workbench</span>
+          </div>
+        </div>
+
+        <nav>
+          <section class="nav-group">
+            <p class="nav-heading">Research</p>
+            <a class="nav-item active" href="#"><span>Dashboard</span><small>ready</small></a>
+            <a class="nav-item" href="#"><span>Latest results</span><small>run</small></a>
+            <a class="nav-item" href="#"><span>Candidate ranking</span><small>top-K</small></a>
+            <a class="nav-item" href="#"><span>Predict pair</span><small>single</small></a>
+          </section>
+
+          <section class="nav-group">
+            <p class="nav-heading">Explore</p>
+            <a class="nav-item" href="#"><span>Visual analysis</span><small>tabs</small></a>
+            <a class="nav-item" href="#"><span>Knowledge graph</span><small>KG</small></a>
+            <a class="nav-item" href="#"><span>Quantum circuit</span><small>QSVC</small></a>
+          </section>
+
+          <section class="nav-group">
+            <p class="nav-heading">Experiments</p>
+            <a class="nav-item" href="#"><span>New experiment</span><small>presets</small></a>
+            <a class="nav-item" href="#"><span>Jobs</span><small>polling</small></a>
+          </section>
+
+          <section class="nav-group">
+            <p class="nav-heading">Ops</p>
+            <a class="nav-item" href="#"><span>System status</span><small>API</small></a>
+            <a class="nav-item" href="#"><span>Exports</span><small>files</small></a>
+          </section>
+        </nav>
+      </aside>
+
+      <main>
+        <section class="session" aria-label="Current research session">
+          <p>
+            Latest run ready in <strong>results/optimized_results_2026_04_24</strong>.
+            Best model: <strong>ExtraTrees</strong>. API status: healthy.
+          </p>
+          <div class="button-row">
+            <a class="btn" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#new-experiment">New experiment</a>
+            <a class="btn" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#jobs">Jobs</a>
+            <a class="btn primary" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#results">Open latest results</a>
+          </div>
+        </section>
+
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Research Dashboard</p>
+            <h1>Move from latest evidence to the next useful experiment.</h1>
+            <p class="lead">
+              The dashboard frames the hybrid quantum-classical biomedical KG system as a
+              guided research loop: review the strongest model evidence, inspect candidate
+              drug-disease signals, validate single pairs, then launch a focused follow-up run.
+            </p>
+
+            <div class="journey" aria-label="Primary customer journey">
+              <div class="step current">
+                <b>01</b>
+                <span>Review</span>
+                <p>Latest run, best model, readiness, and result coverage.</p>
+              </div>
+              <div class="step">
+                <b>02</b>
+                <span>Explore</span>
+                <p>Predictions, embeddings, KG context, and quantum comparison.</p>
+              </div>
+              <div class="step">
+                <b>03</b>
+                <span>Validate</span>
+                <p>Score a drug-disease pair and interpret confidence.</p>
+              </div>
+              <div class="step">
+                <b>04</b>
+                <span>Run</span>
+                <p>Choose a preset, monitor jobs, and export artifacts.</p>
+              </div>
+            </div>
+          </div>
+
+          <aside class="state-card">
+            <div class="status-line">
+              <div class="dot"></div>
+              <div>
+                <strong>Results available</strong>
+                <span>State-aware dashboard branch</span>
+              </div>
+            </div>
+            <div class="grid" style="gap: 10px">
+              <a class="btn primary" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#results">Review latest evidence</a>
+              <a class="btn" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#evidence-studio">Open 3D Evidence Studio</a>
+              <a class="btn" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#ranking">Rank candidates for a disease</a>
+              <a class="btn" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#predict">Validate one pair</a>
+              <a class="btn" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#new-experiment">Launch follow-up experiment</a>
+            </div>
+          </aside>
+        </section>
+
+        <section class="grid metrics" aria-label="Run metrics">
+          <div class="card metric">
+            <small>Best PR-AUC</small>
+            <strong>0.7987</strong>
+            <span>ExtraTrees, CtD relation</span>
+          </div>
+          <div class="card metric">
+            <small>Graph Scale</small>
+            <strong>2.25M</strong>
+            <span>Hetionet relationships</span>
+          </div>
+          <div class="card metric">
+            <small>Entity Coverage</small>
+            <strong>47,031</strong>
+            <span>Compounds, diseases, genes</span>
+          </div>
+          <div class="card metric">
+            <small>Run Mode</small>
+            <strong>Hybrid</strong>
+            <span>Classical + quantum comparison</span>
+          </div>
+        </section>
+
+        <section class="grid body" style="margin-top: 16px">
+          <div class="card">
+            <div class="section-title">
+              <div>
+                <h2>Model leaderboard</h2>
+                <p>Which trained model performs best on the Compound-treats-Disease evaluation task</p>
+              </div>
+              <span class="tag teal">Ready</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Type</th>
+                  <th>PR-AUC</th>
+                  <th>Accuracy</th>
+                  <th>What it means</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>ExtraTrees</strong></td>
+                  <td><span class="tag teal">Classical</span></td>
+                  <td>0.7987</td>
+                  <td>0.912</td>
+                  <td>Best whole-run CtD evaluator</td>
+                </tr>
+                <tr>
+                  <td><strong>Weighted ensemble</strong></td>
+                  <td><span class="tag amber">Ensemble</span></td>
+                  <td>0.7824</td>
+                  <td>0.904</td>
+                  <td>Combines model families</td>
+                </tr>
+                <tr>
+                  <td><strong>QSVC Pauli map</strong></td>
+                  <td><span class="tag violet">Quantum</span></td>
+                  <td>0.7210</td>
+                  <td>0.876</td>
+                  <td>Quantum comparison model</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <aside class="card pipeline">
+            <div class="section-title">
+              <div>
+                <h2>Recommended next actions</h2>
+                <p>Generated from current session state</p>
+              </div>
+            </div>
+
+            <div class="action">
+              <div class="icon">1</div>
+              <div>
+                <strong>Open top predictions</strong>
+                <p>Use the selected run/model to see the highest-scoring compound-disease pairs, then inspect 3D evidence.</p>
+              </div>
+            </div>
+
+            <div class="action">
+              <div class="icon">2</div>
+              <div>
+                <strong>Validate a target pair</strong>
+                <p>Use Predict pair for a single compound and disease, then inspect molecule, target, and mechanism context.</p>
+              </div>
+            </div>
+
+            <div class="action">
+              <div class="icon">3</div>
+              <div>
+                <strong>Launch a hybrid follow-up</strong>
+                <p>Start from the Hybrid benchmark preset and attach the active hypothesis.</p>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="grid body" style="margin-top: 16px">
+          <div class="card viz">
+            <div class="section-title">
+              <div>
+                <h2>Visual analysis + 3D evidence preview</h2>
+                <p>Molecules, targets, binding pockets, pathways, KG context, and prediction confidence in one workspace</p>
+              </div>
+              <span class="tag violet">Explore</span>
+            </div>
+            <div class="node drug" style="left: 18%; top: 44%"></div>
+            <div class="node drug" style="left: 31%; top: 32%"></div>
+            <div class="node disease" style="left: 52%; top: 40%"></div>
+            <div class="node disease" style="left: 65%; top: 58%"></div>
+            <div class="node model" style="left: 74%; top: 31%"></div>
+            <div class="node model" style="left: 42%; top: 68%"></div>
+            <div class="node drug" style="left: 82%; top: 66%"></div>
+            <div class="node disease" style="left: 22%; top: 72%"></div>
+            <div class="studio-preview">
+              <a class="studio-tile" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#evidence-studio">
+                <strong>Molecule</strong>
+                <span>compound conformer</span>
+                <div class="mini-bond" style="left: 38px; top: 72px; width: 44px; transform: rotate(24deg)"></div>
+                <div class="mini-bond" style="left: 78px; top: 89px; width: 38px; transform: rotate(-30deg)"></div>
+                <div class="mini-atom c" style="left: 33px; top: 65px"></div>
+                <div class="mini-atom n" style="left: 75px; top: 82px"></div>
+                <div class="mini-atom o" style="left: 110px; top: 61px"></div>
+              </a>
+              <a class="studio-tile" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#evidence-studio">
+                <strong>Target pocket</strong>
+                <span>protein + ligand</span>
+                <div class="mini-ribbon"></div>
+                <div class="mini-atom c" style="left: 74px; top: 68px"></div>
+                <div class="mini-atom o" style="left: 98px; top: 82px"></div>
+              </a>
+              <a class="studio-tile" href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#evidence-studio">
+                <strong>Mechanism</strong>
+                <span>drug to disease path</span>
+                <div class="mini-node drug" style="left: 18px; top: 62px">Mol</div>
+                <div class="mini-node path" style="left: 72px; top: 48px">Path</div>
+                <div class="mini-node dx" style="left: 112px; top: 76px">Dx</div>
+              </a>
+            </div>
+            <div class="legend">
+              <span>● compounds</span>
+              <span>● diseases</span>
+              <span>● model clusters</span>
+            </div>
+          </div>
+
+          <aside class="card">
+            <div class="section-title">
+              <div>
+                <h2>Alternative empty state</h2>
+                <p>When no run exists yet</p>
+              </div>
+            </div>
+            <div class="action">
+              <div class="icon">A</div>
+              <div>
+                <strong>Check system status</strong>
+                <p>Confirm FastAPI, KG loader, and model readiness before launching work.</p>
+              </div>
+            </div>
+            <div class="action">
+              <div class="icon">B</div>
+              <div>
+                <strong>Start a pipeline run</strong>
+                <p>Use a fast baseline preset first, then compare hybrid and quantum variants.</p>
+              </div>
+            </div>
+            <div class="action">
+              <div class="icon">C</div>
+              <div>
+                <strong>Monitor jobs</strong>
+                <p>Return automatically to results once a run succeeds.</p>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <p class="footer-note">
+          Static mockup only. Continue through the expanded storyboard:
+          <a href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#results" style="color: var(--primary)">Latest results</a>,
+          <a href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#evidence-studio" style="color: var(--primary)">3D Evidence Studio</a>,
+          <a href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#predict" style="color: var(--primary)">Predict pair</a>,
+          <a href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#ranking" style="color: var(--primary)">Candidate ranking</a>,
+          and <a href="file://wsl.localhost/Ubuntu/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/docs/frontend/customer-journey-pages-mockup.html#jobs" style="color: var(--primary)">Jobs</a>.
+        </p>
+      </main>
+    </div>
+  </body>
+</html>

@@ -70,6 +70,17 @@ Optimization, quantum behavior, evaluation, dashboard:
 
 Experiment writeups, results summaries, and historical notes: see [reports/](reports/).
 
+## Manuscript-track results (`docs/results/`)
+
+Audits, sensitivity analyses, and bootstrap-CI outputs that feed the H1/H1b headline and §8.6 sensitivity sections of the OSF preregistration.
+
+| Path | Purpose |
+|------|---------|
+| [results/zne_implementation_audit.md](results/zne_implementation_audit.md) | Match/gap audit of the existing ZNE code in `quantum_layer/{quantum_error_mitigation,advanced_error_mitigation}.py` against preregistration §5.5 / §5.7 (Pauli Path ZNE, fold-based 1×/3×/5×, linear + Richardson extrapolation) — feeds the gap-fix plan before §5.4 hardware experiments |
+| [results/sensitivity_pauli_vs_zz.md](results/sensitivity_pauli_vs_zz.md) | Supplementary §8.6 — feature-map sensitivity: PauliFeatureMap (primary, headline ensemble PR-AUC 0.7987) vs ZZFeatureMap (supplementary, ensemble PR-AUC 0.7408). Point estimates from existing experiment log; paired-bootstrap CIs deferred to the headline GPU run |
+| [results/sensitivity_stacking_vs_weighted.md](results/sensitivity_stacking_vs_weighted.md) | Supplementary §8.6 — ensemble-configuration sensitivity: stacking (primary) vs weighted-average. Qualitative observations from existing log; full weighted-average run deferred to the headline GPU run |
+| [results/bootstrap_ci_analysis.md](results/bootstrap_ci_analysis.md) | (Generated) Manuscript-ready H1 and H1b paired-bootstrap CIs from `scripts/run_bootstrap_ci.py`. Not yet committed — produced by the headline GPU run on the DGX |
+
 ## Improvements logs (`docs/improvements/`)
 
 Iteration summaries: [improvements/](improvements/).
@@ -86,6 +97,7 @@ Iteration summaries: [improvements/](improvements/).
 | [deployment/DOCKER_INSTALL.md](deployment/DOCKER_INSTALL.md) | Docker install notes |
 | [deployment/README_FEATUREMAP_TESTING.md](deployment/README_FEATUREMAP_TESTING.md) | Feature-map Docker testing index |
 | [deployment/FEATUREMAP_TESTING_GUIDE.md](deployment/FEATUREMAP_TESTING_GUIDE.md), [deployment/FEATUREMAP_DOCKERFILE_ANALYSIS.md](deployment/FEATUREMAP_DOCKERFILE_ANALYSIS.md), … | Feature-map build & test notes |
+| [deployment/DGX_BOOTSTRAP_CI.md](deployment/DGX_BOOTSTRAP_CI.md) | NVIDIA DGX Spark / cuStateVec workflow for the H1/H1b paired-bootstrap CI run on real Hetionet (qiskit-aer-gpu install, data sync, verification, launch, troubleshooting) |
 
 The **`deployment/`** directory at the **repo root** holds Dockerfiles, `docker-compose.yml`, and image-specific requirements. Prose for deployment lives under **`docs/deployment/`** (above).
 

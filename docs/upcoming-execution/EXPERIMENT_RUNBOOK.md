@@ -9,6 +9,54 @@ Deltas vs [planning/COMMAND_REFERENCE_NEXT_TASKS.md](../planning/COMMAND_REFEREN
 - Pipeline JSON: `results/optimized_results_<stamp>.json`
 - Optuna: `results/optuna/optuna_trials.csv`, `results/optuna/optuna_best.json`
 
+## ML-Intern quantum job orchestration
+
+Use `ml-intern` as a supervising CLI agent while keeping quantum execution behind
+the repo-owned deterministic runner in `scripts/quantum_job_runner.py`.
+Install `ml-intern` from [`huggingface/ml-intern`](https://github.com/huggingface/ml-intern),
+then configure the model provider keys it needs. Keep IBM Quantum tokens out of
+prompts; save them through `/settings` first or through the local config API.
+
+Dry-run the wrapper prompt without invoking `ml-intern`:
+
+```bash
+./scripts/ml_intern_quantum_job.sh simulator-smoke --dry-run
+```
+
+Run a cheap local simulator smoke job through `ml-intern`:
+
+```bash
+./scripts/ml_intern_quantum_job.sh simulator-smoke \
+  --results-dir results/ml-intern/smoke
+```
+
+Validate a stored IBM Quantum tenant credential without submitting hardware work:
+
+```bash
+./scripts/ml_intern_quantum_job.sh heron-dry-run \
+  --tenant-id local-dev \
+  --max-entities 100 \
+  --qubits 4 \
+  --shots 100 \
+  --dry-run
+```
+
+For a real Heron job, remove the runner dry-run and add the explicit hardware
+confirmation flag:
+
+```bash
+./scripts/ml_intern_quantum_job.sh heron-run \
+  --tenant-id local-dev \
+  --max-entities 100 \
+  --qubits 4 \
+  --shots 100 \
+  --confirm-hardware
+```
+
+The runner injects `IBM_Q_TOKEN`, `IBM_QUANTUM_TOKEN`, and
+`IBM_QUANTUM_INSTANCE` into the child process environment only. It does not print
+token values.
+
 ## Recommended evaluation presets
 
 | Preset | When to use | Flags |

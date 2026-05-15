@@ -82,6 +82,13 @@ Thumbs.db
 qiskitrc
 ibm_quantum_credentials.json
 *.pem
+secrets/
+
+# --- Service shell artifacts ---
+artifacts/runs/
+artifacts/jobs/
+artifacts/evaluations/
+artifacts/LATEST.txt
 
 # --- Project artifacts (large / reproducible) ---
 *.log
@@ -93,7 +100,10 @@ tmp/
 cache/
 
 # Pipeline outputs, predictions, Optuna DBs, experiment history
-results/
+# Anchored to repo root: /results/ is the runtime cache (per-fold .npz, logs).
+# docs/results/ holds manuscript-track markdown (audits, sensitivity write-ups,
+# the bootstrap_ci_analysis.md that the GPU run emits) and IS tracked.
+/results/
 
 # Heavy inputs & trained artifacts (adjust if you track sample data)
 *.pkl

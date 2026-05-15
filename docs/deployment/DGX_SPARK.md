@@ -14,6 +14,7 @@ chmod +x scripts/run_full_embedding_dgx.sh
 - Writes a timestamped log under `results/full_embedding_dgx_<stamp>.log` (override with `LOG_PATH=...`).
 - Uses **full-graph RotatE**, **128** dims, **200** epochs, **hard** negatives, **`--classical_only`** (skips quantum training after embeddings).
 - Points quantum config at `config/quantum_config_dgx.yaml` for consistency on GPU systems (classical-only runs still load config paths used elsewhere).
+- **Paired-bootstrap H1/H1b (GPU Aer):** after `data/rotate_128d_*` cache files exist, see [DGX_BOOTSTRAP_CI.md](DGX_BOOTSTRAP_CI.md) and the README [Publication metadata](../README.md#publication-metadata-provisional) pointers.
 
 Environment overrides (optional):
 

@@ -58,7 +58,20 @@ def main() -> None:
 
     required = [
         "obs_zne_enabled",
+        # Analytical (Pauli-path) — historical primary column.
         "obs_zne_kernel_posneg_mean_C0",
+        # Per preregistration §5.7 step 6 + §8.6: separate linear and Richardson
+        # extrapolations must be reported alongside the analytical fit. These
+        # columns were added by the ZNE Gap 3-5 fix; absence indicates a
+        # regression in quantum_layer/qml_trainer.py's observable schema.
+        "obs_zne_kernel_posneg_mean_C0_analytical",
+        "obs_zne_kernel_posneg_mean_C0_linear",
+        "obs_zne_kernel_posneg_mean_C0_richardson",
+        # Backend metadata (Gap 7) — distinguishes simulator runs from hardware
+        # snapshots for §8.6 sensitivity grouping.
+        "obs_zne_backend_name",
+        "obs_zne_backend_snapshot_id",
+        # Readout mitigation + raw lambda=1.0 baseline.
         "obs_readout_mitigation_enabled",
         "obs_kernel_posneg_mean_explicit_raw_lambda1",
     ]

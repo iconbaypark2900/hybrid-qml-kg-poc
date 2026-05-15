@@ -1,0 +1,17 @@
+# Optional GPU dependencies for QSVC kernel evaluation on cuStateVec.
+#
+# Install AFTER `pip install -r requirements-full.txt`, matched to the CUDA
+# major version that `nvidia-smi` reports on the target machine. Used by:
+#   - scripts/run_bootstrap_ci.py --gpu
+#   - scripts/run_bootstrap_ci_dgx.sh
+#   - scripts/verify_qiskit_gpu.py
+#
+# See docs/deployment/DGX_BOOTSTRAP_CI.md §2.2 for the full install
+# walkthrough. Verify the install with `python scripts/verify_qiskit_gpu.py`
+# before launching a long run.
+#
+# The exact wheel name on PyPI varies by qiskit-aer release; if `qiskit-aer-gpu`
+# alone fails to find a CUDA build, consult:
+#   https://qiskit.org/ecosystem/aer/howtos/running_gpu.html
+
+qiskit-aer-gpu>=0.13

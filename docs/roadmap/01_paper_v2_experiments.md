@@ -55,7 +55,7 @@ python scripts/run_optimized_pipeline.py \
 extension. CpD (Compound-palliates-Disease, 390 positive edges) is the natural
 first extension requiring zero code changes.
 
-**What to run:**
+**What to run:**                                                                                                                                                                                                                                                                              
 
 ```bash
 python scripts/run_optimized_pipeline.py \

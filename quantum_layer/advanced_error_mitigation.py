@@ -3,6 +3,16 @@
 """
 Advanced Error Mitigation Techniques Inspired by Google Quantum AI
 Implements Pauli Path-inspired ZNE and adaptive noise modeling.
+
+Per preregistration §5.7 / §8.6, three zero-noise extrapolations are
+computed at noise scales [1×, 3×, 5×] and reported separately:
+
+  * Analytical Pauli-path fit (the primary, implemented in PauliPathZNE)
+  * Linear polyfit (linear_zero_noise_extrapolation)
+  * Richardson extrapolation (richardson_zero_noise_extrapolation)
+
+The three values are emitted as separate observable columns by
+quantum_layer/qml_trainer.py for downstream §8.6 sensitivity analysis.
 """
 
 import numpy as np
@@ -12,6 +22,117 @@ from scipy.special import erf
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def linear_zero_noise_extrapolation(
+    noise_scales: np.ndarray, measurements: np.ndarray
+) -> float:
+    """Zero-noise value from a degree-1 polynomial fit.
+
+    Solves ``y = a*lambda + b`` by ordinary least squares and returns
+    the intercept ``b`` (which is the extrapolation to ``lambda=0``).
+    Standard Richardson would handle a higher-order fit; this helper
+    exists separately so reviewers see the *first-order* extrapolation
+    explicitly per preregistration §5.7 step 4.
+
+    Args:
+        noise_scales: 1-D array of noise factors, length n >= 2.
+        measurements: 1-D array of measured values at each scale.
+
+    Returns:
+        The zero-noise intercept (a float).
+    """
+    scales = np.asarray(noise_scales, dtype=float).ravel()
+    meas = np.asarray(measurements, dtype=float).ravel()
+    if scales.shape != meas.shape:
+        raise ValueError(
+            f"linear ZNE: scales {scales.shape} != measurements {meas.shape}"
+        )
+    if scales.shape[0] < 2:
+        raise ValueError("linear ZNE: need at least 2 noise scales")
+    # polyfit returns highest-degree coeff first; for deg=1 -> [slope, intercept]
+    slope, intercept = np.polyfit(scales, meas, deg=1)
+    return float(intercept)
+
+
+def richardson_zero_noise_extrapolation(
+    noise_scales: np.ndarray, measurements: np.ndarray
+) -> float:
+    """Zero-noise value via classical Richardson extrapolation.
+
+    For ``n`` noise scales, computes coefficients ``c_i`` such that
+    ``sum(c_i * lambda_i^k) = 1 if k == 0 else 0`` for ``k = 0..n-1``,
+    then returns ``sum(c_i * y_i)``. This cancels error terms up to
+    order ``n-1`` in ``lambda`` and matches the canonical form used
+    in preregistration §5.7 step 5.
+
+    With three scales ``[1, 3, 5]`` (the preregistered defaults), the
+    closed-form coefficients are ``c = (1.875, -1.25, 0.375)`` so that
+    ``f(0) ≈ 1.875 f(1) − 1.25 f(3) + 0.375 f(5)``.
+
+    Args:
+        noise_scales: 1-D array of noise factors, length n >= 2.
+        measurements: 1-D array of measured values at each scale.
+
+    Returns:
+        The zero-noise extrapolated value (a float).
+
+    Raises:
+        ValueError: shape mismatch or fewer than 2 scales.
+        np.linalg.LinAlgError: singular Vandermonde (e.g. duplicate scales).
+    """
+    scales = np.asarray(noise_scales, dtype=float).ravel()
+    meas = np.asarray(measurements, dtype=float).ravel()
+    if scales.shape != meas.shape:
+        raise ValueError(
+            f"Richardson ZNE: scales {scales.shape} != measurements {meas.shape}"
+        )
+    n = scales.shape[0]
+    if n < 2:
+        raise ValueError("Richardson ZNE: need at least 2 noise scales")
+    # Vandermonde-like system: A[k, i] = lambda_i ** k for k = 0..n-1.
+    A = np.vstack([scales ** k for k in range(n)])
+    rhs = np.zeros(n)
+    rhs[0] = 1.0
+    coeffs = np.linalg.solve(A, rhs)
+    return float(np.dot(coeffs, meas))
+
+
+def all_zero_noise_extrapolations(
+    pauli_path_zne: "PauliPathZNE",
+    noise_scales: np.ndarray,
+    measurements: np.ndarray,
+    measurement_errors: Optional[np.ndarray] = None,
+) -> Dict[str, float]:
+    """Compute all three pre-registered ZNE methods on the same data.
+
+    Returns a dict with keys ``analytical``, ``linear``, ``richardson``
+    plus the analytical ``params`` sub-dict. Used by qml_trainer.py to
+    emit per-method observable columns (preregistration §8.6).
+
+    Each method is wrapped in try/except so a single failing method
+    does not block the others; failed methods produce ``float("nan")``.
+    """
+    out: Dict[str, float] = {"analytical": float("nan"), "linear": float("nan"),
+                             "richardson": float("nan")}
+    params: Dict[str, float] = {}
+    try:
+        c0_analytical, params = pauli_path_zne.fit_noise_model(
+            noise_scales, measurements, measurement_errors
+        )
+        out["analytical"] = float(c0_analytical)
+    except Exception as e:
+        logger.warning(f"analytical ZNE failed: {e}")
+    try:
+        out["linear"] = linear_zero_noise_extrapolation(noise_scales, measurements)
+    except Exception as e:
+        logger.warning(f"linear ZNE failed: {e}")
+    try:
+        out["richardson"] = richardson_zero_noise_extrapolation(noise_scales, measurements)
+    except Exception as e:
+        logger.warning(f"Richardson ZNE failed: {e}")
+    out["params"] = params  # type: ignore[assignment]
+    return out
 
 
 class PauliPathZNE:

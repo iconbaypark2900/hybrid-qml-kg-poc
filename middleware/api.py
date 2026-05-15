@@ -1,16 +1,21 @@
 # middleware/api.py
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Any, Dict
 import logging
 import os
 import re
+import time
+import uuid
+from collections import Counter, deque
 import numpy as np
 from .orchestrator import LinkPredictionOrchestrator
 from utils.latest_run import get_latest_run_snapshot
 from .job_manager import job_manager
+from .research_store import research_store
+from .integration_store import DEFAULT_CHANNEL, integration_store
 from utils.ibm_runtime_verify import (
     sanitize_quantum_config_for_client,
     verify_ibm_quantum_runtime,
@@ -52,8 +57,12 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 _default_origins = [
     "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3780",  # Next.js dev (scripts/dev_stack.sh default FRONTEND_PORT)
     "http://localhost:8501",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:3780",
     "http://127.0.0.1:8501",
 ]
 _cors_origins_env = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
@@ -75,6 +84,56 @@ app.add_middleware(
 # Constants
 # ---------------------------------------------------------------------------
 MAX_BATCH_SIZE = int(os.environ.get("MAX_BATCH_SIZE", "100"))
+ENABLE_INTERNAL_AUTH = os.environ.get("ENABLE_INTERNAL_AUTH", "0").strip() in ("1", "true", "yes")
+QGG_INTERNAL_API_SECRET = os.environ.get("QGG_INTERNAL_API_SECRET", "")
+ENABLE_OPS_ENDPOINTS = os.environ.get("ENABLE_OPS_ENDPOINTS", "1").strip() in ("1", "true", "yes")
+OPS_RECENT_FAILURE_LIMIT = int(os.environ.get("OPS_RECENT_FAILURE_LIMIT", "50"))
+APP_STARTED_AT = time.time()
+REQUEST_COUNTS: Counter = Counter()
+REQUEST_FAILURES: Counter = Counter()
+RECENT_FAILURES: deque = deque(maxlen=OPS_RECENT_FAILURE_LIMIT)
+
+
+@app.middleware("http")
+async def request_observability_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-qgg-request-id") or f"req-{uuid.uuid4().hex[:12]}"
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except Exception as exc:
+        status_code = 500
+        raise
+    finally:
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+        route_key = f"{request.method} {request.url.path}"
+        REQUEST_COUNTS[route_key] += 1
+        if status_code >= 400:
+            REQUEST_FAILURES[route_key] += 1
+            RECENT_FAILURES.appendleft(
+                {
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": status_code,
+                    "duration_ms": elapsed_ms,
+                    "timestamp": time.time(),
+                }
+            )
+        logger.info(
+            "request_id=%s method=%s path=%s status=%s duration_ms=%s",
+            request_id,
+            request.method,
+            request.url.path,
+            status_code,
+            elapsed_ms,
+        )
+        try:
+            response.headers["x-qgg-request-id"] = request_id  # type: ignore[possibly-undefined]
+        except Exception:
+            pass
 
 # Initialize orchestrator (singleton)
 try:
@@ -112,8 +171,31 @@ class StatusResponse(BaseModel):
     supported_relations: List[str] = ["CtD"]  # Compound treats Disease
 
 
+class OpsHealthResponse(BaseModel):
+    status: str
+    uptime_seconds: float
+    request_counts: Dict[str, int]
+    request_failures: Dict[str, int]
+    recent_failure_count: int
+    orchestrator_ready: bool
+    classical_model_loaded: bool
+    quantum_model_loaded: bool
+    cors_allowed_origins: List[str]
+    internal_auth_enabled: bool
+    environment: str
+
+
+class OpsFailureResponse(BaseModel):
+    request_id: str
+    method: str
+    path: str
+    status_code: int
+    duration_ms: float
+    timestamp: float
+
+
 class RankedMechanismsRequest(BaseModel):
-    hypothesis_id: str  # "H-001" | "H-002" | "H-003"
+    hypothesis_id: str  # persisted hypothesis id (e.g., "H-001")
     disease_id: str     # Disease name or Hetionet ID
     top_k: Optional[int] = 50
 
@@ -133,6 +215,143 @@ class RankedMechanismsResponse(BaseModel):
     error_message: Optional[str] = None
 
 
+class HypothesisBase(BaseModel):
+    name: str
+    description: str
+    disease_focus: Optional[str] = None
+    mechanism_type: Optional[str] = None
+    notes: Optional[str] = None
+    status: str = "draft"  # draft | active | tested
+
+
+class HypothesisCreateRequest(HypothesisBase):
+    pass
+
+
+class HypothesisUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    disease_focus: Optional[str] = None
+    mechanism_type: Optional[str] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+    last_tested_run_id: Optional[str] = None
+
+
+class HypothesisResponse(HypothesisBase):
+    id: str
+    created_at: float
+    updated_at: float
+    last_tested_run_id: Optional[str] = None
+
+
+class ExperimentHistoryResponse(BaseModel):
+    job_id: str
+    hypothesis_id: Optional[str] = None
+    relation: Optional[str] = None
+    config: Dict[str, Any] = {}
+    metadata: Dict[str, Any] = {}
+    status: str
+    created_at: float
+    started_at: Optional[float] = None
+    finished_at: Optional[float] = None
+    exit_code: Optional[int] = None
+    error: Optional[str] = None
+    run_timestamp: Optional[str] = None
+
+
+class ResearchSessionBase(BaseModel):
+    title: str
+    reviewer_name: Optional[str] = None
+    reviewer_email: Optional[str] = None
+    selected_entity: Dict[str, Any]
+    selected_candidate: Dict[str, Any]
+    run_mode: str
+    score_threshold: Optional[str] = None
+    mechanism_weight: Optional[str] = None
+    decision: str = "Review"
+    notes: Optional[str] = None
+    evidence_state: Dict[str, Any]
+    provenance: List[Dict[str, Any]] = []
+    hypothesis_id: Optional[str] = None
+
+
+class ResearchSessionCreateRequest(ResearchSessionBase):
+    pass
+
+
+class ResearchSessionUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    reviewer_name: Optional[str] = None
+    reviewer_email: Optional[str] = None
+    selected_entity: Optional[Dict[str, Any]] = None
+    selected_candidate: Optional[Dict[str, Any]] = None
+    run_mode: Optional[str] = None
+    score_threshold: Optional[str] = None
+    mechanism_weight: Optional[str] = None
+    decision: Optional[str] = None
+    notes: Optional[str] = None
+    evidence_state: Optional[Dict[str, Any]] = None
+    provenance: Optional[List[Dict[str, Any]]] = None
+    hypothesis_id: Optional[str] = None
+
+
+class ResearchSessionResponse(ResearchSessionBase):
+    id: str
+    created_at: float
+    updated_at: float
+    exported_at: Optional[float] = None
+
+
+class EvidencePacketResponse(BaseModel):
+    evidence_packet_version: int
+    session: Dict[str, Any]
+    research_context: Dict[str, Any]
+    decision: Dict[str, Any]
+    evidence_state: Dict[str, Any]
+    provenance: List[Dict[str, Any]]
+
+
+class AuditEventResponse(BaseModel):
+    id: str
+    timestamp: float
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    role: Optional[str] = None
+    action: str
+    resource_type: str
+    resource_id: Optional[str] = None
+    status: str
+    metadata: Dict[str, Any] = {}
+
+
+class EvidenceProvenance(BaseModel):
+    endpoint: str
+    source_kind: str
+    artifact_path: Optional[str] = None
+    artifact_name: Optional[str] = None
+    mtime_epoch: Optional[float] = None
+    run_timestamp: Optional[str] = None
+    relation: Optional[str] = None
+    model_name: Optional[str] = None
+    model_type: Optional[str] = None
+    embedding_method: Optional[str] = None
+    embedding_dim: Optional[int] = None
+    seed: Optional[int] = None
+    config: Optional[Dict[str, Any]] = None
+    notes: List[str] = []
+
+
+class CandidateEvidenceLink(BaseModel):
+    kind: str
+    label: str
+    source: str
+    relation: Optional[str] = None
+    url: Optional[str] = None
+    score: Optional[float] = None
+    provenance: Optional[EvidenceProvenance] = None
+
+
 class LatestRunResponse(BaseModel):
     """Latest pipeline artifacts under ``results/`` (see ``utils/latest_run.py``)."""
 
@@ -140,6 +359,7 @@ class LatestRunResponse(BaseModel):
     results_dir: str
     latest_csv: Optional[Dict[str, Any]] = None
     latest_json: Optional[Dict[str, Any]] = None
+    provenance: List[EvidenceProvenance] = []
     message: Optional[str] = None
 
 
@@ -173,6 +393,9 @@ class JobCreateRequest(BaseModel):
     tune_classical: bool = False
     results_dir: str = "results"
     quantum_config_path: str = "config/quantum_config.yaml"
+    hypothesis_id: Optional[str] = None
+    experiment_note: Optional[str] = None
+    experiment_tags: List[str] = []
 
     @field_validator("results_dir")
     @classmethod
@@ -189,11 +412,194 @@ class JobResponse(BaseModel):
     id: str
     status: str
     created_at: float
+    hypothesis_id: Optional[str] = None
+    experiment_metadata: Dict[str, Any] = {}
+    flags: Dict[str, Any] = {}
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
     exit_code: Optional[int] = None
     error: Optional[str] = None
     log_tail: Optional[List[str]] = None
+
+
+PIPELINE_FLAG_KEYS = {
+    "relation",
+    "embedding_method",
+    "embedding_dim",
+    "embedding_epochs",
+    "qml_dim",
+    "qml_feature_map",
+    "qml_feature_map_reps",
+    "fast_mode",
+    "skip_quantum",
+    "run_ensemble",
+    "ensemble_method",
+    "tune_classical",
+    "results_dir",
+    "quantum_config_path",
+}
+
+
+def _extract_pipeline_flags(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: v for k, v in payload.items() if k in PIPELINE_FLAG_KEYS}
+
+
+def _sync_job_records() -> None:
+    for j in job_manager.list_jobs():
+        research_store.sync_experiment_from_job(j.to_dict())
+
+
+def _internal_actor(request: Request) -> Dict[str, Any]:
+    role = request.headers.get("x-qgg-role") or "anonymous"
+    actor = {
+        "user_id": request.headers.get("x-qgg-user-id"),
+        "user_email": request.headers.get("x-qgg-user-email"),
+        "role": role,
+        "scopes": request.headers.get("x-qgg-scopes", ""),
+    }
+    if not ENABLE_INTERNAL_AUTH:
+        return actor
+
+    signature = request.headers.get("x-qgg-internal-signature")
+    if not QGG_INTERNAL_API_SECRET or signature != QGG_INTERNAL_API_SECRET:
+        _record_audit_event(
+            actor,
+            action="auth.deny",
+            resource_type="internal_api",
+            resource_id=request.url.path,
+            status="denied",
+            metadata={"reason": "invalid_internal_signature"},
+        )
+        raise HTTPException(status_code=401, detail="Internal API authorization required")
+    return actor
+
+
+def _tenant_id_from_request(request: Request) -> str:
+    raw = (
+        request.headers.get("x-tenant-id")
+        or request.headers.get("x-qgg-user-id")
+        or "local-dev"
+    )
+    tenant_id = raw.strip()
+    if not tenant_id or len(tenant_id) > 128:
+        raise HTTPException(status_code=400, detail="Invalid tenant ID.")
+    return tenant_id
+
+
+def _ibm_metadata_response(metadata: Dict[str, Any]) -> "IBMQuantumConfigResponse":
+    return IBMQuantumConfigResponse(
+        configured=bool(metadata.get("configured")),
+        tenant_id=metadata["tenant_id"],
+        provider=metadata.get("provider", "ibm_quantum"),
+        instance=metadata.get("instance_crn"),
+        channel=metadata.get("channel") or DEFAULT_CHANNEL,
+        token_preview=metadata.get("token_preview"),
+        secret_storage=metadata.get("secret_storage"),
+        created_at=metadata.get("created_at"),
+        updated_at=metadata.get("updated_at"),
+        last_verified_at=metadata.get("last_verified_at"),
+    )
+
+
+def _record_audit_event(
+    actor: Dict[str, Any],
+    *,
+    action: str,
+    resource_type: str,
+    resource_id: Optional[str],
+    status: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    try:
+        research_store.record_audit_event(
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            status=status,
+            user_id=actor.get("user_id"),
+            user_email=actor.get("user_email"),
+            role=actor.get("role"),
+            metadata=metadata,
+        )
+    except Exception as exc:
+        logger.warning("Audit event failed: %s", exc)
+
+
+def _artifact_name(path: Optional[str]) -> Optional[str]:
+    return os.path.basename(path) if path else None
+
+
+def _provenance_from_latest_json(
+    endpoint: str,
+    snapshot: Dict[str, Any],
+    *,
+    notes: Optional[List[str]] = None,
+) -> Optional[EvidenceProvenance]:
+    latest_json = snapshot.get("latest_json")
+    if not latest_json:
+        return None
+    config = latest_json.get("config") if isinstance(latest_json.get("config"), dict) else None
+    return EvidenceProvenance(
+        endpoint=endpoint,
+        source_kind="run_artifact",
+        artifact_path=latest_json.get("path"),
+        artifact_name=_artifact_name(latest_json.get("path")),
+        mtime_epoch=latest_json.get("mtime_epoch"),
+        run_timestamp=latest_json.get("timestamp"),
+        relation=latest_json.get("relation"),
+        embedding_method=latest_json.get("embedding_method"),
+        embedding_dim=latest_json.get("embedding_dim"),
+        seed=latest_json.get("seed"),
+        config=config,
+        notes=notes or [],
+    )
+
+
+def _csv_provenance(
+    endpoint: str,
+    snapshot: Dict[str, Any],
+    *,
+    notes: Optional[List[str]] = None,
+) -> Optional[EvidenceProvenance]:
+    latest_csv = snapshot.get("latest_csv")
+    if not latest_csv:
+        return None
+    return EvidenceProvenance(
+        endpoint=endpoint,
+        source_kind="run_artifact",
+        artifact_path=latest_csv.get("path"),
+        artifact_name=_artifact_name(latest_csv.get("path")),
+        mtime_epoch=latest_csv.get("mtime_epoch"),
+        notes=notes or [],
+    )
+
+
+def _dataset_provenance(
+    endpoint: str,
+    *,
+    artifact_path: Optional[str],
+    relation: Optional[str] = None,
+    notes: Optional[List[str]] = None,
+) -> EvidenceProvenance:
+    return EvidenceProvenance(
+        endpoint=endpoint,
+        source_kind="dataset",
+        artifact_path=artifact_path,
+        artifact_name=_artifact_name(artifact_path),
+        relation=relation,
+        notes=notes or [],
+    )
+
+
+def _latest_run_provenance(endpoint: str, snapshot: Dict[str, Any]) -> List[EvidenceProvenance]:
+    provenance: List[EvidenceProvenance] = []
+    csv_prov = _csv_provenance(endpoint, snapshot, notes=["latest_run.csv summary row"])
+    json_prov = _provenance_from_latest_json(endpoint, snapshot, notes=["optimized_results JSON summary"])
+    if csv_prov:
+        provenance.append(csv_prov)
+    if json_prov:
+        provenance.append(json_prov)
+    return provenance
 
 
 @app.get("/", include_in_schema=False)
@@ -209,6 +615,7 @@ async def get_runs_latest():
     (by mtime), using the same resolution rules as the Streamlit benchmark dashboard.
     """
     payload = get_latest_run_snapshot()
+    payload["provenance"] = _latest_run_provenance("/runs/latest", payload)
     return LatestRunResponse(**payload)
 
 
@@ -234,6 +641,34 @@ async def get_status():
         quantum_model_loaded=False,
         entity_count=entity_count,
     )
+
+
+@app.get("/ops/health", response_model=OpsHealthResponse)
+async def ops_health():
+    if not ENABLE_OPS_ENDPOINTS:
+        raise HTTPException(status_code=404, detail="Ops endpoints disabled")
+    classical_ready = bool(orchestrator and orchestrator.classical_predictor is not None)
+    embedder_ready = bool(orchestrator and orchestrator.embedder is not None)
+    return OpsHealthResponse(
+        status="healthy" if classical_ready and embedder_ready else "degraded",
+        uptime_seconds=round(time.time() - APP_STARTED_AT, 2),
+        request_counts=dict(REQUEST_COUNTS),
+        request_failures=dict(REQUEST_FAILURES),
+        recent_failure_count=len(RECENT_FAILURES),
+        orchestrator_ready=classical_ready and embedder_ready,
+        classical_model_loaded=classical_ready,
+        quantum_model_loaded=False,
+        cors_allowed_origins=_cors_origins,
+        internal_auth_enabled=ENABLE_INTERNAL_AUTH,
+        environment=os.environ.get("ENVIRONMENT", "development"),
+    )
+
+
+@app.get("/ops/errors", response_model=List[OpsFailureResponse])
+async def ops_errors(limit: int = Query(default=20, ge=1, le=100)):
+    if not ENABLE_OPS_ENDPOINTS:
+        raise HTTPException(status_code=404, detail="Ops endpoints disabled")
+    return [OpsFailureResponse(**item) for item in list(RECENT_FAILURES)[:limit]]
 
 
 @app.post("/predict-link", response_model=PredictionResponse)
@@ -332,6 +767,8 @@ async def ranked_mechanisms(request: RankedMechanismsRequest):
     """
     if orchestrator is None:
         raise HTTPException(status_code=500, detail="System not initialized")
+    if research_store.get_hypothesis(request.hypothesis_id) is None:
+        raise HTTPException(status_code=404, detail="Hypothesis not found")
 
     try:
         result = orchestrator.rank_mechanism_candidates(
@@ -347,6 +784,141 @@ async def ranked_mechanisms(request: RankedMechanismsRequest):
     except Exception as e:
         logger.error(f"Ranked mechanisms failed: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/hypotheses", response_model=List[HypothesisResponse])
+async def list_hypotheses():
+    items = research_store.list_hypotheses()
+    return [HypothesisResponse(**it) for it in items]
+
+
+@app.post("/hypotheses", response_model=HypothesisResponse)
+async def create_hypothesis(body: HypothesisCreateRequest):
+    created = research_store.create_hypothesis(
+        name=body.name,
+        description=body.description,
+        disease_focus=body.disease_focus,
+        mechanism_type=body.mechanism_type,
+        notes=body.notes,
+        status=body.status,
+    )
+    return HypothesisResponse(**created)
+
+
+@app.get("/hypotheses/{hypothesis_id}", response_model=HypothesisResponse)
+async def get_hypothesis(hypothesis_id: str):
+    item = research_store.get_hypothesis(hypothesis_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Hypothesis not found")
+    return HypothesisResponse(**item)
+
+
+@app.patch("/hypotheses/{hypothesis_id}", response_model=HypothesisResponse)
+async def patch_hypothesis(hypothesis_id: str, body: HypothesisUpdateRequest):
+    updated = research_store.update_hypothesis(
+        hypothesis_id,
+        body.model_dump(exclude_none=True),
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Hypothesis not found")
+    return HypothesisResponse(**updated)
+
+
+@app.get("/experiments/history", response_model=List[ExperimentHistoryResponse])
+async def experiments_history(hypothesis_id: Optional[str] = Query(default=None)):
+    _sync_job_records()
+    rows = research_store.list_experiments(hypothesis_id=hypothesis_id)
+    return [ExperimentHistoryResponse(**r) for r in rows]
+
+
+@app.get("/hypotheses/{hypothesis_id}/experiments", response_model=List[ExperimentHistoryResponse])
+async def hypothesis_experiments(hypothesis_id: str):
+    if research_store.get_hypothesis(hypothesis_id) is None:
+        raise HTTPException(status_code=404, detail="Hypothesis not found")
+    _sync_job_records()
+    rows = research_store.list_experiments(hypothesis_id=hypothesis_id)
+    return [ExperimentHistoryResponse(**r) for r in rows]
+
+
+@app.get("/research-sessions", response_model=List[ResearchSessionResponse])
+async def list_research_sessions(
+    hypothesis_id: Optional[str] = Query(default=None),
+    reviewer_email: Optional[str] = Query(default=None),
+):
+    rows = research_store.list_research_sessions(
+        hypothesis_id=hypothesis_id,
+        reviewer_email=reviewer_email,
+    )
+    return [ResearchSessionResponse(**row) for row in rows]
+
+
+@app.post("/research-sessions", response_model=ResearchSessionResponse)
+async def create_research_session(body: ResearchSessionCreateRequest, request: Request):
+    actor = _internal_actor(request)
+    if body.hypothesis_id and research_store.get_hypothesis(body.hypothesis_id) is None:
+        raise HTTPException(status_code=404, detail="Hypothesis not found")
+    created = research_store.create_research_session(**body.model_dump())
+    _record_audit_event(
+        actor,
+        action="research_session.create",
+        resource_type="research_session",
+        resource_id=created["id"],
+        status="allowed",
+    )
+    return ResearchSessionResponse(**created)
+
+
+@app.get("/research-sessions/{session_id}/export", response_model=EvidencePacketResponse)
+async def export_research_session(session_id: str, request: Request):
+    actor = _internal_actor(request)
+    packet = research_store.export_research_session(session_id)
+    if packet is None:
+        raise HTTPException(status_code=404, detail="Research session not found")
+    _record_audit_event(
+        actor,
+        action="research_session.export",
+        resource_type="research_session",
+        resource_id=session_id,
+        status="allowed",
+    )
+    return EvidencePacketResponse(**packet)
+
+
+@app.get("/research-sessions/{session_id}", response_model=ResearchSessionResponse)
+async def get_research_session(session_id: str):
+    item = research_store.get_research_session(session_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Research session not found")
+    return ResearchSessionResponse(**item)
+
+
+@app.get("/audit-events", response_model=List[AuditEventResponse])
+async def list_audit_events(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    _internal_actor(request)
+    return [AuditEventResponse(**row) for row in research_store.list_audit_events(limit=limit)]
+
+
+@app.patch("/research-sessions/{session_id}", response_model=ResearchSessionResponse)
+async def patch_research_session(session_id: str, body: ResearchSessionUpdateRequest, request: Request):
+    actor = _internal_actor(request)
+    patch = body.model_dump(exclude_unset=True)
+    if patch.get("hypothesis_id") and research_store.get_hypothesis(patch["hypothesis_id"]) is None:
+        raise HTTPException(status_code=404, detail="Hypothesis not found")
+    updated = research_store.update_research_session(session_id, patch)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Research session not found")
+    _record_audit_event(
+        actor,
+        action="research_session.update",
+        resource_type="research_session",
+        resource_id=session_id,
+        status="allowed",
+        metadata={"fields": list(patch.keys())},
+    )
+    return ResearchSessionResponse(**updated)
 
 
 class KGStatsResponse(BaseModel):
@@ -404,6 +976,67 @@ class QuantumRuntimeVerifyResponse(BaseModel):
     hardware_backend_names: List[str] = []
     simulator_count: int = 0
     instances_count: Optional[int] = None
+
+
+class IBMQuantumConfigRequest(BaseModel):
+    """
+    Persisted tenant-scoped IBM Quantum credentials. Never log this payload.
+    """
+
+    token: str = Field(
+        ...,
+        min_length=8,
+        max_length=512,
+        description="IBM Quantum API token from https://quantum.ibm.com/",
+    )
+    instance: Optional[str] = Field(
+        None,
+        max_length=512,
+        description="Optional IBM Quantum instance CRN.",
+    )
+    channel: str = Field(
+        DEFAULT_CHANNEL,
+        max_length=64,
+        description="Qiskit Runtime channel.",
+    )
+
+
+class IBMQuantumVerifyRequest(BaseModel):
+    """
+    Verify IBM Quantum credentials. If token is omitted, stored tenant credentials are used.
+    """
+
+    token: Optional[str] = Field(
+        None,
+        min_length=8,
+        max_length=512,
+        description="IBM Quantum API token from https://quantum.ibm.com/",
+    )
+    instance: Optional[str] = Field(
+        None,
+        max_length=512,
+        description="Optional IBM Quantum instance CRN.",
+    )
+    channel: str = Field(DEFAULT_CHANNEL, max_length=64)
+
+
+class IBMQuantumConfigResponse(BaseModel):
+    configured: bool
+    tenant_id: str
+    provider: str = "ibm_quantum"
+    instance: Optional[str] = None
+    channel: str = DEFAULT_CHANNEL
+    token_preview: Optional[str] = None
+    secret_storage: Optional[str] = None
+    created_at: Optional[float] = None
+    updated_at: Optional[float] = None
+    last_verified_at: Optional[float] = None
+    message: Optional[str] = None
+
+
+class IBMQuantumVerifyResponse(QuantumRuntimeVerifyResponse):
+    tenant_id: str
+    used_stored_credentials: bool = False
 
 
 @app.get("/kg/stats", response_model=KGStatsResponse)
@@ -503,6 +1136,91 @@ async def quantum_runtime_verify(body: QuantumRuntimeVerifyRequest):
     return QuantumRuntimeVerifyResponse(**result)
 
 
+@app.get("/config/ibm-quantum", response_model=IBMQuantumConfigResponse)
+async def get_ibm_quantum_config(request: Request):
+    """Return non-sensitive IBM Quantum credential metadata for the tenant."""
+    tenant_id = _tenant_id_from_request(request)
+    metadata = integration_store.get_ibm_quantum_metadata(tenant_id)
+    if metadata is None:
+        return IBMQuantumConfigResponse(
+            configured=False,
+            tenant_id=tenant_id,
+            message="No IBM Quantum credentials are stored for this tenant.",
+        )
+    return _ibm_metadata_response(metadata)
+
+
+@app.post("/config/ibm-quantum", response_model=IBMQuantumConfigResponse)
+async def save_ibm_quantum_config(request: Request, body: IBMQuantumConfigRequest):
+    """
+    Save tenant-scoped IBM Quantum credentials.
+
+    The token is encrypted with Fernet when INTEGRATION_ENCRYPTION_KEY is set;
+    otherwise it is base64-encoded for local/dev only. The token is never returned.
+    """
+    tenant_id = _tenant_id_from_request(request)
+    try:
+        metadata = integration_store.save_ibm_quantum_credentials(
+            tenant_id=tenant_id,
+            token=body.token,
+            instance_crn=body.instance,
+            channel=body.channel,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("Could not save IBM Quantum credentials for tenant %s: %s", tenant_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save IBM Quantum credentials.",
+        ) from exc
+    response = _ibm_metadata_response(metadata)
+    response.message = "IBM Quantum credentials saved for this tenant."
+    return response
+
+
+@app.post(
+    "/config/ibm-quantum/verify",
+    response_model=IBMQuantumVerifyResponse,
+    summary="Verify IBM Quantum credentials for a tenant",
+)
+async def verify_ibm_quantum_config(request: Request, body: IBMQuantumVerifyRequest):
+    """
+    Verify supplied credentials without saving, or verify stored tenant credentials
+    when token is omitted.
+    """
+    tenant_id = _tenant_id_from_request(request)
+    used_stored = False
+    token = (body.token or "").strip()
+    instance = body.instance
+    channel = body.channel
+
+    if not token:
+        stored = integration_store.get_ibm_quantum_credentials(tenant_id)
+        if stored is None:
+            raise HTTPException(
+                status_code=404,
+                detail="No IBM Quantum credentials are stored for this tenant.",
+            )
+        token = stored["token"]
+        instance = stored.get("instance_crn")
+        channel = stored.get("channel") or DEFAULT_CHANNEL
+        used_stored = True
+
+    result = verify_ibm_quantum_runtime(
+        token,
+        instance_crn=instance,
+        channel=channel.strip() if channel else DEFAULT_CHANNEL,
+    )
+    if result.get("status") == "ok" and used_stored:
+        integration_store.mark_ibm_quantum_verified(tenant_id)
+    return IBMQuantumVerifyResponse(
+        **result,
+        tenant_id=tenant_id,
+        used_stored_credentials=used_stored,
+    )
+
+
 class AnalysisSummaryResponse(BaseModel):
     """Aggregated metrics derived from the latest pipeline run."""
     status: str
@@ -515,6 +1233,7 @@ class AnalysisSummaryResponse(BaseModel):
     ranking: Optional[List[Dict[str, Any]]] = None
     relation: Optional[str] = None
     run_timestamp: Optional[str] = None
+    provenance: List[EvidenceProvenance] = []
     message: Optional[str] = None
 
 
@@ -552,6 +1271,7 @@ async def analysis_summary():
         ranking=ranking,
         relation=json_blob.get("relation"),
         run_timestamp=json_blob.get("timestamp"),
+        provenance=_latest_run_provenance("/analysis/summary", snapshot),
     )
 
 
@@ -581,8 +1301,9 @@ async def list_exports():
 
 
 @app.get("/exports/{filename}")
-async def download_export(filename: str):
+async def download_export(filename: str, request: Request):
     """Download a single results file (path traversal protected)."""
+    _internal_actor(request)
     from fastapi.responses import FileResponse
     from utils.latest_run import get_results_dir
     import re
@@ -601,13 +1322,40 @@ async def download_export(filename: str):
 
 
 @app.post("/jobs/pipeline", response_model=JobResponse)
-async def create_pipeline_job(request: JobCreateRequest):
+async def create_pipeline_job(request: JobCreateRequest, http_request: Request):
     """
     Start ``run_optimized_pipeline.py`` as a background job.
     Returns immediately with a job id that can be polled via ``GET /jobs/{id}``.
     """
-    flags = request.model_dump()
-    job = job_manager.create(flags)
+    actor = _internal_actor(http_request)
+    payload = request.model_dump()
+    flags = _extract_pipeline_flags(payload)
+    experiment_metadata = {
+        "note": payload.get("experiment_note"),
+        "tags": payload.get("experiment_tags", []),
+    }
+    if request.hypothesis_id and research_store.get_hypothesis(request.hypothesis_id) is None:
+        raise HTTPException(status_code=404, detail="Hypothesis not found")
+    job = job_manager.create(
+        flags,
+        hypothesis_id=request.hypothesis_id,
+        experiment_metadata=experiment_metadata,
+    )
+    research_store.record_experiment_created(
+        job_id=job.id,
+        hypothesis_id=request.hypothesis_id,
+        relation=flags.get("relation"),
+        config=flags,
+        metadata=experiment_metadata,
+    )
+    _record_audit_event(
+        actor,
+        action="pipeline_job.create",
+        resource_type="job",
+        resource_id=job.id,
+        status="allowed",
+        metadata={"relation": flags.get("relation")},
+    )
     return JobResponse(**job.to_dict())
 
 
@@ -617,12 +1365,14 @@ async def get_job(job_id: str):
     job = job_manager.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    research_store.sync_experiment_from_job(job.to_dict())
     return JobResponse(**job.to_dict())
 
 
 @app.get("/jobs", response_model=List[JobResponse])
 async def list_jobs():
     """List all pipeline jobs (most recent first)."""
+    _sync_job_records()
     jobs = sorted(job_manager.list_jobs(), key=lambda j: j.created_at, reverse=True)
     return [JobResponse(**j.to_dict()) for j in jobs]
 
@@ -651,6 +1401,7 @@ class VizMoleculeResponse(BaseModel):
     compound_name: Optional[str] = None
     atoms: List[VizAtom] = []
     bonds: List[VizBond] = []
+    provenance: List[EvidenceProvenance] = []
     message: Optional[str] = None
 
 
@@ -701,6 +1452,7 @@ class VizKGSubgraphResponse(BaseModel):
     nodes: List[VizKGNode] = []
     links: List[VizKGLink] = []
     center_entity: Optional[str] = None
+    provenance: List[EvidenceProvenance] = []
     message: Optional[str] = None
 
 
@@ -751,6 +1503,7 @@ class VizModelMetricsResponse(BaseModel):
     ablation: Optional[Dict[str, float]] = None
     relation: Optional[str] = None
     run_timestamp: Optional[str] = None
+    provenance: List[EvidenceProvenance] = []
     message: Optional[str] = None
 
 
@@ -763,6 +1516,7 @@ class VizCircuitResponse(BaseModel):
     execution_mode: Optional[str] = None
     backend: Optional[str] = None
     shots: Optional[int] = None
+    provenance: List[EvidenceProvenance] = []
 
 
 class VizRunPrediction(BaseModel):
@@ -783,6 +1537,7 @@ class VizRunPredictionsResponse(BaseModel):
     run_timestamp: Optional[str] = None
     source_file: Optional[str] = None
     available_runs: List[str] = []
+    provenance: List[EvidenceProvenance] = []
     message: Optional[str] = None
 
 
@@ -1036,6 +1791,24 @@ def _load_hetionet():
     return edf, name_map, kind_map
 
 
+def _hetionet_edges_path() -> Optional[str]:
+    base = os.path.dirname(os.path.dirname(__file__))
+    edges_sif = os.path.join(base, "data", "hetionet-v1.0-edges.sif")
+    return os.path.abspath(edges_sif) if os.path.exists(edges_sif) else None
+
+
+def _pubchem_provenance(endpoint: str, compound_name: str) -> EvidenceProvenance:
+    return EvidenceProvenance(
+        endpoint=endpoint,
+        source_kind="external",
+        artifact_name="PubChem PUG REST",
+        notes=[
+            f"compound={compound_name}",
+            "record_type=3d",
+        ],
+    )
+
+
 @app.get("/viz/kg-search")
 async def viz_kg_search(
     q: str = Query(..., description="Search term (name fragment)"),
@@ -1071,7 +1844,17 @@ async def viz_kg_subgraph(
     import pandas as pd
     edf, name_map, kind_map = _load_hetionet()
     if edf is None:
-        return VizKGSubgraphResponse(status="error", message="Edge file not found")
+        return VizKGSubgraphResponse(
+            status="error",
+            message="Edge file not found",
+            provenance=[
+                EvidenceProvenance(
+                    endpoint="/viz/kg-subgraph",
+                    source_kind="dataset",
+                    notes=["Hetionet edge file was not available."],
+                )
+            ],
+        )
 
     # Optional relation filter
     allowed_rels = None
@@ -1139,6 +1922,18 @@ async def viz_kg_subgraph(
         nodes=nodes,
         links=all_links,
         center_entity=entity,
+        provenance=[
+            _dataset_provenance(
+                "/viz/kg-subgraph",
+                artifact_path=_hetionet_edges_path(),
+                relation=relation_filter,
+                notes=[
+                    f"center_entity={entity}",
+                    f"hops={hops}",
+                    f"max_nodes={max_nodes}",
+                ],
+            )
+        ],
     )
 
 
@@ -1286,6 +2081,7 @@ async def viz_model_metrics():
         ablation=ablation,
         relation=json_blob.get("relation"),
         run_timestamp=json_blob.get("timestamp"),
+        provenance=_latest_run_provenance("/viz/model-metrics", snapshot),
     )
 
 
@@ -1323,6 +2119,17 @@ async def viz_circuit_params():
         shots = q.get("heron", {}).get("shots")
     elif execution_mode == "simulator":
         shots = q.get("simulator", {}).get("shots")
+    provenance = _latest_run_provenance("/viz/circuit-params", snapshot)
+    provenance.append(
+        EvidenceProvenance(
+            endpoint="/viz/circuit-params",
+            source_kind="config",
+            artifact_path=os.path.abspath(config_path),
+            artifact_name=os.path.basename(config_path),
+            config=config_data,
+            notes=["Circuit params merge quantum_config.yaml and latest optimized run config."],
+        )
+    )
 
     return VizCircuitResponse(
         status="ok",
@@ -1333,6 +2140,7 @@ async def viz_circuit_params():
         execution_mode=execution_mode,
         backend=backend,
         shots=shots,
+        provenance=provenance,
     )
 
 
@@ -1382,6 +2190,7 @@ async def viz_molecule(
         return VizMoleculeResponse(
             status="error",
             compound_name=name,
+            provenance=[_pubchem_provenance("/viz/molecule", name)],
             message=f"PubChem lookup failed for '{name}': {exc}",
         )
 
@@ -1416,6 +2225,7 @@ async def viz_molecule(
             compound_name=name,
             atoms=atoms,
             bonds=bonds,
+            provenance=[_pubchem_provenance("/viz/molecule", name)],
         )
         _mol_cache[cache_key] = resp
         return resp
@@ -1423,6 +2233,7 @@ async def viz_molecule(
         return VizMoleculeResponse(
             status="error",
             compound_name=name,
+            provenance=[_pubchem_provenance("/viz/molecule", name)],
             message=f"Failed to parse PubChem response: {exc}",
         )
 
@@ -1478,6 +2289,15 @@ async def viz_run_predictions(
     if not rd.exists():
         return VizRunPredictionsResponse(
             status="error", message="Results directory not found", available_runs=available,
+            provenance=[
+                EvidenceProvenance(
+                    endpoint="/viz/run-predictions",
+                    source_kind="run_artifact",
+                    artifact_path=str(rd.resolve()),
+                    artifact_name=rd.name,
+                    notes=["Results directory was not found."],
+                )
+            ],
         )
 
     name_map = _load_name_map()
@@ -1526,6 +2346,16 @@ async def viz_run_predictions(
         return VizRunPredictionsResponse(
             status="error", message="No prediction CSV found in results/",
             available_runs=available,
+            provenance=[
+                EvidenceProvenance(
+                    endpoint="/viz/run-predictions",
+                    source_kind="run_artifact",
+                    artifact_path=str(rd.resolve()),
+                    artifact_name=rd.name,
+                    run_timestamp=run_ts,
+                    notes=["No prediction CSV found for requested run."],
+                )
+            ],
         )
 
     predictions: List[VizRunPrediction] = []
@@ -1596,6 +2426,17 @@ async def viz_run_predictions(
         run_timestamp=run_ts,
         source_file=source_file,
         available_runs=available,
+        provenance=[
+            EvidenceProvenance(
+                endpoint="/viz/run-predictions",
+                source_kind="run_artifact",
+                artifact_path=str((rd / source_file).resolve()) if source_file else None,
+                artifact_name=source_file,
+                mtime_epoch=(rd / source_file).stat().st_mtime if source_file and (rd / source_file).exists() else None,
+                run_timestamp=run_ts,
+                notes=["Predictions loaded from pipeline CSV artifact."],
+            )
+        ],
     )
 
 

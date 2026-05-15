@@ -14,6 +14,10 @@ license: mit
 
 Gradio UI that calls the same **FastAPI** application as the main product (`middleware/api.py`) via an in-process `TestClient` — no duplicate business logic.
 
+## Research framing (matches preregistration)
+
+The underlying study evaluates **H1** (QSVC vs each classical baseline on PR-AUC, with a strict paired-bootstrap rule) and **H1b** (the **stacking ensemble** vs each baseline — the headline hybrid configuration). See `preregistration/osf_preregistration_v1.md` §1.3 and §8.1 for full wording; numbers shown in the UI come from your local `results/` runs, not from preregistered outcomes.
+
 ## What’s included
 
 - **Tier A:** `/status`, `/runs/latest`, `/analysis/summary`, `/quantum/config`, `/quantum/runtime/verify`

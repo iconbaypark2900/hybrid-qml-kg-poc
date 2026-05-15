@@ -1,8 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { AnalysisSummaryResponse } from "@/lib/api";
-import { fetchAnalysisSummary, getApiBaseUrl } from "@/lib/api";
+import { fetchAnalysisSummary } from "@/lib/api";
+import { ApiRecoveryCard } from "@/components/api-recovery-card";
+import { LoadingBlock } from "@/components/spinner";
+import { NoPipelineResultsCta } from "@/components/no-pipeline-results-cta";
+import { ResearchNextActions } from "@/components/research-next-actions";
 
 export default function NextStepsPage() {
   const [data, setData] = useState<AnalysisSummaryResponse | null>(null);
@@ -38,32 +43,25 @@ export default function NextStepsPage() {
     <div className="space-y-6">
       <header>
         <h1 className="font-headline text-2xl font-semibold tracking-tight text-on-surface">
-          Analysis: next steps
+          Recommendations
         </h1>
         <p className="mt-1 text-sm text-on-surface-variant">
-          Automated recommendations based on the latest pipeline run.
+          Automated next-step suggestions derived from the latest pipeline run — e.g. enable
+          quantum models, improve embeddings, tune hyperparameters. Based on the same summary
+          as{" "}
+          <Link href="/analysis/drug-delivery" className="text-primary underline-offset-2 hover:underline">
+            Drug delivery analysis
+          </Link>
+          {" "}— that page shows aggregated performance numbers from the same data.
         </p>
       </header>
 
       {loading ? (
-        <p className="text-sm text-on-surface-variant" role="status">
-          Sequencing&hellip;
-        </p>
+        <LoadingBlock text="Loading analysis summary…" />
       ) : error ? (
-        <div className="rounded-lg border border-error/40 bg-error-container/20 p-4">
-          <p className="text-sm font-medium text-error">
-            Could not load analysis
-          </p>
-          <p className="mt-1 text-xs text-on-surface-variant">{error}</p>
-          <p className="mt-3 text-xs text-on-surface-variant">
-            Base URL:{" "}
-            <code className="text-on-surface">{getApiBaseUrl()}</code>
-          </p>
-        </div>
+        <ApiRecoveryCard title="Could not load analysis" error={error} />
       ) : data?.status === "no_results" ? (
-        <div className="rounded-lg border border-outline-variant/15 bg-surface-container-high/60 p-5 text-sm text-on-surface-variant">
-          No pipeline results yet. Run the pipeline first.
-        </div>
+        <NoPipelineResultsCta />
       ) : suggestions.length > 0 ? (
         <ul className="space-y-3">
           {suggestions.map((s, i) => (
@@ -75,6 +73,15 @@ export default function NextStepsPage() {
               <p className="mt-1 text-xs text-on-surface-variant">
                 {s.detail}
               </p>
+              <Link
+                href={s.href}
+                className="mt-3 inline-flex items-center gap-1 rounded-lg border border-outline/20 bg-surface-container-lowest px-3 py-1.5 text-xs font-medium text-on-surface hover:bg-surface-container"
+              >
+                <span className="material-symbols-outlined text-sm" aria-hidden>
+                  arrow_forward
+                </span>
+                {s.cta}
+              </Link>
             </li>
           ))}
         </ul>
@@ -83,6 +90,8 @@ export default function NextStepsPage() {
           No specific recommendations at this time.
         </div>
       )}
+
+      <ResearchNextActions context="analysis" />
     </div>
   );
 }
@@ -90,6 +99,8 @@ export default function NextStepsPage() {
 interface Suggestion {
   title: string;
   detail: string;
+  href: string;
+  cta: string;
 }
 
 function deriveNextSteps(data: AnalysisSummaryResponse): Suggestion[] {
@@ -99,7 +110,9 @@ function deriveNextSteps(data: AnalysisSummaryResponse): Suggestion[] {
     out.push({
       title: "Enable quantum models",
       detail:
-        "The last run had no quantum models. Re-run without --skip_quantum to compare QSVC/VQC against classical baselines.",
+        "The latest run did not include quantum models. Launch a hybrid preset to compare QSVC/VQC against classical baselines.",
+      href: "/simulation/parameters?preset=hybrid-default",
+      cta: "Open hybrid preset",
     });
   }
 
@@ -107,7 +120,9 @@ function deriveNextSteps(data: AnalysisSummaryResponse): Suggestion[] {
     out.push({
       title: "Try ensemble methods",
       detail:
-        "Add --run_ensemble --ensemble_method stacking to combine classical and quantum predictions for potentially higher PR-AUC.",
+        "Combine classical and quantum predictions in a single run and compare aggregate performance in the comparison charts.",
+      href: "/simulation/parameters?preset=hybrid-default",
+      cta: "Configure ensemble run",
     });
   }
 
@@ -115,7 +130,9 @@ function deriveNextSteps(data: AnalysisSummaryResponse): Suggestion[] {
     out.push({
       title: "Improve embedding quality",
       detail:
-        "Best PR-AUC is below 0.70. Consider RotatE embeddings (--embedding_method RotatE --embedding_dim 128 --embedding_epochs 200) and full-graph context (--full_graph_embeddings).",
+        "Best PR-AUC is below 0.70. Try a stronger embedding preset with larger dimensions and epochs.",
+      href: "/simulation/parameters?preset=classical-baseline",
+      cta: "Open embedding-focused preset",
     });
   }
 
@@ -123,7 +140,9 @@ function deriveNextSteps(data: AnalysisSummaryResponse): Suggestion[] {
     out.push({
       title: "Fine-tune hyperparameters",
       detail:
-        "PR-AUC is promising. Run Optuna search (python scripts/optuna_pipeline_search.py --n_trials 50 --objective best) to squeeze out further gains.",
+        "PR-AUC is promising. Run a tuning-focused follow-up to improve model selection and confidence bands.",
+      href: "/simulation/parameters?preset=hybrid-default",
+      cta: "Launch tuning follow-up",
     });
   }
 
@@ -131,7 +150,9 @@ function deriveNextSteps(data: AnalysisSummaryResponse): Suggestion[] {
     out.push({
       title: "Validate on additional relations",
       detail:
-        "PR-AUC >= 0.80 is strong. Test generalization by running on other relations (e.g. --relation DaG).",
+        "PR-AUC >= 0.80 is strong. Validate generalization by exploring additional relations in New run.",
+      href: "/simulation/parameters",
+      cta: "Open New run",
     });
   }
 
@@ -139,7 +160,9 @@ function deriveNextSteps(data: AnalysisSummaryResponse): Suggestion[] {
     out.push({
       title: "Classical tuning",
       detail:
-        "Add --tune_classical to run GridSearchCV on ExtraTrees, RandomForest, and LogisticRegression for potential gains with minimal overhead.",
+        "Run classical hyperparameter tuning and compare with current leaderboard before selecting the next hypothesis iteration.",
+      href: "/simulation/parameters?preset=classical-baseline",
+      cta: "Configure classical tuning",
     });
   }
 

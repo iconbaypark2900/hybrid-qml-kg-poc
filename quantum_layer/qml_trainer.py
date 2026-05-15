@@ -869,13 +869,19 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
         noise_spec = sim_cfg.get("noise_model")
 
         if zne_enabled and exec_mode == "simulator_noisy" and isinstance(noise_spec, str) and noise_spec.strip().startswith("depolarizing:"):
-            from quantum_layer.advanced_error_mitigation import PauliPathZNE
+            from quantum_layer.advanced_error_mitigation import (
+                PauliPathZNE,
+                all_zero_noise_extrapolations,
+            )
             from qiskit_aer.noise import NoiseModel, depolarizing_error
             from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
+            from utils.preregistered_constants import ZNE_NOISE_SCALES
             import json as _json
 
             base_prob = float(noise_spec.strip().split(":", 1)[1])
-            scales = zne_cfg.get("scales", [1.0, 1.5, 2.0])
+            # Default noise factors locked by preregistration §5.7 step 1-3 = (1, 3, 5).
+            # YAML can override (debug / sensitivity); deviation requires a §12 amendment.
+            scales = zne_cfg.get("scales", list(ZNE_NOISE_SCALES))
             # Ensure valid, sorted, includes 1.0 and only uses amplification (>= 1.0)
             scales = sorted({float(s) for s in scales if float(s) >= 1.0} | {1.0})
 
@@ -1128,27 +1134,66 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
                             "zne_skipped_reason": f"scale_measurement_mismatch(scales={len(scales_arr)},meas={len(meas_arr_raw)})",
                         })
                     else:
-                        zne = PauliPathZNE(use_bayesian_priors=False)
-                        C0_raw, fit_params_raw = zne.fit_noise_model(scales_arr, meas_arr_raw, measurement_errors=None)
+                        # Compute analytical (Pauli-path), linear, and Richardson
+                        # extrapolations on each stream — preregistration §5.7 step
+                        # 6 + §8.6 sensitivity. all_zero_noise_extrapolations()
+                        # returns a dict {analytical, linear, richardson, params}.
+                        zne_raw_dict = all_zero_noise_extrapolations(
+                            PauliPathZNE(use_bayesian_priors=False),
+                            scales_arr, meas_arr_raw, measurement_errors=None,
+                        )
+                        C0_raw = zne_raw_dict["analytical"]
+                        C0_raw_linear = zne_raw_dict["linear"]
+                        C0_raw_richardson = zne_raw_dict["richardson"]
+                        fit_params_raw = zne_raw_dict.get("params", {}) or {}
+
+                        zne_ro_dict: Dict[str, float] = {}
                         C0_ro = None
-                        fit_params_ro = {}
+                        C0_ro_linear = None
+                        C0_ro_richardson = None
+                        fit_params_ro: Dict[str, float] = {}
                         if meas_arr_ro is not None and len(meas_arr_ro) == len(scales_arr):
                             try:
-                                zne2 = PauliPathZNE(use_bayesian_priors=False)
-                                C0_ro, fit_params_ro = zne2.fit_noise_model(scales_arr, meas_arr_ro, measurement_errors=None)
+                                zne_ro_dict = all_zero_noise_extrapolations(
+                                    PauliPathZNE(use_bayesian_priors=False),
+                                    scales_arr, meas_arr_ro, measurement_errors=None,
+                                )
+                                if not np.isnan(zne_ro_dict["analytical"]):
+                                    C0_ro = float(zne_ro_dict["analytical"])
+                                if not np.isnan(zne_ro_dict["linear"]):
+                                    C0_ro_linear = float(zne_ro_dict["linear"])
+                                if not np.isnan(zne_ro_dict["richardson"]):
+                                    C0_ro_richardson = float(zne_ro_dict["richardson"])
+                                fit_params_ro = zne_ro_dict.get("params", {}) or {}
                             except Exception:
                                 C0_ro = None
 
                         # Choose primary C0: prefer readout-mitigated if available
+                        # (the existing convention; applies to all three methods).
                         C0_primary = float(C0_ro) if C0_ro is not None else float(C0_raw)
+                        C0_primary_linear = (
+                            float(C0_ro_linear) if C0_ro_linear is not None else float(C0_raw_linear)
+                        )
+                        C0_primary_richardson = (
+                            float(C0_ro_richardson) if C0_ro_richardson is not None else float(C0_raw_richardson)
+                        )
                         fit_params_primary = fit_params_ro if C0_ro is not None else fit_params_raw
 
-                        # Guardrail: clip C0 into [0,1] and record if we had to.
+                        # Guardrail: clip the primary analytical C0 into [0,1] and
+                        # record if we had to. Linear / Richardson are NOT clipped
+                        # — reviewers can see the raw extrapolations and decide.
                         clipped = False
                         if not np.isnan(C0_primary):
                             if C0_primary < 0.0 or C0_primary > 1.0:
                                 clipped = True
                                 C0_primary = float(np.clip(C0_primary, 0.0, 1.0))
+
+                        # Backend metadata (Gap 7). For the simulator path here,
+                        # backend identifies the local Aer simulator + noise model.
+                        # Hardware path (when implemented) overrides these from the
+                        # IBM job metadata at execution time.
+                        zne_backend_name = "aer_simulator_statevector"
+                        zne_backend_snapshot_id = f"sim::{noise_spec}"
 
                         observables.update({
                             "zne_enabled": 1,
@@ -1159,9 +1204,32 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
                             "zne_scales_json": _json.dumps(scales),
                             "zne_measurements_json_raw": _json.dumps([float(x) for x in meas_arr_raw.tolist()]),
                             "zne_measurements_json_readout": _json.dumps([float(x) for x in meas_arr_ro.tolist()]) if meas_arr_ro is not None else None,
+
+                            # Analytical (Pauli-path) — historical primary, kept under
+                            # the original column names for backwards compatibility.
                             "zne_kernel_posneg_mean_C0_raw": float(C0_raw),
                             "zne_kernel_posneg_mean_C0_readout": float(C0_ro) if C0_ro is not None else None,
                             "zne_kernel_posneg_mean_C0": float(C0_primary),
+                            # Explicit alias (preregistration §8.6 reads cleaner with the
+                            # method spelled out): mirror the values above.
+                            "zne_kernel_posneg_mean_C0_analytical_raw": float(C0_raw),
+                            "zne_kernel_posneg_mean_C0_analytical_readout": float(C0_ro) if C0_ro is not None else None,
+                            "zne_kernel_posneg_mean_C0_analytical": float(C0_primary),
+
+                            # Linear polyfit — preregistration §5.7 step 4.
+                            "zne_kernel_posneg_mean_C0_linear_raw": float(C0_raw_linear),
+                            "zne_kernel_posneg_mean_C0_linear_readout": float(C0_ro_linear) if C0_ro_linear is not None else None,
+                            "zne_kernel_posneg_mean_C0_linear": float(C0_primary_linear),
+
+                            # Richardson — preregistration §5.7 step 5.
+                            "zne_kernel_posneg_mean_C0_richardson_raw": float(C0_raw_richardson),
+                            "zne_kernel_posneg_mean_C0_richardson_readout": float(C0_ro_richardson) if C0_ro_richardson is not None else None,
+                            "zne_kernel_posneg_mean_C0_richardson": float(C0_primary_richardson),
+
+                            # Backend metadata (preregistration §8.6 sensitivity).
+                            "zne_backend_name": zne_backend_name,
+                            "zne_backend_snapshot_id": zne_backend_snapshot_id,
+
                             "zne_C0_clipped": int(clipped),
                             "zne_fit_error": float(fit_params_primary.get("fit_error", float("nan"))),
                             "zne_H_bar": float(fit_params_primary.get("H_bar", float("nan"))),
@@ -1169,8 +1237,11 @@ def qsvc_with_precomputed_kernel(X_train, y_train, X_test, y_test, args, log):
                             "zne_beta": float(fit_params_primary.get("beta", float("nan"))),
                         })
                         log.info(
-                            f"[ZNE] mitigated kernel_posneg_mean: raw@1.0={meas_arr_raw[0]:.4f} → C0={float(C0_primary):.4f} "
-                            f"(scales={scales})"
+                            f"[ZNE] mitigated kernel_posneg_mean: raw@1.0={meas_arr_raw[0]:.4f} "
+                            f"→ analytical={float(C0_primary):.4f} | "
+                            f"linear={float(C0_primary_linear):.4f} | "
+                            f"richardson={float(C0_primary_richardson):.4f} "
+                            f"(scales={scales}, backend={zne_backend_name})"
                         )
         else:
             # Keep it explicit in logs/CSV when ZNE isn't configured.

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { StatusResponse } from "@/lib/api";
-import { fetchStatus, getApiBaseUrl } from "@/lib/api";
+import { fetchStatus } from "@/lib/api";
+import { ApiRecoveryCard } from "@/components/api-recovery-card";
 
 export function SystemStatusPanel() {
   const [data, setData] = useState<StatusResponse | null>(null);
@@ -42,19 +43,11 @@ export function SystemStatusPanel() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-error/40 bg-error-container/20 p-4">
-        <p className="text-sm font-medium text-error">Could not reach API</p>
-        <p className="mt-1 text-xs text-on-surface-variant">{error}</p>
-        <p className="mt-3 text-xs text-on-surface-variant">
-          Base URL: <code className="text-on-surface">{getApiBaseUrl()}</code> —
-          start FastAPI with{" "}
-          <code className="text-on-surface">
-            uvicorn middleware.api:app --reload
-          </code>{" "}
-          from the repo root, or set{" "}
-          <code className="text-on-surface">NEXT_PUBLIC_API_URL</code>.
-        </p>
-      </div>
+      <ApiRecoveryCard
+        title="Could not reach API"
+        error={error}
+        details="Use System status to verify readiness, then continue in New run."
+      />
     );
   }
 

@@ -18,11 +18,16 @@ try:
         QiskitRuntimeService, Sampler as RuntimeSampler,
         Session, Options
     )
+    try:
+        from qiskit_ibm_runtime.options import SamplerOptions
+    except ImportError:
+        SamplerOptions = Options
 except ImportError:
     QiskitRuntimeService = None  # type: ignore[misc, assignment]
     RuntimeSampler = None  # type: ignore[misc, assignment]
     Session = None  # type: ignore[misc, assignment]
     Options = None  # type: ignore[misc, assignment]
+    SamplerOptions = None  # type: ignore[misc, assignment]
 from qiskit.transpiler import PassManager
 try:
     from qiskit.transpiler.passes import DynamicalDecoupling
@@ -35,6 +40,23 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+class RuntimePassManager:
+    """Pass-manager adapter for IBM Runtime fidelity circuits."""
+
+    def __init__(self, pass_manager: Any) -> None:
+        self.pass_manager = pass_manager
+
+    def run(self, circuit: QuantumCircuit) -> QuantumCircuit:
+        transpiled = self.pass_manager.run(circuit)
+        # The global phase is irrelevant for compute-uncompute measurement
+        # probabilities, and parameterized phases can fail QPY serialization.
+        try:
+            transpiled.global_phase = 0
+        except Exception:
+            pass
+        return transpiled
+
+
 class QuantumExecutor:
     """
     Unified executor for quantum circuits supporting both simulator and IBM Heron/Torino.
@@ -42,11 +64,18 @@ class QuantumExecutor:
 
     @staticmethod
     def gpu_available() -> bool:
-        """Check if GPU-backed Aer simulation is available (cuStateVec)."""
+        """Check if GPU-backed Aer simulation is genuinely available (cuStateVec).
+
+        Uses ``AerSimulator.available_devices()`` which queries the backend
+        device registry. The previous implementation tried to construct
+        ``AerSimulator(device='GPU')`` which is permissive and returned True
+        even on CPU-only systems (the failure only surfaced later when a
+        circuit actually tried to run). All callers in this repo use the
+        result for logging or hard-gating, so accuracy matters.
+        """
         try:
             from qiskit_aer import AerSimulator
-            AerSimulator(method='statevector', device='GPU')
-            return True
+            return "GPU" in AerSimulator().available_devices()
         except Exception:
             return False
     
@@ -250,11 +279,17 @@ class QuantumExecutor:
             backend = self.service.backend(backend_name)
             logger.info(f"🚀 Using IBM Quantum backend: {backend_name}")
             
-            # Configure options - FIXED for new API (removed unsupported options)
-            options = Options()
+            # Configure sampler options. qiskit-ibm-runtime 0.42 expects
+            # SamplerOptions rather than generic Options for SamplerV2.
+            options = SamplerOptions() if SamplerOptions is not None else Options()
+            if hasattr(options, "default_shots"):
+                options.default_shots = int(heron_config["shots"])
             # New API uses different structure - check if execution exists
             if hasattr(options, 'execution'):
-                options.execution.shots = heron_config['shots']
+                try:
+                    options.execution.shots = int(heron_config['shots'])
+                except Exception:
+                    pass
             # max_execution_time may not be in Options anymore
             if hasattr(options, 'max_execution_time'):
                 options.max_execution_time = heron_config['max_runtime_minutes'] * 60
@@ -279,7 +314,19 @@ class QuantumExecutor:
             
             # Create session for cost efficiency
             self.session = Session(backend=backend)
-            sampler = RuntimeSampler(session=self.session, options=options)
+            sampler = RuntimeSampler(mode=self.session, options=options)
+            sampler._qgg_backend = backend
+            try:
+                from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
+
+                opt_level = int(heron_config.get("optimization_level", 1) or 1)
+                pass_manager = generate_preset_pass_manager(
+                    backend=backend,
+                    optimization_level=opt_level,
+                )
+                sampler._qgg_pass_manager = RuntimePassManager(pass_manager)
+            except Exception as e:
+                logger.warning(f"⚠️  Could not build IBM Runtime pass manager: {e}")
             
             return sampler, backend_name
             

@@ -35,6 +35,8 @@ class Job:
     status: JobStatus
     created_at: float
     flags: Dict[str, Any]
+    hypothesis_id: Optional[str] = None
+    experiment_metadata: Dict[str, Any] = field(default_factory=dict)
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
     exit_code: Optional[int] = None
@@ -52,12 +54,19 @@ class JobManager:
         self._jobs: Dict[str, Job] = {}
         self._lock = threading.Lock()
 
-    def create(self, flags: Dict[str, Any]) -> Job:
+    def create(
+        self,
+        flags: Dict[str, Any],
+        hypothesis_id: Optional[str] = None,
+        experiment_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Job:
         job = Job(
             id=uuid.uuid4().hex[:12],
             status=JobStatus.queued,
             created_at=time.time(),
             flags=flags,
+            hypothesis_id=hypothesis_id,
+            experiment_metadata=experiment_metadata or {},
         )
         with self._lock:
             self._jobs[job.id] = job

@@ -3,6 +3,17 @@
 **Status:** QSVC works but is near practical limits; VQC near-random; scaling unsolved  
 **Key constraint:** Full fidelity quantum kernel is O(n²) — infeasible beyond ~1,500 pairs
 
+### Checklist (priority / dependencies)
+
+1. **Nyström CtD sweep** — establish accuracy vs `m`; blocks choosing `m` for large relations. *Script:* `scripts/run_nystrom_sweep.sh` (dry-run by default; `EXECUTE=1` to run; optional `RUN_ON_DGX=1`).
+2. **CbG (or other large relation) with Nyström** — run only after (1) picks `m`. *Script:* `scripts/run_cbg_nystrom.sh` (`NYSTROM_M=...`).
+3. **GPU / DGX ensemble timing** — same numerics as CPU statevector; validates `HYBRID_QML_SYSTEM=dgx` / `--gpu` path. *Script:* `scripts/run_gpu_ensemble_smoke.sh`.
+4. **VQC compute budget + depth** — independent of (1–3); uses `scripts/run_vqc_scaling_smoke.sh` (`QML_MAX_ITER`, `VQC_ANSATZ_REPS`).
+5. **Kernel-target alignment hooks** — fast screens: `--optimize_feature_map_reps`, `--use_kernel_alignment`, `scripts/compute_kta_zz_vs_pauli_subset.py` (see §3).
+6. **Noisy simulator + mitigation ladder** — see §5; quick entry: `scripts/run_noisy_sim_smoke.sh` (maps to `docs/roadmap/02_scientific_gaps.md` §3; extend for ZNE/readout tiers as flags land).
+7. **Full VQKL in pipeline** — high effort; `quantum_layer/quantum_kernel_engineering.py` has trainable-kernel building blocks but is not the main QSVC path yet (§3).
+8. **Feature-map / decorrelation study** — §6; ensemble-focused metrics after baselines above.
+
 ---
 
 ## Running on NVIDIA DGX Spark (GPU)
@@ -37,7 +48,9 @@ of `n_train²`. Accuracy degrades gracefully with `m`.
 **The flag exists:** `--qsvc_nystrom_m 200`
 
 **What is missing:** A systematic sweep of `m` values to find the accuracy/
-speed tradeoff:
+speed tradeoff. **Automation:** `./scripts/run_nystrom_sweep.sh` prints the same loop (add `RUN_ON_DGX=1` for `config/quantum_config_dgx.yaml`); `EXECUTE=1` runs sequentially.
+
+Equivalent one-liner:
 
 ```bash
 for m in 50 100 200 400 800; do
@@ -59,7 +72,7 @@ the accuracy/speed curve. This table should be added to the paper.
 ### Application to CbG
 
 Once the Nyström sweep determines an acceptable `m` (e.g. 400), the CbG
-relation becomes feasible:
+relation becomes feasible. **Automation:** `./scripts/run_cbg_nystrom.sh` (`NYSTROM_M=400`, optional `RUN_ON_DGX=1`).
 
 ```bash
 HYBRID_QML_SYSTEM=dgx python scripts/run_optimized_pipeline.py --relation CbG \
@@ -97,9 +110,11 @@ HYBRID_QML_SYSTEM=dgx python scripts/run_optimized_pipeline.py --relation CtD \
   --full_graph_embeddings --embedding_method RotatE \
   --embedding_dim 128 --embedding_epochs 200 --negative_sampling hard \
   --vqc_only --qml_dim 8 --vqc_optimizer SPSA \
-  --vqc_max_iter 200 --vqc_ansatz RealAmplitudes --vqc_reps 6 \
+  --qml_max_iter 200 --vqc_ansatz_type RealAmplitudes --vqc_ansatz_reps 6 \
   --results_dir results/vqc_200iter
 ```
+
+**Automation:** `./scripts/run_vqc_scaling_smoke.sh` (`QML_MAX_ITER`, `VQC_ANSATZ_REPS`, `RUN_ON_DGX=1` optional).
 
 **Step 2: Try layerwise training**
 
@@ -138,8 +153,14 @@ The Pauli inversion effect (§6.3 of the paper) shows that kernel geometry
 matters more than standalone QSVC accuracy for ensemble diversity. VQKL
 optimizes geometry directly.
 
-**File:** `quantum_layer/quantum_kernel_engineering.py` — likely has stubs
-for this. Audit before implementing.
+**Files / hooks (already in repo):**
+
+- `quantum_layer/quantum_kernel_engineering.py` — `AdaptiveQuantumKernel` and related optimization (not wired as the default pipeline QSVC path; audit before promoting).
+- `quantum_layer/quantum_kernel_alignment.py` — `kernel_target_alignment` (used by tooling below).
+- **Pipeline CLI:** `--optimize_feature_map_reps` (KTA-driven repetition search), `--use_kernel_alignment` (alignment diagnostic on a sample before QSVC).
+- **Script:** `scripts/compute_kta_zz_vs_pauli_subset.py` — cheap ZZ vs Pauli screen on a subset.
+
+Full VQKL (joint `θ` + SVM) remains future work on top of these primitives.
 
 **Implementation sketch:**
 
@@ -170,7 +191,7 @@ No GPU benchmark result exists. The expected speedup for 16-qubit statevector
 is approximately 10–50× depending on the GPU, which would reduce the 43-minute
 kernel computation to ~1–4 minutes.
 
-**What to run** (DGX: uses `quantum_config_dgx.yaml`; same numerics as `--gpu` + `quantum_config_gpu.yaml`):
+**What to run** (DGX: uses `quantum_config_dgx.yaml`; same numerics as `--gpu` + `quantum_config_gpu.yaml`). **Automation:** `./scripts/run_gpu_ensemble_smoke.sh` (`RUN_ON_DGX=1` or `USE_GPU_FLAG=1` for non-DGX NVIDIA; never both).
 
 ```bash
 HYBRID_QML_SYSTEM=dgx python scripts/run_optimized_pipeline.py --relation CtD \
@@ -244,9 +265,9 @@ set. Lower correlation = better ensemble candidate.
 
 | Work item | Effort | Impact |
 |-----------|--------|--------|
-| Nyström sweep (m values) | Low — bash loop | Enables CbG, DaG at scale |
-| GPU benchmark | Low — config flag | Faster iteration on all experiments |
-| VQC iteration budget increase | Low | Likely lifts VQC from ~0.55 to 0.60+ |
+| Nyström sweep (m values) | Low — `scripts/run_nystrom_sweep.sh` | Enables CbG, DaG at scale |
+| GPU benchmark | Low — `scripts/run_gpu_ensemble_smoke.sh` | Faster iteration on all experiments |
+| VQC iteration budget increase | Low — `scripts/run_vqc_scaling_smoke.sh` | Likely lifts VQC from ~0.55 to 0.60+ |
 | KTA-based feature map selection | Medium | Replaces 43-min sweeps with 2-min screens |
 | Noisy simulator + ZNE ablation | Medium | Fills ideal→hardware gap |
 | VQKL (variational kernel learning) | High | Potentially large ensemble gain |

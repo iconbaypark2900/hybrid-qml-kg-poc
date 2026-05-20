@@ -84,10 +84,18 @@ ibm_quantum_credentials.json
 *.pem
 secrets/
 
+pnpm-store/
+.pnpm-store/
+# Local biomedical dumps / exports (keep out of git unless explicitly versioned)
+biomedical/
+
 # --- Service shell artifacts ---
 artifacts/runs/
 artifacts/jobs/
 artifacts/evaluations/
+artifacts/predictions/
+artifacts/signatures/
+artifacts/single_cell/
 artifacts/LATEST.txt
 
 # --- Project artifacts (large / reproducible) ---

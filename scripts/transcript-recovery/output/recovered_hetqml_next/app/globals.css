@@ -1,0 +1,7 @@
+  .footer-actions > * { width: 100%; text-align: center; }
+}
+/* Very small phones: tighten metric strip + tables to 2 columns */
+@media (max-width: 480px) {
+  .panel { padding: 14px; }
+  .field-grid { grid-template-columns: 1fr !important; }
+}

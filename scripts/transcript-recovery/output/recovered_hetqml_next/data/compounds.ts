@@ -1,0 +1,97 @@
+import type { Compound } from './types';
+
+// Curated subset of Hetionet compounds (DrugBank IDs) — categorized by therapeutic class
+export const HETIONET_COMPOUNDS: Compound[] = [
+  // Targeted therapy
+  { id: 'DB12015', name: 'Inaxaplin',        mech: 'APOL1 inhibitor',                   cat: 'targeted-therapy' },
+  { id: 'DB11581', name: 'Venetoclax',       mech: 'BCL-2 inhibitor',                   cat: 'targeted-therapy' },
+  { id: 'DB14738', name: 'Deucravacitinib',  mech: 'TYK2 allosteric inhibitor',         cat: 'targeted-therapy' },
+  { id: 'DB12218', name: 'Capivasertib',     mech: 'pan-AKT inhibitor',                 cat: 'targeted-therapy' },
+  { id: 'DB00619', name: 'Imatinib',         mech: 'BCR-ABL kinase inhibitor',          cat: 'targeted-therapy' },
+  { id: 'DB01254', name: 'Dasatinib',        mech: 'multi-kinase inhibitor',            cat: 'targeted-therapy' },
+  { id: 'DB04868', name: 'Nilotinib',        mech: 'BCR-ABL kinase inhibitor',          cat: 'targeted-therapy' },
+  { id: 'DB05294', name: 'Vandetanib',       mech: 'multi-kinase inhibitor',            cat: 'targeted-therapy' },
+  { id: 'DB01259', name: 'Lapatinib',        mech: 'EGFR/HER2 dual kinase inhibitor',   cat: 'targeted-therapy' },
+  { id: 'DB00530', name: 'Erlotinib',        mech: 'EGFR kinase inhibitor',             cat: 'targeted-therapy' },
+  { id: 'DB00317', name: 'Gefitinib',        mech: 'EGFR kinase inhibitor',             cat: 'targeted-therapy' },
+  { id: 'DB09330', name: 'Osimertinib',      mech: 'EGFR T790M inhibitor',              cat: 'targeted-therapy' },
+  { id: 'DB00398', name: 'Sorafenib',        mech: 'multi-kinase inhibitor',            cat: 'targeted-therapy' },
+  { id: 'DB05266', name: 'Ibrutinib',        mech: 'BTK inhibitor',                     cat: 'targeted-therapy' },
+  { id: 'DB14772', name: 'Sotorasib',        mech: 'KRAS G12C inhibitor',               cat: 'targeted-therapy' },
+  // Chemotherapy
+  { id: 'DB01262', name: 'Decitabine',       mech: 'DNA methyltransferase inhibitor',   cat: 'chemotherapy' },
+  { id: 'DB00997', name: 'Doxorubicin',      mech: 'topoisomerase II inhibitor',        cat: 'chemotherapy' },
+  { id: 'DB01030', name: 'Topotecan',        mech: 'topoisomerase I inhibitor',         cat: 'chemotherapy' },
+  { id: 'DB00531', name: 'Cyclophosphamide', mech: 'alkylating agent',                  cat: 'chemotherapy' },
+  { id: 'DB00958', name: 'Carboplatin',      mech: 'platinum-based agent',              cat: 'chemotherapy' },
+  { id: 'DB00515', name: 'Cisplatin',        mech: 'platinum-based agent',              cat: 'chemotherapy' },
+  { id: 'DB01248', name: 'Docetaxel',        mech: 'microtubule stabilizer',            cat: 'chemotherapy' },
+  { id: 'DB01229', name: 'Paclitaxel',       mech: 'microtubule stabilizer',            cat: 'chemotherapy' },
+  { id: 'DB00642', name: 'Pemetrexed',       mech: 'antifolate',                        cat: 'chemotherapy' },
+  { id: 'DB00563', name: 'Methotrexate',     mech: 'dihydrofolate reductase inhibitor', cat: 'chemotherapy' },
+  { id: 'DB00544', name: 'Fluorouracil',     mech: 'thymidylate synthase inhibitor',    cat: 'chemotherapy' },
+  { id: 'DB00441', name: 'Gemcitabine',      mech: 'nucleoside analog',                 cat: 'chemotherapy' },
+  { id: 'DB01177', name: 'Idarubicin',       mech: 'anthracycline',                     cat: 'chemotherapy' },
+  // Biologic
+  { id: 'DB00072', name: 'Trastuzumab',      mech: 'anti-HER2 monoclonal',              cat: 'biologic' },
+  { id: 'DB00073', name: 'Rituximab',        mech: 'anti-CD20 monoclonal',              cat: 'biologic' },
+  { id: 'DB00112', name: 'Bevacizumab',      mech: 'anti-VEGF monoclonal',              cat: 'biologic' },
+  { id: 'DB00065', name: 'Infliximab',       mech: 'anti-TNFα monoclonal',              cat: 'biologic' },
+  { id: 'DB00051', name: 'Adalimumab',       mech: 'anti-TNFα monoclonal',              cat: 'biologic' },
+  // Immunotherapy
+  { id: 'DB09028', name: 'Pembrolizumab',    mech: 'anti-PD-1 monoclonal',              cat: 'immunotherapy' },
+  { id: 'DB09035', name: 'Nivolumab',        mech: 'anti-PD-1 monoclonal',              cat: 'immunotherapy' },
+  { id: 'DB11595', name: 'Atezolizumab',     mech: 'anti-PD-L1 monoclonal',             cat: 'immunotherapy' },
+  { id: 'DB00480', name: 'Lenalidomide',     mech: 'cereblon modulator',                cat: 'immunotherapy' },
+  // Antibiotic / antiviral
+  { id: 'DB00415', name: 'Ampicillin',       mech: 'β-lactam antibiotic',               cat: 'antibiotic' },
+  { id: 'DB00759', name: 'Tetracycline',     mech: 'protein synthesis inhibitor',       cat: 'antibiotic' },
+  { id: 'DB00254', name: 'Doxycycline',      mech: 'tetracycline antibiotic',           cat: 'antibiotic' },
+  { id: 'DB01211', name: 'Erythromycin',     mech: 'macrolide antibiotic',              cat: 'antibiotic' },
+  { id: 'DB01048', name: 'Abacavir',         mech: 'NRTI antiretroviral',               cat: 'antiviral' },
+  // NSAID / analgesic
+  { id: 'DB00945', name: 'Aspirin',          mech: 'COX-1/2 inhibitor',                 cat: 'NSAID' },
+  { id: 'DB01050', name: 'Ibuprofen',        mech: 'COX-1/2 inhibitor',                 cat: 'NSAID' },
+  { id: 'DB00328', name: 'Indomethacin',     mech: 'COX inhibitor (NSAID)',             cat: 'NSAID' },
+  { id: 'DB00316', name: 'Acetaminophen',    mech: 'COX-1/2 (CNS)',                     cat: 'analgesic' },
+  // Antidiabetic
+  { id: 'DB09038', name: 'Empagliflozin',    mech: 'SGLT2 inhibitor',                   cat: 'antidiabetic' },
+  { id: 'DB00491', name: 'Miglitol',         mech: 'α-glucosidase inhibitor',           cat: 'antidiabetic' },
+  { id: 'DB00331', name: 'Metformin',        mech: 'biguanide',                         cat: 'antidiabetic' },
+  { id: 'DB00047', name: 'Insulin glargine', mech: 'insulin analog',                    cat: 'antidiabetic' },
+  { id: 'DB00030', name: 'Insulin human',    mech: 'insulin',                           cat: 'antidiabetic' },
+  { id: 'DB00197', name: 'Troglitazone',     mech: 'PPARγ agonist',                     cat: 'antidiabetic' },
+  { id: 'DB01016', name: 'Glyburide',        mech: 'sulfonylurea',                      cat: 'antidiabetic' },
+  // Statin
+  { id: 'DB01076', name: 'Atorvastatin',     mech: 'HMG-CoA reductase inhibitor',       cat: 'statin' },
+  { id: 'DB01098', name: 'Rosuvastatin',     mech: 'HMG-CoA reductase inhibitor',       cat: 'statin' },
+  { id: 'DB00641', name: 'Simvastatin',      mech: 'HMG-CoA reductase inhibitor',       cat: 'statin' },
+  { id: 'DB00227', name: 'Lovastatin',       mech: 'HMG-CoA reductase inhibitor',       cat: 'statin' },
+  // Cardiovascular
+  { id: 'DB00177', name: 'Valsartan',        mech: 'angiotensin II receptor blocker',   cat: 'cardiovascular' },
+  { id: 'DB00722', name: 'Lisinopril',       mech: 'ACE inhibitor',                     cat: 'cardiovascular' },
+  { id: 'DB00521', name: 'Carvedilol',       mech: 'non-selective β-blocker',           cat: 'cardiovascular' },
+  { id: 'DB00264', name: 'Metoprolol',       mech: 'β1-selective blocker',              cat: 'cardiovascular' },
+  { id: 'DB00390', name: 'Digoxin',          mech: 'cardiac glycoside',                 cat: 'cardiovascular' },
+  { id: 'DB01148', name: 'Flecainide',       mech: 'sodium channel blocker',            cat: 'cardiovascular' },
+  { id: 'DB00682', name: 'Warfarin',         mech: 'vitamin K antagonist',              cat: 'anticoagulant' },
+  // Antiepileptic / psychiatric
+  { id: 'DB00564', name: 'Carbamazepine',    mech: 'sodium channel blocker',            cat: 'antiepileptic' },
+  { id: 'DB00370', name: 'Mirtazapine',      mech: 'NaSSA antidepressant',              cat: 'antidepressant' },
+  { id: 'DB00715', name: 'Paroxetine',       mech: 'SSRI',                              cat: 'antidepressant' },
+  { id: 'DB00472', name: 'Fluoxetine',       mech: 'SSRI',                              cat: 'antidepressant' },
+  { id: 'DB00476', name: 'Duloxetine',       mech: 'SNRI',                              cat: 'antidepressant' },
+  { id: 'DB00734', name: 'Risperidone',      mech: 'atypical antipsychotic',            cat: 'antipsychotic' },
+  { id: 'DB00477', name: 'Chlorpromazine',   mech: 'typical antipsychotic',             cat: 'antipsychotic' },
+  { id: 'DB01068', name: 'Clonazepam',       mech: 'GABA-A potentiator',                cat: 'anxiolytic' },
+  { id: 'DB00829', name: 'Diazepam',         mech: 'benzodiazepine',                    cat: 'anxiolytic' },
+  // Corticosteroid / endocrine
+  { id: 'DB00394', name: 'Beclomethasone',   mech: 'inhaled corticosteroid',            cat: 'corticosteroid' },
+  { id: 'DB00635', name: 'Prednisone',       mech: 'oral corticosteroid',               cat: 'corticosteroid' },
+  { id: 'DB00741', name: 'Hydrocortisone',   mech: 'corticosteroid',                    cat: 'corticosteroid' },
+  { id: 'DB00451', name: 'Levothyroxine',    mech: 'thyroid hormone replacement',       cat: 'endocrine' },
+  { id: 'DB00657', name: 'Mecasermin',       mech: 'IGF-1 analog',                      cat: 'endocrine' },
+  // GI / vitamin
+  { id: 'DB00501', name: 'Cimetidine',       mech: 'H2 receptor antagonist',            cat: 'gastrointestinal' },
+  { id: 'DB00115', name: 'Cyanocobalamin',   mech: 'vitamin B12',                       cat: 'vitamin' }
+];

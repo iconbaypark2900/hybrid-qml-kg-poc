@@ -1,0 +1,116 @@
+project:
+  name: hybrid-qml-kg-evolving-ctd
+  relation: CtD
+  objective: maximize_test_pr_auc
+  results_dir: results/evolving
+
+execution:
+  dry_run: false
+  python_bin: python
+  timeout_seconds: 3600
+  stop_on_error: false
+
+scoring:
+  primary_metric: test_pr_auc
+  runtime_penalty_per_minute: 0.0005
+  noise_drop_penalty: 0.5
+  practical_margin: 0.02
+  acceptable_noise_gap: 0.05
+
+phases:
+  classical_stability:
+    description: Establish strongest classical baseline across seeds and scale tiers.
+    command_template: >-
+      {python_bin} classical_baseline/train_baseline.py
+      --relation {relation}
+      --max_entities {max_entities}
+      --embedding_dim {embedding_dim}
+      --qml_dim {qml_dim}
+      --model {model}
+      --results_dir {results_dir}/artifacts
+      --random_state {seed}
+    grid:
+      model: [LogisticRegression, SVM, RandomForest]
+      seed: [7, 13, 21, 42, 101]
+      max_entities: [300, 600, 1000]
+      embedding_dim: [32, 64]
+      qml_dim: [3, 5]
+
+  qsvc_kernel_sweep:
+    description: Compare quantum kernel variants against strongest classical SVM baseline.
+    command_template: >-
+      {python_bin} quantum_layer/qml_trainer.py
+      --relation {relation}
+      --max_entities {max_entities}
+      --embedding_dim {embedding_dim}
+      --qml_dim {qml_dim}
+      --model QSVC
+      --feature_map {feature_map}
+      --reps {reps}
+      --execution_mode {execution_mode}
+      --results_dir {results_dir}/artifacts
+      --random_state {seed}
+    grid:
+      seed: [7, 13, 21, 42, 101]
+      max_entities: [300, 600]
+      embedding_dim: [32, 64]
+      qml_dim: [2, 3, 4, 5]
+      feature_map: [ZFeatureMap, ZZFeatureMap]
+      reps: [1, 2, 3]
+      execution_mode: [ideal_simulator]
+
+  vqc_tuning:
+    description: Decide whether VQC is promising enough to continue.
+    command_template: >-
+      {python_bin} quantum_layer/qml_trainer.py
+      --relation {relation}
+      --max_entities {max_entities}
+      --embedding_dim {embedding_dim}
+      --qml_dim {qml_dim}
+      --model VQC
+      --ansatz {ansatz}
+      --reps {reps}
+      --optimizer {optimizer}
+      --maxiter {maxiter}
+      --results_dir {results_dir}/artifacts
+      --random_state {seed}
+    grid:
+      seed: [7, 13, 21, 42, 101]
+      max_entities: [300]
+      embedding_dim: [32]
+      qml_dim: [2, 3, 4]
+      ansatz: [RealAmplitudes]
+      reps: [1, 2, 3]
+      optimizer: [COBYLA, SPSA]
+      maxiter: [50, 100, 300]
+
+  noisy_robustness:
+    description: Re-run promoted quantum configs under noisy simulation.
+    command_template: >-
+      {python_bin} quantum_layer/qml_trainer.py
+      --relation {relation}
+      --max_entities {max_entities}
+      --embedding_dim {embedding_dim}
+      --qml_dim {qml_dim}
+      --model {model}
+      --execution_mode noisy_simulator
+      --noise_model {noise_model}
+      --shots {shots}
+      --results_dir {results_dir}/artifacts
+      --random_state {seed}
+    grid:
+      model: [QSVC, VQC]
+      seed: [7, 13, 21, 42, 101]
+      max_entities: [300]
+      embedding_dim: [32]
+      qml_dim: [3, 5]
+      noise_model: [depolarizing, backend_approx]
+      shots: [1024, 4096]
+
+promotion:
+  top_k_per_phase: 10
+  promote_if:
+    min_completed_seeds: 3
+    min_test_pr_auc: 0.60
+    max_metric_std: 0.08
+    max_runtime_seconds: 1800

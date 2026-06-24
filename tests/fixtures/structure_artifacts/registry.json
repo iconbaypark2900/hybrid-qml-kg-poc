@@ -1,0 +1,28 @@
+{
+  "artifacts": [
+    {
+      "target_id": "Gene::1",
+      "target_name": "Mini target",
+      "sequence_hash": "sha256:fixture-mini",
+      "source_tool": "fixture",
+      "source_version": "1.0",
+      "artifact_path": "mini_target.pdb",
+      "artifact_format": "pdb",
+      "license_note": "local test fixture",
+      "confidence": {"score_type": "pLDDT"},
+      "metadata": {"expected_residue_count": 5}
+    },
+    {
+      "target_id": "Gene::2",
+      "target_name": "No structure target",
+      "sequence_hash": "sha256:fixture-missing",
+      "source_tool": "none",
+      "source_version": "",
+      "artifact_path": "",
+      "artifact_format": "",
+      "license_note": "no structure artifact available",
+      "confidence": {},
+      "metadata": {"expected_residue_count": 7}
+    }
+  ]
+}

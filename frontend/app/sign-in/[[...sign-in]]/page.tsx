@@ -1,7 +1,8 @@
-import { SignIn } from "@clerk/nextjs";
+import { getClerkPublishableKey } from "@/lib/clerk-config";
 
-export default function SignInPage() {
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+export default async function SignInPage() {
+  const publishableKey = getClerkPublishableKey();
+  if (!publishableKey) {
     return (
       <main className="min-h-screen bg-background p-8 text-on-surface">
         <h1 className="font-headline text-3xl font-semibold">Sign in disabled</h1>
@@ -12,6 +13,7 @@ export default function SignInPage() {
     );
   }
 
+  const { SignIn } = await import("@clerk/nextjs");
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-8">
       <SignIn />

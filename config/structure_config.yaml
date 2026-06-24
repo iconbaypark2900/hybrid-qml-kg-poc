@@ -1,0 +1,9 @@
+# Local-first structure feature extraction defaults.
+#
+# Keep this pipeline offline by default. Registry paths point to local artifacts
+# produced by OpenFold, ESMFold, Chai-1, Boltz, or manually supplied fixtures.
+
+artifact_registry: data/structure/structure_artifacts.json
+output_dir: results/structure_features
+low_confidence_plddt_cutoff: 70.0
+contact_distance_angstrom: 8.0

@@ -1,6 +1,6 @@
 export type V2NavItem = {
   href: string;
-  label: "Initialize" | "Experiment" | "Validate" | "Visualize" | "Operations";
+  label: "Initialize" | "Experiment" | "Repurpose" | "Validate" | "Visualize" | "Operations";
   short: string;
   icon: string;
   description: string;
@@ -20,6 +20,13 @@ export const v2NavItems: V2NavItem[] = [
     short: "Exp",
     icon: "science",
     description: "Inspect runs, candidates, and model outputs.",
+  },
+  {
+    href: "/v2/repurposing",
+    label: "Repurpose",
+    short: "Drug",
+    icon: "biotech",
+    description: "Rank disease-focused repurposing hypotheses.",
   },
   {
     href: "/v2/validation",

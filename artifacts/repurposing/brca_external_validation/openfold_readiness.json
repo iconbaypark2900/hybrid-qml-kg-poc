@@ -1,0 +1,140 @@
+{
+  "status": "ready",
+  "schema_version": "1.0",
+  "registry": "tests/fixtures/structure_artifacts/registry.json",
+  "artifact_count": 2,
+  "local_artifact_count": 1,
+  "parse_success_count": 1,
+  "feature_count": 21,
+  "checks": [
+    {
+      "check": "registry_exists",
+      "status": "pass",
+      "evidence": "tests/fixtures/structure_artifacts/registry.json"
+    },
+    {
+      "check": "registry_has_rows",
+      "status": "pass",
+      "evidence": 2
+    },
+    {
+      "check": "target_ids_present",
+      "status": "pass",
+      "evidence": [
+        "Gene::1",
+        "Gene::2"
+      ]
+    },
+    {
+      "check": "source_tools_open_source_or_local",
+      "status": "pass",
+      "evidence": []
+    },
+    {
+      "check": "local_artifact_files_exist",
+      "status": "pass",
+      "evidence": 1
+    },
+    {
+      "check": "supported_structure_formats",
+      "status": "pass",
+      "evidence": []
+    },
+    {
+      "check": "local_artifacts_have_license_notes",
+      "status": "pass",
+      "evidence": []
+    },
+    {
+      "check": "feature_rows_match_registry",
+      "status": "pass",
+      "evidence": {
+        "features": 2,
+        "artifacts": 2
+      }
+    },
+    {
+      "check": "minimum_parse_success",
+      "status": "pass",
+      "evidence": {
+        "observed": 1,
+        "required": 1
+      }
+    }
+  ],
+  "features_preview": [
+    {
+      "target_id": "Gene::1",
+      "target_name": "Mini target",
+      "has_structure": 1,
+      "parse_success": 1,
+      "missing_structure": 0,
+      "residue_count": 4,
+      "chain_count": 2,
+      "ca_atom_count": 4,
+      "expected_residue_count": 5,
+      "residue_coverage": 0.8,
+      "plddt_mean": 72.0,
+      "plddt_median": 70.5,
+      "plddt_low_conf_fraction": 0.5,
+      "contact_count": 4,
+      "contact_density": 0.666667,
+      "radius_gyration": 5.196152,
+      "compactness": 0.7698,
+      "source_tool": "fixture",
+      "source_version": "1.0",
+      "artifact_format": "pdb",
+      "license_note": "local test fixture"
+    },
+    {
+      "target_id": "Gene::2",
+      "target_name": "No structure target",
+      "has_structure": 0,
+      "parse_success": 0,
+      "missing_structure": 1,
+      "residue_count": 0,
+      "chain_count": 0,
+      "ca_atom_count": 0,
+      "expected_residue_count": 7,
+      "residue_coverage": null,
+      "plddt_mean": null,
+      "plddt_median": null,
+      "plddt_low_conf_fraction": null,
+      "contact_count": 0,
+      "contact_density": null,
+      "radius_gyration": null,
+      "compactness": null,
+      "source_tool": "none",
+      "source_version": "",
+      "artifact_format": "",
+      "license_note": "no structure artifact available"
+    }
+  ],
+  "provenance_preview": [
+    {
+      "target_id": "Gene::1",
+      "source_tool": "fixture",
+      "source_version": "1.0",
+      "artifact_path": "/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/tests/fixtures/structure_artifacts/mini_target.pdb",
+      "artifact_format": "pdb",
+      "license_note": "local test fixture",
+      "has_structure": 1,
+      "parse_success": 1,
+      "parse_error": "",
+      "sequence_hash": "sha256:fixture-mini"
+    },
+    {
+      "target_id": "Gene::2",
+      "source_tool": "none",
+      "source_version": "",
+      "artifact_path": "",
+      "artifact_format": "",
+      "license_note": "no structure artifact available",
+      "has_structure": 0,
+      "parse_success": 0,
+      "parse_error": "",
+      "sequence_hash": "sha256:fixture-missing"
+    }
+  ],
+  "claim_policy": "Structure support is artifact-first. This proves local feature extraction, not therapeutic efficacy or de novo cure discovery."
+}

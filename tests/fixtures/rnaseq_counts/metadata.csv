@@ -1,0 +1,5 @@
+sample_id,condition,batch,cell_type,tissue
+case_a,disease,batch1,T_cell,blood
+case_b,disease,batch1,B_cell,blood
+control_a,control,batch2,T_cell,blood
+control_b,control,batch2,B_cell,blood

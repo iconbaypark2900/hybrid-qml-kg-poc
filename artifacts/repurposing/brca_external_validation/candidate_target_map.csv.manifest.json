@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "status": "ready",
+  "ranking_comparison": "artifacts/benchmarks/rnaseq_quantum_tcga_brca_60_harmonized/ranking_comparison.csv",
+  "nodes": "data/hetionet-v1.0-nodes.tsv",
+  "edges": "data/hetionet-v1.0-edges.sif",
+  "out": "artifacts/repurposing/brca_external_validation/candidate_target_map.csv",
+  "disease_name": "breast cancer",
+  "disease_kg_id": "Disease::DOID:1612",
+  "candidate_count": 63,
+  "mapped_candidate_count": 31,
+  "target_source": "hetionet_shared_compound_disease_gene_edges",
+  "compound_gene_edges": [
+    "CbG",
+    "CdG",
+    "CuG"
+  ],
+  "disease_gene_edges": [
+    "DaG",
+    "DdG",
+    "DuG"
+  ],
+  "claim_policy": "Candidate targets are KG provenance for research hypotheses only; they are not clinical validation."
+}

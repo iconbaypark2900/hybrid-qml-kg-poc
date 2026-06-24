@@ -1,0 +1,185 @@
+{
+  "schema_version": "1.0",
+  "status": "ready",
+  "required_check_count": 14,
+  "failed_required_count": 0,
+  "warning_count": 0,
+  "checks": [
+    {
+      "check": "rnaseq_evidence_verified",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "verification_status": "pass",
+        "verification_failed": 0
+      }
+    },
+    {
+      "check": "independent_counts_cohort_threshold",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "n_samples": 155,
+        "n_case": 80,
+        "n_control": 75,
+        "min_class_n": 75,
+        "n_patients": 83,
+        "n_paired_patients": 72,
+        "cluster_id_source": "patient_id"
+      }
+    },
+    {
+      "check": "structure_readiness_verified",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "status": "ready",
+        "parse_success_count": 15,
+        "artifact_count": 15
+      }
+    },
+    {
+      "check": "protein_structure_evidence_ready",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "status": "ready",
+        "parsed_count": 15,
+        "protein_count": 15
+      }
+    },
+    {
+      "check": "candidate_target_mapping_ready",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "status": "ready",
+        "path": "artifacts/repurposing/brca_external_validation/candidate_target_map.csv",
+        "candidate_count": 63,
+        "mapped_candidate_count": 31,
+        "target_source": "hetionet_shared_compound_disease_gene_edges",
+        "mapped_output_candidate_count": 8,
+        "structure_covered_candidate_count": 8,
+        "total_mapped_targets": 227,
+        "total_structure_artifact_targets": 48
+      }
+    },
+    {
+      "check": "mapped_candidates_have_structure_coverage",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "mapped_output_candidate_count": 8,
+        "structure_covered_candidate_count": 8
+      }
+    },
+    {
+      "check": "ranking_uses_kg_omics_structure_score",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "score_column": "kg_omics_structure_score",
+        "candidate_count": 25
+      }
+    },
+    {
+      "check": "top_candidate_has_3d_structures",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "compound": "Anastrozole",
+        "structure_targets": {
+          "mapping_status": "mapped",
+          "target_source": "hetionet_shared_compound_disease_gene_edges",
+          "compound_kg_id": "Compound::DB01217",
+          "disease_kg_id": "Disease::DOID:1612",
+          "target_ids": [
+            "Gene::154",
+            "Gene::1576",
+            "Gene::1588"
+          ],
+          "target_count": 3,
+          "structure_artifact_target_count": 3,
+          "parsed_structure_count": 3,
+          "missing_structure_target_ids": [],
+          "structure_feature_score": 0.8763788,
+          "notes": ""
+        }
+      }
+    },
+    {
+      "check": "quantum_is_benchmark_not_advantage_claim",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "external_quantum_adds_value": false,
+        "audit_status": "pass"
+      }
+    },
+    {
+      "check": "claim_policy_blocks_cures_and_clinical_claims",
+      "status": "pass",
+      "required": true,
+      "evidence": "Ranked research hypotheses only. Do not claim cures, clinical efficacy, or quantum advantage from this bundle."
+    },
+    {
+      "check": "frontend_exports_evidence_bundle",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "page": "frontend/app/v2/repurposing/page.tsx"
+      }
+    },
+    {
+      "check": "frontend_renders_local_protein_viewer",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "page": "frontend/app/v2/repurposing/page.tsx",
+        "api": "frontend/lib/api.ts"
+      }
+    },
+    {
+      "check": "frontend_production_build_verified",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "build_id_path": "frontend/.next/BUILD_ID",
+        "exists": true,
+        "build_id": "RYfts7YMi0EhScA7l_QSy"
+      }
+    },
+    {
+      "check": "frontend_live_http_render_verified",
+      "status": "pass",
+      "required": true,
+      "evidence": {
+        "smoke_path": "artifacts/repurposing/brca_external_validation/frontend_live_smoke.json",
+        "exists": true,
+        "status": "pass",
+        "frontend_build_id": "RYfts7YMi0EhScA7l_QSy",
+        "current_build_id": "RYfts7YMi0EhScA7l_QSy",
+        "assertions": {
+          "page_contains_ranked_hypotheses": true,
+          "page_contains_top_candidate": true,
+          "page_contains_research_hypothesis_policy": true,
+          "page_contains_openfold_policy": true,
+          "page_contains_protein_evidence": true,
+          "api_status_ok_or_ready": true,
+          "api_candidate_count_at_least_25": true,
+          "api_top_candidate_has_structure": true,
+          "api_quantum_advantage_claim_blocked": true
+        }
+      }
+    }
+  ],
+  "claim_policy": "Research hypotheses only; not cures, prescriptions, clinical validation, or quantum advantage claims.",
+  "inputs": {
+    "bundle_path": "artifacts/repurposing/brca_external_validation/repurposing_evidence_bundle.json",
+    "structure_readiness_path": "artifacts/structures/alphafold/brca_anastrozole_targets/openfold_readiness.json",
+    "frontend_page_path": "frontend/app/v2/repurposing/page.tsx",
+    "frontend_api_path": "frontend/lib/api.ts",
+    "frontend_build_id_path": "frontend/.next/BUILD_ID",
+    "frontend_live_smoke_path": "artifacts/repurposing/brca_external_validation/frontend_live_smoke.json"
+  }
+}

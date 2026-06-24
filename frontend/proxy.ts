@@ -1,22 +1,44 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import type { NextFetchEvent, NextRequest } from "next/server";
+import { getClerkPublishableKey } from "./lib/clerk-config";
 
-const protectedRoutes = createRouteMatcher([
+const protectedRoutePatterns = [
   "/v2(.*)",
   "/experiments(.*)",
   "/hypotheses(.*)",
   "/validation(.*)",
   "/api/proxy(.*)",
-]);
+];
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+const protectedRoutePrefixes = [
+  "/v2",
+  "/experiments",
+  "/hypotheses",
+  "/validation",
+  "/api/proxy",
+];
+
+export default async function proxy(req: NextRequest, event: NextFetchEvent) {
+  const publishableKey = getClerkPublishableKey();
+  if (!publishableKey || !isProtectedPath(req.nextUrl.pathname)) {
     return;
   }
 
-  if (protectedRoutes(req)) {
-    await auth.protect();
-  }
-});
+  const { clerkMiddleware, createRouteMatcher } = await import("@clerk/nextjs/server");
+  const protectedRoutes = createRouteMatcher(protectedRoutePatterns);
+  const middleware = clerkMiddleware(async (auth, clerkReq) => {
+    if (protectedRoutes(clerkReq)) {
+      await auth.protect();
+    }
+  });
+
+  return middleware(req, event);
+}
+
+function isProtectedPath(pathname: string): boolean {
+  return protectedRoutePrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
 
 export const config = {
   matcher: [

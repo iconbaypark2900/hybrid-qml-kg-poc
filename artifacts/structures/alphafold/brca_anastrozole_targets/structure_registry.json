@@ -1,0 +1,473 @@
+{
+  "schema_version": "1.0",
+  "source": "alphafold_db_public_api_cached_local_pdb",
+  "source_api": "https://alphafold.ebi.ac.uk/api/prediction/{uniprot_id}",
+  "claim_policy": "Local structure artifacts support research hypothesis inspection only; they do not prove therapeutic efficacy.",
+  "artifacts": [
+    {
+      "target_id": "Gene::154",
+      "target_name": "ADRB2",
+      "sequence_hash": "sha256:3e9d25347d93e5c2b71f7d8151dd1e9c",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_154_AF-P07550-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 79.12,
+        "fraction_plddt_very_high": 0.596,
+        "fraction_plddt_confident": 0.104,
+        "fraction_plddt_low": 0.09,
+        "fraction_plddt_very_low": 0.211
+      },
+      "metadata": {
+        "uniprot_id": "P07550",
+        "gene_symbol": "ADRB2",
+        "expected_residue_count": 413,
+        "model_entity_id": "AF-P07550-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P07550",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P07550-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P07550-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P07550-F1-predicted_aligned_error_v6.json",
+        "sha256": "f6c92a8e92db8ec97f473b961905ddca11eaea1d896c53ec61ebff42648df519"
+      }
+    },
+    {
+      "target_id": "Gene::1576",
+      "target_name": "CYP3A4",
+      "sequence_hash": "sha256:0d1c7296209804664d2da95c23eea089",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_1576_AF-P08684-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 92.38,
+        "fraction_plddt_very_high": 0.795,
+        "fraction_plddt_confident": 0.165,
+        "fraction_plddt_low": 0.028,
+        "fraction_plddt_very_low": 0.012
+      },
+      "metadata": {
+        "uniprot_id": "P08684",
+        "gene_symbol": "CYP3A4",
+        "expected_residue_count": 503,
+        "model_entity_id": "AF-P08684-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P08684",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P08684-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P08684-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P08684-F1-predicted_aligned_error_v6.json",
+        "sha256": "a40c9e4e4d35fb4a90b38a90c64e47386493cc0fd13bbcf5d65fb3a0b8d1ea92"
+      }
+    },
+    {
+      "target_id": "Gene::1588",
+      "target_name": "CYP19A1",
+      "sequence_hash": "sha256:f3121c0f2c6fcd07561aed8758469019",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_1588_AF-P11511-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 91.38,
+        "fraction_plddt_very_high": 0.839,
+        "fraction_plddt_confident": 0.074,
+        "fraction_plddt_low": 0.036,
+        "fraction_plddt_very_low": 0.052
+      },
+      "metadata": {
+        "uniprot_id": "P11511",
+        "gene_symbol": "CYP19A1",
+        "expected_residue_count": 503,
+        "model_entity_id": "AF-P11511-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P11511",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P11511-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P11511-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P11511-F1-predicted_aligned_error_v6.json",
+        "sha256": "2ae460cc44ce16e4983c7f6976e685039125fb56ac033998981e52875089efbc"
+      }
+    },
+    {
+      "target_id": "Gene::1848",
+      "target_name": "DUSP6",
+      "sequence_hash": "sha256:eb7333ea7c9e44c38a9768051b6b43d0",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_1848_AF-Q16828-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 75.25,
+        "fraction_plddt_very_high": 0.373,
+        "fraction_plddt_confident": 0.239,
+        "fraction_plddt_low": 0.184,
+        "fraction_plddt_very_low": 0.205
+      },
+      "metadata": {
+        "uniprot_id": "Q16828",
+        "gene_symbol": "DUSP6",
+        "expected_residue_count": 381,
+        "model_entity_id": "AF-Q16828-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/Q16828",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-Q16828-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-Q16828-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-Q16828-F1-predicted_aligned_error_v6.json",
+        "sha256": "ba704a1ae0d801775757f542cceb24384f4df6b278671503ff800ba57cd49de1"
+      }
+    },
+    {
+      "target_id": "Gene::1956",
+      "target_name": "EGFR",
+      "sequence_hash": "sha256:99d03b567dbcdd7fb0dd21fb40d5d283",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_1956_AF-P00533-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 75.94,
+        "fraction_plddt_very_high": 0.474,
+        "fraction_plddt_confident": 0.233,
+        "fraction_plddt_low": 0.065,
+        "fraction_plddt_very_low": 0.228
+      },
+      "metadata": {
+        "uniprot_id": "P00533",
+        "gene_symbol": "EGFR",
+        "expected_residue_count": 1210,
+        "model_entity_id": "AF-P00533-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P00533",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P00533-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P00533-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P00533-F1-predicted_aligned_error_v6.json",
+        "sha256": "8b381730ae157a75f2fbc78043aff7b9e605a30420dfe749a56cd61f12125cb9"
+      }
+    },
+    {
+      "target_id": "Gene::2064",
+      "target_name": "ERBB2",
+      "sequence_hash": "sha256:d89a90920775435179a0d5281a800f78",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_2064_AF-P04626-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 74.0,
+        "fraction_plddt_very_high": 0.422,
+        "fraction_plddt_confident": 0.246,
+        "fraction_plddt_low": 0.086,
+        "fraction_plddt_very_low": 0.245
+      },
+      "metadata": {
+        "uniprot_id": "P04626",
+        "gene_symbol": "ERBB2",
+        "expected_residue_count": 1255,
+        "model_entity_id": "AF-P04626-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P04626",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P04626-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P04626-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P04626-F1-predicted_aligned_error_v6.json",
+        "sha256": "67779a57b099b435e48bb163ad1238d9e86df0e57a898bce4ec3a3c4b8880e3c"
+      }
+    },
+    {
+      "target_id": "Gene::2065",
+      "target_name": "ERBB3",
+      "sequence_hash": "sha256:4a991f48f32cfa86f990aab1b861bed4",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_2065_AF-P21860-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 72.44,
+        "fraction_plddt_very_high": 0.47,
+        "fraction_plddt_confident": 0.189,
+        "fraction_plddt_low": 0.044,
+        "fraction_plddt_very_low": 0.297
+      },
+      "metadata": {
+        "uniprot_id": "P21860",
+        "gene_symbol": "ERBB3",
+        "expected_residue_count": 1342,
+        "model_entity_id": "AF-P21860-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P21860",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P21860-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P21860-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P21860-F1-predicted_aligned_error_v6.json",
+        "sha256": "811850abcff4da00e0a9a50daa4c2ccbf0c633712366a7bf20b04ce4fd1063e9"
+      }
+    },
+    {
+      "target_id": "Gene::2066",
+      "target_name": "ERBB4",
+      "sequence_hash": "sha256:427b0012f5464bdd5b2c4f015a5cb648",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_2066_AF-Q15303-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 73.12,
+        "fraction_plddt_very_high": 0.44,
+        "fraction_plddt_confident": 0.227,
+        "fraction_plddt_low": 0.063,
+        "fraction_plddt_very_low": 0.269
+      },
+      "metadata": {
+        "uniprot_id": "Q15303",
+        "gene_symbol": "ERBB4",
+        "expected_residue_count": 1308,
+        "model_entity_id": "AF-Q15303-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/Q15303",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-Q15303-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-Q15303-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-Q15303-F1-predicted_aligned_error_v6.json",
+        "sha256": "41eedcc80f0a5e46d10302bdb23cf13c127a718906e0c17c5954649b328f10c0"
+      }
+    },
+    {
+      "target_id": "Gene::5243",
+      "target_name": "ABCB1",
+      "sequence_hash": "sha256:e8c72a9371a2775313fe0714108c5e40",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_5243_AF-P08183-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 84.56,
+        "fraction_plddt_very_high": 0.545,
+        "fraction_plddt_confident": 0.345,
+        "fraction_plddt_low": 0.033,
+        "fraction_plddt_very_low": 0.077
+      },
+      "metadata": {
+        "uniprot_id": "P08183",
+        "gene_symbol": "ABCB1",
+        "expected_residue_count": 1280,
+        "model_entity_id": "AF-P08183-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P08183",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P08183-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P08183-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P08183-F1-predicted_aligned_error_v6.json",
+        "sha256": "2a7fb17f30ae995c67bed60e211f7ef30afc97dda5c5568460f07020ae10223b"
+      }
+    },
+    {
+      "target_id": "Gene::5894",
+      "target_name": "RAF1",
+      "sequence_hash": "sha256:d231d020cb5d921e3a7c5bbe10089245",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_5894_AF-P04049-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 67.5,
+        "fraction_plddt_very_high": 0.295,
+        "fraction_plddt_confident": 0.273,
+        "fraction_plddt_low": 0.077,
+        "fraction_plddt_very_low": 0.355
+      },
+      "metadata": {
+        "uniprot_id": "P04049",
+        "gene_symbol": "RAF1",
+        "expected_residue_count": 648,
+        "model_entity_id": "AF-P04049-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P04049",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P04049-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P04049-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P04049-F1-predicted_aligned_error_v6.json",
+        "sha256": "5cf638eb37037d8672fa502d9bcb946b989ba94b9ead0282e77447cc33afb1a9"
+      }
+    },
+    {
+      "target_id": "Gene::672",
+      "target_name": "BRCA1",
+      "sequence_hash": "sha256:e40f752dedf675e2f7c99142ebb2607a",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_672_AF-P38398-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 41.59,
+        "fraction_plddt_very_high": 0.111,
+        "fraction_plddt_confident": 0.063,
+        "fraction_plddt_low": 0.022,
+        "fraction_plddt_very_low": 0.804
+      },
+      "metadata": {
+        "uniprot_id": "P38398",
+        "gene_symbol": "BRCA1",
+        "expected_residue_count": 1863,
+        "model_entity_id": "AF-P38398-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P38398",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P38398-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P38398-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P38398-F1-predicted_aligned_error_v6.json",
+        "sha256": "b2af213e2ef20f95c349a2159d628321205ad55b64511dd9e891b8a652d8a1a4"
+      }
+    },
+    {
+      "target_id": "Gene::673",
+      "target_name": "BRAF",
+      "sequence_hash": "sha256:74c9b69323bd112084c1b5b385e7e6c5",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_673_AF-P15056-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 66.38,
+        "fraction_plddt_very_high": 0.294,
+        "fraction_plddt_confident": 0.258,
+        "fraction_plddt_low": 0.061,
+        "fraction_plddt_very_low": 0.386
+      },
+      "metadata": {
+        "uniprot_id": "P15056",
+        "gene_symbol": "BRAF",
+        "expected_residue_count": 766,
+        "model_entity_id": "AF-P15056-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P15056",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P15056-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P15056-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P15056-F1-predicted_aligned_error_v6.json",
+        "sha256": "73e7fde74dca04df65fb3370fd969cd485d83b2f9dd102975f10a87fdfa78766"
+      }
+    },
+    {
+      "target_id": "Gene::7157",
+      "target_name": "TP53",
+      "sequence_hash": "sha256:c133dfce69f606f20865e9008199f852",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_7157_AF-P04637-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 75.06,
+        "fraction_plddt_very_high": 0.527,
+        "fraction_plddt_confident": 0.071,
+        "fraction_plddt_low": 0.104,
+        "fraction_plddt_very_low": 0.298
+      },
+      "metadata": {
+        "uniprot_id": "P04637",
+        "gene_symbol": "TP53",
+        "expected_residue_count": 393,
+        "model_entity_id": "AF-P04637-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P04637",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-predicted_aligned_error_v6.json",
+        "sha256": "5a7051e8f97848d43b3747268825b29cafb5fa99d2e3fff6f58efcdb74e74cc3"
+      }
+    },
+    {
+      "target_id": "Gene::1026",
+      "target_name": "CDKN1A",
+      "sequence_hash": "sha256:9ce8168c00c3f6d663f866816b83e0b2",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_1026_AF-P38936-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 69.0,
+        "fraction_plddt_very_high": 0.28,
+        "fraction_plddt_confident": 0.171,
+        "fraction_plddt_low": 0.299,
+        "fraction_plddt_very_low": 0.25
+      },
+      "metadata": {
+        "uniprot_id": "P38936",
+        "gene_symbol": "CDKN1A",
+        "expected_residue_count": 164,
+        "model_entity_id": "AF-P38936-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/P38936",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-P38936-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-P38936-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-P38936-F1-predicted_aligned_error_v6.json",
+        "sha256": "8edbd961610f6922e3c427b2de10272df52edfb2f624c3c90b6803bd77265d23"
+      }
+    },
+    {
+      "target_id": "Gene::991",
+      "target_name": "CDC20",
+      "sequence_hash": "sha256:46cf2c6112920cf7407044a98178085f",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "Gene_991_AF-Q12834-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "confidence": {
+        "score_type": "pLDDT",
+        "global_metric_value": 84.12,
+        "fraction_plddt_very_high": 0.615,
+        "fraction_plddt_confident": 0.132,
+        "fraction_plddt_low": 0.15,
+        "fraction_plddt_very_low": 0.102
+      },
+      "metadata": {
+        "uniprot_id": "Q12834",
+        "gene_symbol": "CDC20",
+        "expected_residue_count": 499,
+        "model_entity_id": "AF-Q12834-F1",
+        "model_created_date": "2025-08-01T00:00:00Z",
+        "organism": "Homo sapiens",
+        "api_url": "https://alphafold.ebi.ac.uk/api/prediction/Q12834",
+        "pdb_url": "https://alphafold.ebi.ac.uk/files/AF-Q12834-F1-model_v6.pdb",
+        "cif_url": "https://alphafold.ebi.ac.uk/files/AF-Q12834-F1-model_v6.cif",
+        "pae_doc_url": "https://alphafold.ebi.ac.uk/files/AF-Q12834-F1-predicted_aligned_error_v6.json",
+        "sha256": "238bd201c49e3b273881cbc9cac9d89de468c2b95bc3ad6778c151c5aa8079b9"
+      }
+    }
+  ]
+}

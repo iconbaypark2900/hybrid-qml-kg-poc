@@ -1,0 +1,16 @@
+target_id,target_name,gene_symbol,uniprot_id,compound_name,disease_name,provenance
+Gene::154,ADRB2,ADRB2,P07550,Anastrozole,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::1576,CYP3A4,CYP3A4,P08684,Anastrozole;Letrozole;Lapatinib;Vemurafenib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::1588,CYP19A1,CYP19A1,P11511,Anastrozole;Letrozole,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::1848,DUSP6,DUSP6,Q16828,Lapatinib;Vemurafenib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::1956,EGFR,EGFR,P00533,Lapatinib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::2064,ERBB2,ERBB2,P04626,Lapatinib;Vemurafenib;Ribavirin,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::2065,ERBB3,ERBB3,P21860,Vemurafenib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::2066,ERBB4,ERBB4,Q15303,Lapatinib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::5243,ABCB1,ABCB1,P08183,Lapatinib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::5894,RAF1,RAF1,P04049,Vemurafenib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::672,BRCA1,BRCA1,P38398,Vemurafenib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::673,BRAF,BRAF,P15056,Vemurafenib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::7157,TP53,TP53,P04637,Vemurafenib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::1026,CDKN1A,CDKN1A,P38936,Vemurafenib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol
+Gene::991,CDC20,CDC20,Q12834,Vemurafenib,breast cancer,manual_gene_to_uniprot_map_from_local_hetionet_gene_symbol

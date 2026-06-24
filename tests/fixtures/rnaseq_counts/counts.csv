@@ -1,0 +1,7 @@
+gene,case_a,case_b,control_a,control_b
+GENE_UP,100,120,10,12
+GENE_DOWN,8,9,90,95
+GENE_FLAT,40,42,41,39
+GENE_CASE,70,65,5,4
+GENE_CTRL,6,7,60,58
+MT-GENE,5,6,5,6

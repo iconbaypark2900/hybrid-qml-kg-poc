@@ -1,6 +1,6 @@
 # Roadmap — Master Index
 
-**Last updated:** 2026-04-16  
+**Last updated:** 2026-06-16  
 **Scope:** Everything not yet done, ordered by scientific impact and delivery risk.
 
 This folder documents gaps between the current state of the project and a
@@ -18,6 +18,7 @@ Each file is self-contained and actionable.
 | [03_frontend_completion.md](03_frontend_completion.md) | Next.js UI parity with Streamlit + new features | 3–5 days |
 | [04_quantum_scaling.md](04_quantum_scaling.md) | Quantum path improvements: Nyström, VQC, KTA, kernel learning | 3–7 days |
 | [05_platform_extensions.md](05_platform_extensions.md) | Longer-term extensions: DRKG, multi-relational, ClinicalTrials API | 2–4 weeks |
+| [06_open_source_biomolecular_prediction.md](06_open_source_biomolecular_prediction.md) | Open-source structure, molecule, and quantum-simulation feature plan | 1-6 weeks |
 
 ---
 
@@ -51,6 +52,7 @@ Each file is self-contained and actionable.
 19. VQC architecture search (100+ iterations, reps=6–8)
 20. DRKG extension (4.4M edges, 97K entities)
 21. Variational quantum kernel learning
+22. Open-source biomolecular structure and molecule feature slice
 
 ---
 

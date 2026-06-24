@@ -55,6 +55,10 @@ Markdown for this project lives under `docs/` (except the root `README.md`). Use
 | [guides/cli_container.md](guides/cli_container.md) | CLI / container notes |
 | [guides/FULL_GRAPH_EMBEDDINGS_GUIDE.md](guides/FULL_GRAPH_EMBEDDINGS_GUIDE.md) | Full-graph embeddings |
 | [guides/QSVC_ONLY_GUIDE.md](guides/QSVC_ONLY_GUIDE.md) | QSVC-focused runs |
+| [guides/RNASEQ_COUNTS_PIPELINE.md](guides/RNASEQ_COUNTS_PIPELINE.md) | Counts-first RNA-seq ingestion and normalization |
+| [guides/TCGA_BRCA_RNASEQ_COHORT.md](guides/TCGA_BRCA_RNASEQ_COHORT.md) | Open TCGA-BRCA development cohort |
+| [guides/GSE225846_EXTERNAL_VALIDATION.md](guides/GSE225846_EXTERNAL_VALIDATION.md) | Independent TCGA-to-GEO RNA-seq validation |
+| [guides/RNASEQ_QUANTUM_BENCHMARK.md](guides/RNASEQ_QUANTUM_BENCHMARK.md) | Leakage-safe classical/QSVC benchmark and audit |
 
 ## Core technical docs (`docs/` root)
 

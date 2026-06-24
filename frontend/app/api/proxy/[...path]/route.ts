@@ -1,4 +1,3 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import {
   getRequiredScopeForApiPath,
@@ -6,6 +5,7 @@ import {
   roleForEmail,
   scopesForRole,
 } from "@/lib/authz";
+import { getClerkPublishableKey } from "@/lib/clerk-config";
 
 const apiOrigin = (
   process.env.API_ORIGIN ??
@@ -90,7 +90,7 @@ async function resolveAccess(method: string, path: string): Promise<
   | { ok: false; status: number; message: string }
 > {
   const requiredScope = getRequiredScopeForApiPath(method, path);
-  const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  const clerkEnabled = Boolean(getClerkPublishableKey());
 
   if (!clerkEnabled) {
     const role = roleForEmail(null);
@@ -111,6 +111,7 @@ async function resolveAccess(method: string, path: string): Promise<
     };
   }
 
+  const { auth, currentUser } = await import("@clerk/nextjs/server");
   const { userId } = await auth();
   if (!userId) {
     return { ok: false, status: 401, message: "Unauthorized" };

@@ -1,6 +1,7 @@
 # middleware/api.py
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Any, Dict
@@ -9,6 +10,7 @@ import os
 import re
 import time
 import uuid
+from pathlib import Path
 from collections import Counter, deque
 import numpy as np
 from .orchestrator import LinkPredictionOrchestrator
@@ -16,6 +18,7 @@ from utils.latest_run import get_latest_run_snapshot
 from .job_manager import job_manager
 from .research_store import research_store
 from .integration_store import DEFAULT_CHANNEL, integration_store
+from .repurposing_workbench import build_repurposing_candidates, list_repurposing_diseases
 from utils.ibm_runtime_verify import (
     sanitize_quantum_config_for_client,
     verify_ibm_quantum_runtime,
@@ -89,6 +92,8 @@ QGG_INTERNAL_API_SECRET = os.environ.get("QGG_INTERNAL_API_SECRET", "")
 ENABLE_OPS_ENDPOINTS = os.environ.get("ENABLE_OPS_ENDPOINTS", "1").strip() in ("1", "true", "yes")
 OPS_RECENT_FAILURE_LIMIT = int(os.environ.get("OPS_RECENT_FAILURE_LIMIT", "50"))
 APP_STARTED_AT = time.time()
+REPO_ROOT = Path(__file__).resolve().parents[1]
+STRUCTURE_ARTIFACT_ROOT = (REPO_ROOT / "artifacts" / "structures").resolve()
 REQUEST_COUNTS: Counter = Counter()
 REQUEST_FAILURES: Counter = Counter()
 RECENT_FAILURES: deque = deque(maxlen=OPS_RECENT_FAILURE_LIMIT)
@@ -352,6 +357,96 @@ class CandidateEvidenceLink(BaseModel):
     provenance: Optional[EvidenceProvenance] = None
 
 
+class RepurposingDisease(BaseModel):
+    id: str
+    name: str
+    cohort: str
+    source: str
+    sample_count: int
+    smallest_class_count: int
+    evidence_status: str
+    notes: List[str] = []
+
+
+class RepurposingEvidenceComponent(BaseModel):
+    label: str
+    value: str
+    status: str
+    detail: str
+
+
+class RepurposingStructureEvidence(BaseModel):
+    status: str
+    target_count: int = 0
+    available_target_count: int = 0
+    missing_rate: float = 1.0
+    target_ids: List[str] = []
+    provenance: List[EvidenceProvenance] = []
+
+
+class RepurposingProteinStructureEvidence(BaseModel):
+    target_id: str
+    target_name: str
+    display_name: str
+    sequence_hash: Optional[str] = None
+    source_tool: str
+    source_version: Optional[str] = None
+    artifact_path: Optional[str] = None
+    artifact_format: Optional[str] = None
+    artifact_available: bool = False
+    parse_success: bool = False
+    license_note: Optional[str] = None
+    confidence: Dict[str, Any] = {}
+    feature_summary: Dict[str, Any] = {}
+    viewer: Dict[str, Any] = {}
+    provenance: Dict[str, Any] = {}
+    claim_policy: str
+
+
+class RepurposingAudit(BaseModel):
+    status: str
+    claim_policy: str
+    warnings: List[str] = []
+    quantum_advantage_claim_allowed: bool = False
+    clinical_claim_allowed: bool = False
+
+
+class RepurposingCandidate(BaseModel):
+    compound_id: str
+    compound_name: str
+    disease_id: str
+    disease_name: str
+    hypothesis_score: float
+    scoring_mode: str
+    rank: int
+    summary: str
+    evidence_components: List[RepurposingEvidenceComponent]
+    kg_paths: List[str]
+    rnaseq_signature: Dict[str, Any]
+    structure: RepurposingStructureEvidence
+    structure_targets: Dict[str, Any] = {}
+    protein_structures: List[RepurposingProteinStructureEvidence] = []
+    classical_ml: Dict[str, Any]
+    quantum_benchmark: Dict[str, Any]
+    audit: RepurposingAudit
+
+
+class RepurposingDiseasesResponse(BaseModel):
+    status: str
+    diseases: List[RepurposingDisease]
+    provenance: List[EvidenceProvenance] = []
+
+
+class RepurposingCandidatesResponse(BaseModel):
+    status: str
+    disease: RepurposingDisease
+    candidates: List[RepurposingCandidate]
+    scoring_modes: List[str]
+    manifest: Dict[str, Any]
+    provenance: List[EvidenceProvenance] = []
+    message: Optional[str] = None
+
+
 class LatestRunResponse(BaseModel):
     """Latest pipeline artifacts under ``results/`` (see ``utils/latest_run.py``)."""
 
@@ -606,6 +701,59 @@ def _latest_run_provenance(endpoint: str, snapshot: Dict[str, Any]) -> List[Evid
 async def root():
     """Redirect to docs."""
     return {"message": "Hybrid QML-KG API. Visit /docs for interactive documentation."}
+
+
+@app.get("/repurposing/diseases", response_model=RepurposingDiseasesResponse)
+async def repurposing_diseases():
+    return RepurposingDiseasesResponse(**list_repurposing_diseases())
+
+
+@app.get("/repurposing/candidates", response_model=RepurposingCandidatesResponse)
+async def repurposing_candidates(disease_id: str = Query(default="brca_external_validation")):
+    return RepurposingCandidatesResponse(**build_repurposing_candidates(disease_id))
+
+
+@app.get("/repurposing/evidence-bundle")
+async def repurposing_evidence_bundle(
+    disease_id: str = Query(default="brca_external_validation"),
+    format: str = Query(default="json"),
+):
+    """Download the verified local repurposing evidence bundle."""
+    if disease_id != "brca_external_validation":
+        raise HTTPException(status_code=404, detail="Evidence bundle is not available for this disease")
+    bundle_dir = REPO_ROOT / "artifacts" / "repurposing" / "brca_external_validation"
+    normalized_format = format.lower()
+    if normalized_format == "json":
+        path = bundle_dir / "repurposing_evidence_bundle.json"
+        media_type = "application/json"
+        filename = "brca_external_validation_repurposing_evidence_bundle.json"
+    elif normalized_format in {"markdown", "md"}:
+        path = bundle_dir / "repurposing_evidence_bundle.md"
+        media_type = "text/markdown"
+        filename = "brca_external_validation_repurposing_evidence_bundle.md"
+    else:
+        raise HTTPException(status_code=400, detail="format must be one of: json, markdown")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Evidence bundle artifact not found")
+    return FileResponse(path, media_type=media_type, filename=filename)
+
+
+@app.get("/repurposing/structure-artifact")
+async def repurposing_structure_artifact(path: str = Query(..., min_length=1)):
+    """Serve local structure artifacts from the controlled artifacts/structures tree."""
+    requested = Path(path)
+    if not requested.is_absolute():
+        requested = REPO_ROOT / requested
+    resolved = requested.resolve()
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail="Structure artifact not found")
+    if not resolved.is_relative_to(STRUCTURE_ARTIFACT_ROOT):
+        raise HTTPException(status_code=403, detail="Structure artifact path is outside the allowed artifact root")
+    suffix = resolved.suffix.lower()
+    if suffix not in {".pdb", ".ent", ".cif", ".mmcif"}:
+        raise HTTPException(status_code=415, detail="Unsupported structure artifact format")
+    media_type = "chemical/x-pdb" if suffix in {".pdb", ".ent"} else "chemical/x-mmcif"
+    return FileResponse(resolved, media_type=media_type, filename=resolved.name)
 
 
 @app.get("/runs/latest", response_model=LatestRunResponse)

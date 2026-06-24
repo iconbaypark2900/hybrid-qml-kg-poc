@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "status": "pass",
+  "generated_at": "2026-06-24T14:56:33.281288+00:00",
+  "auth_mode": "local_no_clerk",
+  "frontend_url": "http://127.0.0.1:3780/v2/repurposing?disease_id=brca_external_validation",
+  "api_url": "http://127.0.0.1:8780/repurposing/candidates?disease_id=brca_external_validation",
+  "frontend_build_id": "RYfts7YMi0EhScA7l_QSy",
+  "page_bytes": 417546,
+  "api_status": "ok",
+  "candidate_count": 25,
+  "top_candidate": "Anastrozole",
+  "top_candidate_parsed_structure_count": 3,
+  "quantum_advantage_claim_allowed": false,
+  "assertions": {
+    "page_contains_ranked_hypotheses": true,
+    "page_contains_top_candidate": true,
+    "page_contains_research_hypothesis_policy": true,
+    "page_contains_openfold_policy": true,
+    "page_contains_protein_evidence": true,
+    "api_status_ok_or_ready": true,
+    "api_candidate_count_at_least_25": true,
+    "api_top_candidate_has_structure": true,
+    "api_quantum_advantage_claim_blocked": true
+  }
+}

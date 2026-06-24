@@ -1,9 +1,12 @@
-import { ClerkProvider } from "@clerk/nextjs";
+import type { ReactNode } from "react";
+import { getClerkPublishableKey } from "@/lib/clerk-config";
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+export async function AuthProvider({ children }: { children: ReactNode }) {
+  const publishableKey = getClerkPublishableKey();
+  if (!publishableKey) {
     return <>{children}</>;
   }
 
-  return <ClerkProvider>{children}</ClerkProvider>;
+  const { ClerkProvider } = await import("@clerk/nextjs");
+  return <ClerkProvider publishableKey={publishableKey}>{children}</ClerkProvider>;
 }

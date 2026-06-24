@@ -83,6 +83,31 @@ from kg_layer.enhanced_features import EnhancedFeatureBuilder, validate_no_leaka
 from quantum_layer.advanced_qml_features import QuantumFeatureEngineer
 
 
+def _load_structure_target_features(path: str) -> Dict[str, Dict[str, Any]]:
+    """Load target-level structure features from build_structure_features.py output."""
+
+    features_path = os.path.abspath(path)
+    if not os.path.exists(features_path):
+        raise FileNotFoundError(
+            f"Structure feature CSV not found: {features_path}. "
+            "Run scripts/build_structure_features.py first or pass --structure_features_path."
+        )
+    df = pd.read_csv(features_path)
+    if "target_id" not in df.columns:
+        raise ValueError(f"Structure feature CSV must include target_id: {features_path}")
+
+    features: Dict[str, Dict[str, Any]] = {}
+    for _, row in df.iterrows():
+        target_id = str(row["target_id"])
+        feature_row: Dict[str, Any] = {}
+        for key, value in row.to_dict().items():
+            feature_row[key] = None if pd.isna(value) else value
+        features[target_id] = feature_row
+    if not features:
+        raise ValueError(f"No structure feature rows found in {features_path}")
+    return features
+
+
 def _write_cheap_quantum_config(
     base_config_path: str,
     out_config_path: str,
@@ -763,6 +788,11 @@ def main():
     parser.add_argument("--use_moa_features", action="store_true", default=False,
                        help="Include mechanism-of-action features (binding targets, pathway overlap, "
                             "drug class, chemical/disease similarity to known treatments)")
+    parser.add_argument("--use_structure_features", action="store_true", default=False,
+                       help="Append local open-source structure-derived target features to pair features.")
+    parser.add_argument("--structure_features_path", type=str,
+                       default="results/structure_features/target_structure_features.csv",
+                       help="CSV produced by scripts/build_structure_features.py.")
 
     # Quantum args.
     # Defaults sourced from utils/preregistered_constants.py (locked by
@@ -1052,7 +1082,11 @@ def main():
     logger.info(f"Calibrate probabilities: {args.calibrate_probabilities}")
     if args.calibrate_probabilities:
         logger.info(f"Calibration method: {args.calibration_method}")
-    logger.info(f"Graph features: {args.use_graph_features}, Domain features: {args.use_domain_features}, MoA features: {getattr(args, 'use_moa_features', False)}")
+    logger.info(
+        f"Graph features: {args.use_graph_features}, Domain features: {args.use_domain_features}, "
+        f"MoA features: {getattr(args, 'use_moa_features', False)}, "
+        f"Structure features: {getattr(args, 'use_structure_features', False)}"
+    )
     logger.info(f"Quantum encoding: {args.qml_encoding} (qubits={args.qml_dim})")
     logger.info(f"Quantum feature map: {args.qml_feature_map} (reps={args.qml_feature_map_reps}, entanglement={args.qml_entanglement})")
 
@@ -2032,6 +2066,45 @@ def main():
     X_test, feature_names_test = feature_builder.build_features(
         test_df_for_features, embeddings, edges_df=train_edges_only, fit_scaler=False
     )
+
+    structure_feature_names = []
+    if getattr(args, "use_structure_features", False):
+        logger.info("Appending local structure-derived features...")
+        from structure_layer import StructureTargetIndex, build_pair_structure_feature_matrix
+
+        target_features = _load_structure_target_features(args.structure_features_path)
+        structure_index = StructureTargetIndex.from_edges(df, target_features)
+        X_train_structure, structure_feature_names, train_structure_targets = build_pair_structure_feature_matrix(
+            train_df_for_features,
+            structure_index,
+            source_col="source",
+            target_col="target",
+        )
+        X_test_structure, _, test_structure_targets = build_pair_structure_feature_matrix(
+            test_df_for_features,
+            structure_index,
+            source_col="source",
+            target_col="target",
+        )
+
+        structure_scaler = StandardScaler()
+        X_train_structure = structure_scaler.fit_transform(X_train_structure)
+        X_test_structure = structure_scaler.transform(X_test_structure)
+        X_train = np.hstack([X_train, X_train_structure])
+        X_test = np.hstack([X_test, X_test_structure])
+        feature_names.extend(structure_feature_names)
+
+        train_pairs_with_targets = sum(1 for ids in train_structure_targets if ids)
+        test_pairs_with_targets = sum(1 for ids in test_structure_targets if ids)
+        logger.info(
+            "Structure features appended: %s features, %s/%s train pairs and %s/%s test pairs "
+            "have shared structure targets",
+            len(structure_feature_names),
+            train_pairs_with_targets,
+            len(train_structure_targets),
+            test_pairs_with_targets,
+            len(test_structure_targets),
+        )
     
     # Additional diagnostic: Check feature values before normalization
     logger.info(f"\nFeature diagnostic after building:")
@@ -3587,6 +3660,8 @@ def main():
                 "use_graph_features":  getattr(args, "use_graph_features", False),
                 "use_domain_features": getattr(args, "use_domain_features", False),
                 "use_moa_features":    getattr(args, "use_moa_features", False),
+                "use_structure_features": getattr(args, "use_structure_features", False),
+                "structure_features_path": getattr(args, "structure_features_path", None),
             }
             with open(os.path.join(_model_dir, "classical_best_meta.json"), "w") as _mf:
                 json.dump(_meta, _mf, indent=2, default=str)

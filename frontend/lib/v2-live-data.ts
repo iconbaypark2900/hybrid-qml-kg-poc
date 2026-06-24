@@ -2,6 +2,8 @@ import {
   fetchAnalysisSummary,
   fetchJobs,
   fetchLatestRun,
+  fetchRepurposingCandidates,
+  fetchRepurposingDiseases,
   fetchStatus,
   fetchVizCircuitParams,
   fetchVizKGSubgraph,
@@ -13,6 +15,8 @@ import {
   type EvidenceProvenance,
   type JobResponse,
   type LatestRunResponse,
+  type RepurposingCandidatesResponse,
+  type RepurposingDiseasesResponse,
   type StatusResponse,
   type VizAtom,
   type VizBond,
@@ -89,6 +93,11 @@ export interface V2VisualEvidence {
   circuit: V2CircuitEvidence;
 }
 
+export interface V2RepurposingEvidence {
+  diseases: EvidenceState<RepurposingDiseasesResponse | null>;
+  candidates: EvidenceState<RepurposingCandidatesResponse | null>;
+}
+
 export interface V2EvidenceSnapshot {
   version: number;
   generatedAt: string;
@@ -139,6 +148,20 @@ export async function loadV2ExperimentEvidence(
     methods: buildMethodState(modelMetrics),
     predictions: buildPredictionState(predictions, session),
     jobs: buildJobsState(jobs, session),
+  };
+}
+
+export async function loadV2RepurposingEvidence(
+  diseaseId = "brca_external_validation",
+): Promise<V2RepurposingEvidence> {
+  const [diseases, candidates] = await Promise.all([
+    safeCall(fetchRepurposingDiseases),
+    safeCall(() => fetchRepurposingCandidates(diseaseId)),
+  ]);
+
+  return {
+    diseases: toState(diseases, null),
+    candidates: toState(candidates, null),
   };
 }
 

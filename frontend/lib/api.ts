@@ -140,6 +140,7 @@ function isCacheableGet(path: string): boolean {
     path.startsWith("/analysis") ||
     path.startsWith("/viz") ||
     path.startsWith("/kg") ||
+    path.startsWith("/repurposing") ||
     path.startsWith("/quantum/config")
   );
 }
@@ -288,6 +289,135 @@ export interface LatestRunResponse {
 
 export function fetchLatestRun(): Promise<LatestRunResponse> {
   return apiFetch<LatestRunResponse>("/runs/latest");
+}
+
+// ---------- /repurposing ----------
+
+export interface RepurposingDisease {
+  id: string;
+  name: string;
+  cohort: string;
+  source: string;
+  sample_count: number;
+  smallest_class_count: number;
+  evidence_status: string;
+  notes: string[];
+}
+
+export interface RepurposingEvidenceComponent {
+  label: string;
+  value: string;
+  status: string;
+  detail: string;
+}
+
+export interface RepurposingStructureEvidence {
+  status: string;
+  target_count: number;
+  available_target_count: number;
+  missing_rate: number;
+  target_ids: string[];
+  provenance: EvidenceProvenance[];
+}
+
+export interface RepurposingStructureTargets {
+  mapping_status: string;
+  target_source?: string | null;
+  compound_kg_id?: string | null;
+  disease_kg_id?: string | null;
+  target_ids: string[];
+  target_count: number;
+  structure_artifact_target_count: number;
+  parsed_structure_count: number;
+  missing_structure_target_ids: string[];
+  structure_feature_score: number;
+  notes?: string | null;
+}
+
+export interface RepurposingProteinStructureEvidence {
+  target_id: string;
+  target_name: string;
+  display_name: string;
+  artifact_available: boolean;
+  parse_success: boolean;
+  confidence: Record<string, unknown>;
+  feature_summary: Record<string, unknown>;
+  viewer: {
+    kind: string;
+    supports_3d: boolean;
+    preferred_viewer: string;
+    artifact_path?: string | null;
+    artifact_format?: string | null;
+  };
+  claim_policy: string;
+}
+
+export interface RepurposingAudit {
+  status: string;
+  claim_policy: string;
+  warnings: string[];
+  quantum_advantage_claim_allowed: boolean;
+  clinical_claim_allowed: boolean;
+}
+
+export interface RepurposingCandidate {
+  compound_id: string;
+  compound_name: string;
+  disease_id: string;
+  disease_name: string;
+  hypothesis_score: number;
+  scoring_mode: string;
+  rank: number;
+  summary: string;
+  evidence_components: RepurposingEvidenceComponent[];
+  kg_paths: string[];
+  rnaseq_signature: Record<string, unknown>;
+  structure: RepurposingStructureEvidence;
+  structure_targets: RepurposingStructureTargets;
+  protein_structures: RepurposingProteinStructureEvidence[];
+  classical_ml: Record<string, unknown>;
+  quantum_benchmark: Record<string, unknown>;
+  audit: RepurposingAudit;
+}
+
+export interface RepurposingDiseasesResponse {
+  status: string;
+  diseases: RepurposingDisease[];
+  provenance: EvidenceProvenance[];
+}
+
+export interface RepurposingCandidatesResponse {
+  status: string;
+  disease: RepurposingDisease;
+  candidates: RepurposingCandidate[];
+  scoring_modes: string[];
+  manifest: Record<string, unknown>;
+  provenance: EvidenceProvenance[];
+  message?: string | null;
+}
+
+export function fetchRepurposingDiseases(): Promise<RepurposingDiseasesResponse> {
+  return apiFetch<RepurposingDiseasesResponse>("/repurposing/diseases");
+}
+
+export function fetchRepurposingCandidates(
+  diseaseId = "brca_external_validation",
+): Promise<RepurposingCandidatesResponse> {
+  return apiFetch<RepurposingCandidatesResponse>(
+    `/repurposing/candidates?disease_id=${encodeURIComponent(diseaseId)}`,
+  );
+}
+
+
+export function getRepurposingEvidenceBundleUrl(
+  diseaseId = "brca_external_validation",
+  format: "json" | "markdown" = "json",
+): string {
+  return `${getApiBaseUrl()}/repurposing/evidence-bundle?disease_id=${encodeURIComponent(diseaseId)}&format=${format}`;
+}
+
+export function getStructureArtifactUrl(artifactPath: string): string {
+  return `${getApiBaseUrl()}/repurposing/structure-artifact?path=${encodeURIComponent(artifactPath)}`;
 }
 
 // ---------- /predict-link ----------

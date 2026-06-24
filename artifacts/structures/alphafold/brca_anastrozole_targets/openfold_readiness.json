@@ -1,0 +1,258 @@
+{
+  "status": "ready",
+  "schema_version": "1.0",
+  "registry": "artifacts/structures/alphafold/brca_anastrozole_targets/structure_registry.json",
+  "artifact_count": 15,
+  "local_artifact_count": 15,
+  "parse_success_count": 15,
+  "feature_count": 21,
+  "checks": [
+    {
+      "check": "registry_exists",
+      "status": "pass",
+      "evidence": "artifacts/structures/alphafold/brca_anastrozole_targets/structure_registry.json"
+    },
+    {
+      "check": "registry_has_rows",
+      "status": "pass",
+      "evidence": 15
+    },
+    {
+      "check": "target_ids_present",
+      "status": "pass",
+      "evidence": [
+        "Gene::154",
+        "Gene::1576",
+        "Gene::1588",
+        "Gene::1848",
+        "Gene::1956",
+        "Gene::2064",
+        "Gene::2065",
+        "Gene::2066",
+        "Gene::5243",
+        "Gene::5894",
+        "Gene::672",
+        "Gene::673",
+        "Gene::7157",
+        "Gene::1026",
+        "Gene::991"
+      ]
+    },
+    {
+      "check": "source_tools_open_source_or_local",
+      "status": "pass",
+      "evidence": []
+    },
+    {
+      "check": "local_artifact_files_exist",
+      "status": "pass",
+      "evidence": 15
+    },
+    {
+      "check": "supported_structure_formats",
+      "status": "pass",
+      "evidence": []
+    },
+    {
+      "check": "local_artifacts_have_license_notes",
+      "status": "pass",
+      "evidence": []
+    },
+    {
+      "check": "feature_rows_match_registry",
+      "status": "pass",
+      "evidence": {
+        "features": 15,
+        "artifacts": 15
+      }
+    },
+    {
+      "check": "minimum_parse_success",
+      "status": "pass",
+      "evidence": {
+        "observed": 15,
+        "required": 15
+      }
+    }
+  ],
+  "features_preview": [
+    {
+      "target_id": "Gene::154",
+      "target_name": "ADRB2",
+      "has_structure": 1,
+      "parse_success": 1,
+      "missing_structure": 0,
+      "residue_count": 413,
+      "chain_count": 1,
+      "ca_atom_count": 413,
+      "expected_residue_count": 413,
+      "residue_coverage": 1.0,
+      "plddt_mean": 79.135569,
+      "plddt_median": 93.62,
+      "plddt_low_conf_fraction": 0.300242,
+      "contact_count": 1695,
+      "contact_density": 0.019923,
+      "radius_gyration": 33.520637,
+      "compactness": 12.320768,
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use."
+    },
+    {
+      "target_id": "Gene::1576",
+      "target_name": "CYP3A4",
+      "has_structure": 1,
+      "parse_success": 1,
+      "missing_structure": 0,
+      "residue_count": 503,
+      "chain_count": 1,
+      "ca_atom_count": 503,
+      "expected_residue_count": 503,
+      "residue_coverage": 1.0,
+      "plddt_mean": 92.400815,
+      "plddt_median": 95.44,
+      "plddt_low_conf_fraction": 0.039761,
+      "contact_count": 2352,
+      "contact_density": 0.018629,
+      "radius_gyration": 24.856273,
+      "compactness": 20.236341,
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use."
+    },
+    {
+      "target_id": "Gene::1588",
+      "target_name": "CYP19A1",
+      "has_structure": 1,
+      "parse_success": 1,
+      "missing_structure": 0,
+      "residue_count": 503,
+      "chain_count": 1,
+      "ca_atom_count": 503,
+      "expected_residue_count": 503,
+      "residue_coverage": 1.0,
+      "plddt_mean": 91.377256,
+      "plddt_median": 96.88,
+      "plddt_low_conf_fraction": 0.087475,
+      "contact_count": 2350,
+      "contact_density": 0.018613,
+      "radius_gyration": 27.744606,
+      "compactness": 18.12965,
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use."
+    },
+    {
+      "target_id": "Gene::1848",
+      "target_name": "DUSP6",
+      "has_structure": 1,
+      "parse_success": 1,
+      "missing_structure": 0,
+      "residue_count": 381,
+      "chain_count": 1,
+      "ca_atom_count": 381,
+      "expected_residue_count": 381,
+      "residue_coverage": 1.0,
+      "plddt_mean": 75.235591,
+      "plddt_median": 84.88,
+      "plddt_low_conf_fraction": 0.388451,
+      "contact_count": 1583,
+      "contact_density": 0.021868,
+      "radius_gyration": 26.83128,
+      "compactness": 14.199845,
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use."
+    },
+    {
+      "target_id": "Gene::1956",
+      "target_name": "EGFR",
+      "has_structure": 1,
+      "parse_success": 1,
+      "missing_structure": 0,
+      "residue_count": 1210,
+      "chain_count": 1,
+      "ca_atom_count": 1210,
+      "expected_residue_count": 1210,
+      "residue_coverage": 1.0,
+      "plddt_mean": 75.949884,
+      "plddt_median": 89.12,
+      "plddt_low_conf_fraction": 0.293388,
+      "contact_count": 5379,
+      "contact_density": 0.007354,
+      "radius_gyration": 40.130431,
+      "compactness": 30.151682,
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use."
+    }
+  ],
+  "provenance_preview": [
+    {
+      "target_id": "Gene::154",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/artifacts/structures/alphafold/brca_anastrozole_targets/Gene_154_AF-P07550-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "has_structure": 1,
+      "parse_success": 1,
+      "parse_error": "",
+      "sequence_hash": "sha256:3e9d25347d93e5c2b71f7d8151dd1e9c"
+    },
+    {
+      "target_id": "Gene::1576",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/artifacts/structures/alphafold/brca_anastrozole_targets/Gene_1576_AF-P08684-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "has_structure": 1,
+      "parse_success": 1,
+      "parse_error": "",
+      "sequence_hash": "sha256:0d1c7296209804664d2da95c23eea089"
+    },
+    {
+      "target_id": "Gene::1588",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/artifacts/structures/alphafold/brca_anastrozole_targets/Gene_1588_AF-P11511-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "has_structure": 1,
+      "parse_success": 1,
+      "parse_error": "",
+      "sequence_hash": "sha256:f3121c0f2c6fcd07561aed8758469019"
+    },
+    {
+      "target_id": "Gene::1848",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/artifacts/structures/alphafold/brca_anastrozole_targets/Gene_1848_AF-Q16828-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "has_structure": 1,
+      "parse_success": 1,
+      "parse_error": "",
+      "sequence_hash": "sha256:eb7333ea7c9e44c38a9768051b6b43d0"
+    },
+    {
+      "target_id": "Gene::1956",
+      "source_tool": "alphafold_db_cached",
+      "source_version": "6",
+      "artifact_path": "/home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/artifacts/structures/alphafold/brca_anastrozole_targets/Gene_1956_AF-P00533-F1.pdb",
+      "artifact_format": "pdb",
+      "license_note": "AlphaFold DB public model cached locally; review AlphaFold DB terms before redistribution or model-training use.",
+      "has_structure": 1,
+      "parse_success": 1,
+      "parse_error": "",
+      "sequence_hash": "sha256:99d03b567dbcdd7fb0dd21fb40d5d283"
+    }
+  ],
+  "claim_policy": "Structure support is artifact-first. This proves local feature extraction, not therapeutic efficacy or de novo cure discovery."
+}

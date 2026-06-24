@@ -1,0 +1,15 @@
+HEADER    MINI TARGET FIXTURE
+ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00 92.00           N
+ATOM      2  CA  ALA A   1       0.000   0.000   0.000  1.00 92.00           C
+ATOM      3  C   ALA A   1       1.000   0.000   0.000  1.00 92.00           C
+ATOM      4  N   GLY A   2       3.000   0.000   0.000  1.00 61.00           N
+ATOM      5  CA  GLY A   2       4.000   0.000   0.000  1.00 61.00           C
+ATOM      6  C   GLY A   2       5.000   0.000   0.000  1.00 61.00           C
+ATOM      7  N   SER B   1       0.000   3.000   0.000  1.00 80.00           N
+ATOM      8  CA  SER B   1       0.000   4.000   0.000  1.00 80.00           C
+ATOM      9  C   SER B   1       0.000   5.000   0.000  1.00 80.00           C
+ATOM     10  N   VAL B   2      10.000   0.000   0.000  1.00 55.00           N
+ATOM     11  CA  VAL B   2      12.000   0.000   0.000  1.00 55.00           C
+ATOM     12  C   VAL B   2      13.000   0.000   0.000  1.00 55.00           C
+TER
+END

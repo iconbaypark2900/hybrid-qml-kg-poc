@@ -94,8 +94,10 @@ artifacts/runs/
 artifacts/jobs/
 artifacts/evaluations/
 artifacts/predictions/
+artifacts/benchmarks/
 artifacts/signatures/
 artifacts/single_cell/
+artifacts/external/
 artifacts/LATEST.txt
 
 # --- Project artifacts (large / reproducible) ---

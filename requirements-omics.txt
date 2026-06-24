@@ -22,6 +22,9 @@ scrublet>=0.2.3
 # Gene set enrichment
 gseapy>=1.1.0
 
+# Bulk RNA-seq differential expression
+pydeseq2>=0.5.4,<0.6
+
 # Biological ID mapping and pathway databases
 biopython>=1.81
 

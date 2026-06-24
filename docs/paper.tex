@@ -362,12 +362,15 @@ ExtraTrees-Optimized & 0.7807 & 0.7301 & 0.6623 & Classical \\
 Ensemble-QC-stacking (ZZ)$\dagger$ & 0.7408 & --- & 0.6490 & Hybrid quantum-classical \\
 QSVC-Optimized (ZZ)$\dagger$ & 0.7216 & --- & 0.6556 & Quantum only \\
 QSVC-Optimized (Pauli) & 0.6343 & 0.6313 & 0.5861 & Quantum only \\
+\midrule
+Degree-heuristic & 0.7169 & --- & --- & Heuristic baseline \\
+Random (expected) & 0.5000 & --- & --- & Null baseline \\
 \bottomrule
 \end{tabular}
 
 \smallskip
 \begin{minipage}{\linewidth}
-\small $\dagger$ZZ results from \texttt{results/optimized\_results\_20260216-091710.json} (same train/test split; QSVC genuine computation: 908 s). All Pauli-configuration rows are from the primary run.
+\small $\dagger$ZZ results from \texttt{results/optimized\_results\_20260216-091710.json} (same train/test split; QSVC genuine computation: 908 s). All Pauli-configuration rows are from the primary run. Degree-heuristic scores pairs by compound-degree $\times$ disease-degree in the training graph (\texttt{scripts/degree\_heuristic\_baseline.py}); Random is the positive rate of the balanced test set.
 \end{minipage}
 \end{table*}
 

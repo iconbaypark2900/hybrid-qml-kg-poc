@@ -760,13 +760,13 @@ before submitting to *Quantum Machine Intelligence*.
 [ ] 1.1 MoA benchmark result in results/ and Table 3 updated
 [ ] 1.2 CpD result in results/ and Table 3 updated
 [ ] 1.3 5-seed results computed, mean ± std in Table 3
-[ ] 1.4 paper.tex compiles with zero [?] citations
-[ ] 1.5 figures/fig1_pipeline.pdf committed
-[ ] 1.5 figures/fig2_pauli_zz.pdf committed
-[ ] 1.5 figures/fig3_clinical.pdf committed
-[ ] 1.5 pdflatex passes with no missing figure warnings
-[ ] 1.6 Degree-heuristic baseline computed and in Table 3
-[ ] 1.6 Random baseline row (PR-AUC = 0.50) added to Table 3
+[x] 1.4 paper.tex compiles with zero [?] citations
+[x] 1.5 figures/fig1_pipeline.pdf committed
+[x] 1.5 figures/fig2_pauli_zz.pdf committed
+[x] 1.5 figures/fig3_clinical.pdf committed
+[x] 1.5 pdflatex passes with no missing figure warnings
+[x] 1.6 Degree-heuristic baseline computed and in Table 3
+[x] 1.6 Random baseline row (PR-AUC = 0.50) added to Table 3
 [ ] 2.1 Ablation A/B/C/D results in results/ablation_*/
 [ ] 2.1 B vs C delta stated explicitly in paper §6.3
 [ ] 2.3 Nyström sweep complete, m chosen and justified

@@ -1,6 +1,7 @@
 import { ExperimentCandidatePanel } from "@/components/v2/experiment-candidate-panel";
 import { ExperimentNextActions } from "@/components/v2/experiment-next-actions";
 import { ModelLeaderboard } from "@/components/v2/model-leaderboard";
+import { MoAExplanationPanel } from "@/components/v2/moa-explanation-panel";
 import { RunProvenancePanel } from "@/components/v2/run-provenance-panel";
 import { ScientificQualityPanel } from "@/components/v2/scientific-quality-panel";
 import {
@@ -122,6 +123,8 @@ export default async function V2ExperimentPage({
         <ModelLeaderboard methods={evidence.methods} />
         <RunProvenancePanel latestRun={evidence.latestRun} analysis={evidence.analysis} />
       </section>
+
+      <MoAExplanationPanel />
 
       <ExperimentCandidatePanel session={session} predictions={evidence.predictions} />
 

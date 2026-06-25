@@ -447,6 +447,22 @@ class RepurposingCandidatesResponse(BaseModel):
     message: Optional[str] = None
 
 
+class FeatureImportanceResponse(BaseModel):
+    """Feature importances from the best classical model in the latest run."""
+
+    status: str  # "ok" | "empty" | "error"
+    model_name: Optional[str] = None
+    model_type: Optional[str] = None
+    pr_auc: Optional[float] = None
+    feature_count: Optional[int] = None
+    top_features: List[Dict[str, Any]] = []
+    all_importances: Optional[List[float]] = None
+    feature_names: Optional[List[str]] = None
+    config: Optional[Dict[str, Any]] = None
+    message: Optional[str] = None
+    provenance: List[EvidenceProvenance] = []
+
+
 class LatestRunResponse(BaseModel):
     """Latest pipeline artifacts under ``results/`` (see ``utils/latest_run.py``)."""
 
@@ -765,6 +781,103 @@ async def get_runs_latest():
     payload = get_latest_run_snapshot()
     payload["provenance"] = _latest_run_provenance("/runs/latest", payload)
     return LatestRunResponse(**payload)
+
+
+@app.get("/runs/latest/feature-importance", response_model=FeatureImportanceResponse)
+async def get_runs_latest_feature_importance():
+    """Feature importances from the best classical model in the latest run.
+
+    Returns the top-N features by importance, with model metadata.
+    Highlights MoA (mechanism-of-action) features when present.
+    """
+    try:
+        from pathlib import Path
+        from utils.latest_run import find_latest_optimized_json_path
+        import json
+
+        path = find_latest_optimized_json_path()
+        if path is None:
+            return FeatureImportanceResponse(
+                status="empty",
+                message="No optimized_results JSON found under results/.",
+                provenance=[_latest_run_provenance("/runs/latest/feature-importance", {})],
+            )
+
+        with open(path) as f:
+            raw = json.load(f)
+
+        ranking = raw.get("ranking", [])
+        classical_results = raw.get("classical_results", {})
+        config = raw.get("config", {})
+
+        # Find the best classical model that has feature_importances
+        best_model_name = None
+        best_model_data = None
+        best_importances = None
+        best_names = None
+        best_pr_auc = -1
+
+        for m in ranking:
+            if m.get("type") != "classical":
+                continue
+            name = m["name"]
+            res = classical_results.get(name, {})
+            fi = res.get("feature_importances")
+            if fi is not None and m.get("pr_auc", 0) > best_pr_auc:
+                best_model_name = name
+                best_model_data = res
+                best_importances = fi
+                best_pr_auc = m["pr_auc"]
+                best_names = res.get("feature_names")
+
+        if best_importances is None:
+            return FeatureImportanceResponse(
+                status="empty",
+                message="No classical model with feature_importances found in the latest run.",
+                provenance=[_latest_run_provenance("/runs/latest/feature-importance", raw)],
+            )
+
+        # Build top-N list
+        indexed = list(enumerate(best_importances))
+        indexed.sort(key=lambda x: x[1], reverse=True)
+        top_20 = indexed[:20]
+
+        top_features = []
+        for idx, importance in top_20:
+            name = best_names[idx] if best_names and idx < len(best_names) else f"feature_{idx}"
+            is_moa = name.startswith("moa_") if best_names else False
+            top_features.append({
+                "rank": len(top_features) + 1,
+                "index": idx,
+                "name": name,
+                "importance": round(importance, 6),
+                "is_moa": is_moa,
+            })
+
+        # Count MoA features in top-20
+        moa_in_top = sum(1 for f in top_features if f["is_moa"])
+
+        return FeatureImportanceResponse(
+            status="ok",
+            model_name=best_model_name,
+            model_type="classical",
+            pr_auc=round(best_pr_auc, 4),
+            feature_count=len(best_importances),
+            top_features=top_features,
+            all_importances=best_importances,
+            feature_names=best_names,
+            config=config,
+            message=f"MoA features in top-20: {moa_in_top}" if best_names else "Feature names not available from this run.",
+            provenance=[_latest_run_provenance("/runs/latest/feature-importance", raw)],
+        )
+
+    except Exception as e:
+        logger.exception("Failed to load feature importance data")
+        return FeatureImportanceResponse(
+            status="error",
+            message=str(e),
+            provenance=[_latest_run_provenance("/runs/latest/feature-importance", {"error": str(e)})],
+        )
 
 
 @app.get("/status", response_model=StatusResponse)

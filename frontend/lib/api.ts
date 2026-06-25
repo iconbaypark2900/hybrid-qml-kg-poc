@@ -291,6 +291,32 @@ export function fetchLatestRun(): Promise<LatestRunResponse> {
   return apiFetch<LatestRunResponse>("/runs/latest");
 }
 
+export interface FeatureImportanceItem {
+  rank: number;
+  index: number;
+  name: string;
+  importance: number;
+  is_moa: boolean;
+}
+
+export interface FeatureImportanceResponse {
+  status: "ok" | "empty" | "error";
+  model_name: string | null;
+  model_type: string | null;
+  pr_auc: number | null;
+  feature_count: number | null;
+  top_features: FeatureImportanceItem[];
+  all_importances: number[] | null;
+  feature_names: string[] | null;
+  config: Record<string, unknown> | null;
+  message: string | null;
+  provenance: EvidenceProvenance[];
+}
+
+export function fetchFeatureImportance(): Promise<FeatureImportanceResponse> {
+  return apiFetch<FeatureImportanceResponse>("/runs/latest/feature-importance");
+}
+
 // ---------- /repurposing ----------
 
 export interface RepurposingDisease {

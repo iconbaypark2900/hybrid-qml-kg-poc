@@ -703,9 +703,11 @@ def train_classical_model(name, model, X_train, y_train, X_test, y_test, cv_fold
             'test_scores': test_scores,  # For predictions_compare.csv
         }
         
-        # Add feature importances if available
+        # Add feature importances and names if available
         if hasattr(model, 'feature_importances_'):
             result['feature_importances'] = model.feature_importances_.tolist()
+            if feature_names is not None:
+                result['feature_names'] = feature_names
         
         return result
     except Exception as e:

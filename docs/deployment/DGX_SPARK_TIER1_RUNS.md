@@ -38,101 +38,141 @@ git pull origin main
 
 ## Step 2 — Set Up the Python Environment
 
-> **WARNING — read before running pip install.**
-> Installing PyTorch downloads a ~2.5 GB wheel and expands it in memory.
-> On a shared DGX this can freeze or reboot the machine if done naively.
-> Follow the steps below exactly to stay within safe memory limits.
+> **Do NOT run pip install yet.** Every previous crash happened during pip
+> install. DGX Spark machines ship with PyTorch + CUDA already available.
+> Check what exists first — you may need zero installation.
 
-### 2a — Check available RAM first
+### 2a — Check what is already on the machine (do this first)
+
+Run these four checks in order. Stop at the first one that works.
+
+**Check 1 — conda environment**
+
+```bash
+conda env list 2>/dev/null
+```
+
+If you see any environment with `torch` or `pytorch` in the name, activate it:
+
+```bash
+conda activate <env-name>
+python3 -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+If that prints `True`, skip to Step 2d.
+
+**Check 2 — module system**
+
+```bash
+module avail 2>/dev/null | grep -iE 'python|torch|cuda'
+```
+
+If modules appear, load the PyTorch one:
+
+```bash
+module load pytorch   # exact name varies — use what avail shows
+python3 -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+If that prints `True`, skip to Step 2d.
+
+**Check 3 — system Python already has torch**
+
+```bash
+python3 -c "import torch; print(torch.__version__, torch.cuda.is_available())" 2>/dev/null
+```
+
+If that prints `True`, skip to Step 2d.
+
+**Check 4 — NGC Docker container (standard on DGX)**
+
+DGX Spark machines run jobs inside NVIDIA NGC containers. If the above
+three checks all fail, ask your DGX administrator or check:
+
+```bash
+docker images 2>/dev/null | grep nvcr
+# or
+ls /opt/nvidia/ 2>/dev/null
+```
+
+If NGC containers are available, launch one:
+
+```bash
+docker run --gpus all --rm -it \
+  -v ~/hybrid-qml-kg-poc:/workspace/project \
+  nvcr.io/nvidia/pytorch:24.01-py3 bash
+cd /workspace/project
+```
+
+Inside the container PyTorch + CUDA are pre-installed. Skip to Step 2d.
+
+---
+
+### 2b — Only if all four checks above failed: install pip packages
+
+**Check free RAM before anything else:**
 
 ```bash
 free -h
+# You need at least 8 GB free. If not, wait for other jobs to finish.
 ```
 
-You need at least **8 GB free** before running pip. If free memory is low,
-check who else is using the machine:
+Download the wheel to disk before installing (prevents the RAM spike that
+crashes the machine):
 
 ```bash
-who         # other logged-in users
-nvidia-smi  # GPU processes
-top -b -n1 | head -20   # top RAM consumers
-```
+nvidia-smi | grep "CUDA Version"   # find your CUDA version
 
-If memory is tight, coordinate with other users or wait for their jobs to finish
-before installing.
-
-### 2b — Download the wheel separately before installing
-
-This splits the download and install into two steps so pip never holds
-the full wheel + extracted files in RAM at the same time.
-
-```bash
-# Check your CUDA version
-nvidia-smi | grep "CUDA Version"
-
-# Create a download directory on local disk (not RAM)
-mkdir -p ~/torch_wheels && cd ~/torch_wheels
-
-# Download the wheel without installing (pick cu124 or cu121 to match your driver)
+mkdir -p ~/torch_wheels
 pip download torch \
   --index-url https://download.pytorch.org/whl/cu124 \
   --no-deps \
   -d ~/torch_wheels
 
-# Go back to the project
-cd ~/hybrid-qml-kg-poc
-```
-
-### 2c — Create the venv and install from the local wheel
-
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-
-# Install torch from the local wheel file (no network, no extra decompression RAM spike)
 pip install ~/torch_wheels/torch-*.whl
+```
 
-# Install remaining dependencies one chunk at a time to avoid RAM spikes
+Then install project deps in small batches — never all at once:
+
+```bash
 pip install pykeen networkx scikit-learn numpy pandas
 pip install qiskit qiskit-aer
 pip install -r requirements.txt
 ```
 
-If `pip install -r requirements.txt` still causes a freeze, install in smaller
-batches — open `requirements.txt` and install 5–10 packages at a time.
+---
 
-Verify GPU is visible before running anything:
+### 2c — Install remaining project deps into whichever environment is active
+
+Once you have a working Python with CUDA torch (from any path above), install
+the project-specific packages that are not already present:
+
+```bash
+pip install pykeen qiskit qiskit-aer scikit-learn networkx pandas \
+  fastapi httpx 2>&1 | tail -5
+```
+
+If any package is already installed it will be skipped silently.
+
+---
+
+### 2d — Verify GPU before running anything
 
 ```bash
 python3 -c "
 import torch
 print('torch:', torch.__version__)
-print('CUDA available:', torch.cuda.is_available())
+print('CUDA:', torch.cuda.is_available())
 if torch.cuda.is_available():
     print('GPU:', torch.cuda.get_device_name(0))
-else:
-    print('ERROR: CUDA not available — stop here and fix the PyTorch install')
 "
 ```
 
-You must see `CUDA available: True` before proceeding.
-
-Also verify Qiskit Aer GPU support:
-
-```bash
-python3 -c "
-from qiskit_aer import AerSimulator
-gpu_sim = AerSimulator(method='statevector', device='GPU')
-print('Aer GPU simulator OK:', gpu_sim)
-"
-```
-
-If this errors with `device GPU is not supported`, install the GPU Aer build:
-
-```bash
-pip install qiskit-aer-gpu
-```
+You must see `CUDA: True`. If you see `False`, go back to Step 2a and try the
+next check — do not proceed and do not run pip install again.
 
 ---
 

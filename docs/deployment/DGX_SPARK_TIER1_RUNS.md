@@ -38,34 +38,69 @@ git pull origin main
 
 ## Step 2 — Set Up the Python Environment
 
-The DGX must run a **CUDA-enabled** PyTorch build. CPU PyTorch will silently
-fall back to slow CPU training even on a GPU machine.
+> **WARNING — read before running pip install.**
+> Installing PyTorch downloads a ~2.5 GB wheel and expands it in memory.
+> On a shared DGX this can freeze or reboot the machine if done naively.
+> Follow the steps below exactly to stay within safe memory limits.
+
+### 2a — Check available RAM first
 
 ```bash
-# Create a fresh venv
+free -h
+```
+
+You need at least **8 GB free** before running pip. If free memory is low,
+check who else is using the machine:
+
+```bash
+who         # other logged-in users
+nvidia-smi  # GPU processes
+top -b -n1 | head -20   # top RAM consumers
+```
+
+If memory is tight, coordinate with other users or wait for their jobs to finish
+before installing.
+
+### 2b — Download the wheel separately before installing
+
+This splits the download and install into two steps so pip never holds
+the full wheel + extracted files in RAM at the same time.
+
+```bash
+# Check your CUDA version
+nvidia-smi | grep "CUDA Version"
+
+# Create a download directory on local disk (not RAM)
+mkdir -p ~/torch_wheels && cd ~/torch_wheels
+
+# Download the wheel without installing (pick cu124 or cu121 to match your driver)
+pip download torch \
+  --index-url https://download.pytorch.org/whl/cu124 \
+  --no-deps \
+  -d ~/torch_wheels
+
+# Go back to the project
+cd ~/hybrid-qml-kg-poc
+```
+
+### 2c — Create the venv and install from the local wheel
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-```
 
-Install CUDA PyTorch — match the `cu12X` suffix to your driver output from
-`nvidia-smi`. For CUDA 12.4 (common on DGX Spark):
+# Install torch from the local wheel file (no network, no extra decompression RAM spike)
+pip install ~/torch_wheels/torch-*.whl
 
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu124
-```
-
-For CUDA 12.1:
-
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu121
-```
-
-Then install all project dependencies:
-
-```bash
+# Install remaining dependencies one chunk at a time to avoid RAM spikes
+pip install pykeen networkx scikit-learn numpy pandas
+pip install qiskit qiskit-aer
 pip install -r requirements.txt
 ```
+
+If `pip install -r requirements.txt` still causes a freeze, install in smaller
+batches — open `requirements.txt` and install 5–10 packages at a time.
 
 Verify GPU is visible before running anything:
 
@@ -310,6 +345,42 @@ git push origin main
 ```
 
 Do NOT push to the `qgg` remote — that is the Quantum-Global-Group fork.
+
+---
+
+## If the Machine Crashed During pip install
+
+The DGX likely OOM-killed itself because pip downloaded and extracted a large
+wheel while other processes were also using RAM. Recovery steps:
+
+```bash
+# 1. SSH back in after the machine reboots
+ssh <your-dgx-hostname>
+cd ~/hybrid-qml-kg-poc
+
+# 2. Remove any partial venv from the failed attempt
+rm -rf .venv ~/torch_wheels
+
+# 3. Check how much RAM is free NOW before trying again
+free -h
+# You need at least 8 GB free
+
+# 4. Check who else is on the machine and what GPU jobs are running
+who && nvidia-smi
+
+# 5. Follow the RAM-safe install in Step 2 above (download wheel first, then install)
+```
+
+If the DGX is a shared machine administered by someone else (NVIDIA, MDC, etc.),
+ask them whether a Python environment with PyTorch + CUDA is already installed
+system-wide or available as a module:
+
+```bash
+module avail 2>/dev/null | grep -i torch   # if using environment modules
+conda env list 2>/dev/null                 # if conda is available
+```
+
+Using an existing system environment avoids the pip install entirely.
 
 ---
 

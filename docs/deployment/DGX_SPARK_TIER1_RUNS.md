@@ -164,9 +164,16 @@ echo $HYBRID_QML_SYSTEM   # should print: dgx
 
 ## Step 4 — Run the MoA Benchmark
 
-This run was killed on CPU at epoch 19/50. On DGX it should finish in ~60 min.
+> **Why the previous runs failed:** The pipeline was re-training RotatE from
+> scratch every run (15+ hours on CPU). Pre-trained 128d embeddings already
+> exist at `data/rotate_128d_entity_embeddings.npy` from earlier successful runs.
+> The flags `--use_cached_embeddings --allow_cached_embeddings_with_holdout`
+> tell the pipeline to load them directly, skipping embedding training entirely.
+> On DGX the only remaining compute is the QSVC kernel (~2–4 min on GPU).
 
 ```bash
+mkdir -p results/moa_benchmark
+
 nohup python3 scripts/run_optimized_pipeline.py \
   --relation CtD \
   --full_graph_embeddings \
@@ -183,6 +190,8 @@ nohup python3 scripts/run_optimized_pipeline.py \
   --ensemble_method stacking \
   --tune_classical \
   --use_moa_features \
+  --use_cached_embeddings \
+  --allow_cached_embeddings_with_holdout \
   --results_dir results/moa_benchmark \
   > results/moa_benchmark/run_dgx.log 2>&1 &
 
@@ -195,20 +204,28 @@ Monitor progress:
 tail -f results/moa_benchmark/run_dgx.log
 ```
 
-Look for:
-- `PyKEEN training device: cuda` — confirms GPU embedding training
-- `Training epochs on cuda: 100%` — embedding done, QSVC starting
-- `QSVC kernel computation complete` — quantum kernel done
-- `Ensemble PR-AUC:` — final result
+Look for these lines in order — each confirms a stage completed:
+
+```
+Using cached embeddings          ← skipped retraining, loaded from data/
+QSVC kernel computation complete ← quantum kernel done (~2-4 min on GPU)
+Ensemble PR-AUC: 0.XXXX          ← final result
+```
+
+If you see `Training epochs on cpu` instead, the cache was not found or CUDA
+is not active — see Troubleshooting below.
 
 ---
 
 ## Step 5 — Run the CpD Relation
 
 Start this in a **second tmux pane** (`Ctrl-B then %` to split, or `Ctrl-B then C`
-for a new window) while MoA is running.
+for a new window) while MoA is running. CpD uses the same cached embeddings so
+it also skips retraining.
 
 ```bash
+mkdir -p results/cpd_run
+
 nohup python3 scripts/run_optimized_pipeline.py \
   --relation CpD \
   --full_graph_embeddings \
@@ -224,6 +241,8 @@ nohup python3 scripts/run_optimized_pipeline.py \
   --run_ensemble \
   --ensemble_method stacking \
   --tune_classical \
+  --use_cached_embeddings \
+  --allow_cached_embeddings_with_holdout \
   --results_dir results/cpd_run \
   > results/cpd_run/run_dgx.log 2>&1 &
 
@@ -241,9 +260,8 @@ tail -f results/cpd_run/run_dgx.log
 ## Step 6 — Run the Multi-Seed Evaluation
 
 Seed 42 is already done (`results/multiseed/seed_42/`). Run the remaining 4 seeds.
-These use Nyström (`--qsvc_nystrom_m 200`) so each seed takes ~2 min of quantum
-time instead of 43. Run them sequentially in the same pane after Step 5 starts,
-or in parallel panes if GPU memory allows.
+Nyström (`--qsvc_nystrom_m 200`) keeps each quantum kernel to ~20 sec on GPU.
+Cached embeddings skip retraining for all 4 seeds.
 
 ```bash
 for seed in 7 13 99 2026; do
@@ -265,6 +283,8 @@ for seed in 7 13 99 2026; do
     --ensemble_method stacking \
     --tune_classical \
     --qsvc_nystrom_m 200 \
+    --use_cached_embeddings \
+    --allow_cached_embeddings_with_holdout \
     --random_state $seed \
     --results_dir results/multiseed/seed_$seed \
     2>&1 | tee results/multiseed/seed_$seed.log
@@ -385,6 +405,35 @@ Using an existing system environment avoids the pip install entirely.
 ---
 
 ## Troubleshooting
+
+### Still seeing "Training epochs on cpu" despite --use_cached_embeddings
+
+The cache flags were set but the pipeline is still retraining. Two causes:
+
+**1. The cache file is missing on DGX.** The pre-trained embeddings live in `data/`
+and are not committed to git (too large). Copy them from your local machine:
+
+```bash
+# From your local WSL machine — copy data/ to DGX
+scp -r /home/roc/quantumGlobalGroup/hybrid-qml-kg-poc/data/rotate_128d_* \
+  <dgx-user>@<dgx-hostname>:~/hybrid-qml-kg-poc/data/
+
+# Verify they arrived
+ls ~/hybrid-qml-kg-poc/data/rotate_128d_*
+# Should see: rotate_128d_entity_embeddings.npy, rotate_128d_entity_ids.json, rotate_128d_relation_embeddings.npy
+```
+
+**2. The leakage guard blocked the cache.** If you see the warning
+`Leakage guard: hold-out set detected; disabling cached embeddings`, make sure
+you included BOTH flags:
+
+```bash
+--use_cached_embeddings --allow_cached_embeddings_with_holdout
+```
+
+Both are required. `--use_cached_embeddings` alone is blocked by the leakage guard.
+
+---
 
 ### CUDA not available after installing CUDA PyTorch
 

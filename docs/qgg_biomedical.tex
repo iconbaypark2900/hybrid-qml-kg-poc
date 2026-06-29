@@ -102,6 +102,10 @@ the best-supported clinically.
 We introduce a ten-feature mechanism-of-action (MoA) module---binding-target
 overlap, pathway co-involvement, pharmacologic class, and treatment
 analogy---to re-align model scores with clinical validity.
+On the current reproducible protocol (cached 256D RotatE, MoA features, full
+classical suite, Nystr\"{o}m $m{=}200$), the stacking ensemble reaches
+\textbf{0.7805} test PR-AUC (seed 42) and \textbf{0.7398 $\pm$ 0.038} over five
+seeds; we do not claim quantum advantage on CtD under this protocol.
 \end{abstract}
 
 \medskip\noindent\textbf{Keywords:} quantum machine learning; quantum kernel methods; knowledge graph embeddings;
@@ -351,9 +355,11 @@ kernel evaluation regimes typical of current NISQ devices.
 \textbf{Fidelity kernel.}
 $k_Q(\mathbf{x},\mathbf{y})=|\langle 0^{\otimes n}|U^\dagger(\mathbf{x})U(\mathbf{y})|0^{\otimes n}\rangle|^2$,
 computed via Qiskit Aer CPU statevector simulation \cite{qiskit_aer2023}.
-No Nystr\"{o}m approximation \cite{williams2001nystrom,qiskit_ml2023} is used
-(\texttt{nystrom\_m=None}); the full $1{,}208\!\times\!1{,}208$ kernel matrix
-required \textbf{2,619 s}---a genuine full-dataset computation.
+The historical 128D headline run used no Nystr\"{o}m approximation
+\cite{williams2001nystrom,qiskit_ml2023} (\texttt{nystrom\_m=None}); the full
+$1{,}208\!\times\!1{,}208$ kernel matrix required \textbf{2,619 s}.
+Reproducible multiseed benchmarks use Nystr\"{o}m landmarks
+(\texttt{--qsvc\_nystrom\_m 200}).
 \textbf{QSVC} uses $C\!=\!0.1$ (primary) or $C\!=\!0.676$ (Optuna-tuned);
 $C$ is the standard SVM soft-margin parameter \cite{qiskit_ml2023}.
 Rather than serving as a standalone classifier replacement, the quantum support
@@ -447,19 +453,22 @@ PyTorch 2.x (PyKEEN backend).
 \textbf{Hardware.} Qiskit Aer CPU statevector simulator (primary); IBM Quantum
 Heron (hardware validation). Seed 42 for all splits and training.
 
-\textbf{Reproducing the primary result (PR-AUC 0.7987):}
+\textbf{Reproducible Tier-1 benchmark (reported headline):}
 {\small\begin{verbatim}
-python scripts/run_optimized_pipeline.py
-  --relation CtD --full_graph_embeddings
-  --embedding_method RotatE --embedding_dim 128
-  --embedding_epochs 200 --negative_sampling hard
-  --qml_dim 16 --qml_feature_map Pauli
-  --qml_feature_map_reps 2 --qsvc_C 0.1
-  --qml_pre_pca_dim 24 --run_ensemble
-  --ensemble_method stacking --tune_classical
-  --fast_mode
+./scripts/run_256d_moa_multiseed.sh
 \end{verbatim}}
-Results written to \texttt{results/optimized\_results\_}\linebreak\texttt{YYYYMMDD-HHMMSS.json}.
+Uses cached full-graph RotatE 256D embeddings (symlinked as 128D paths),
+MoA features, full classical tuning (no \texttt{--fast\_mode}),
+\texttt{--qsvc\_nystrom\_m 200}, and stacking that selects the best
+PR-AUC classical base learner (HistGBDT) for the meta-learner
+(\texttt{\_select\_best\_ensemble\_classical}).
+\textbf{Caveat:} \texttt{--fast\_mode} trains only RF+ET and caps embedding
+epochs at 50; it must not be used for HistGBDT/MoA benchmarking.
+Historical single-run PR-AUC 0.7987 used \texttt{--fast\_mode} with
+RF-led classical selection and is not reproduced on the current protocol
+(see \texttt{results/headline\_repro\_fresh/INVESTIGATION.md}).
+Results: \texttt{results/rerun\_256d\_moa/}; summary in
+\texttt{results/multiseed/TABLE3.md}.
 
 %% ====================================================================
 \section{Results}
@@ -474,33 +483,42 @@ gives PR-AUC $\approx 0.50$; all reported models exceed this substantially.
 \subsection{Primary Results}
 
 \begin{table}[t]
-\caption{Primary short-paper result: RotatE-128D, Pauli-16Q QSVC, stacking.
-\textit{Full-graph RotatE 128D (200 ep.), Pauli reps=2, PCA$\to$24D$\to$16Q,
-$C=0.1$, hard negatives 1:1, tuned classical. Kernel time 2,619~s.}}
+\caption{Reproducible Tier-1 CtD benchmark (cached 256D RotatE + MoA, five seeds).
+Nystr\"{o}m $m{=}200$; stacking uses best PR-AUC classical (HistGBDT).
+Source: \texttt{results/rerun\_256d\_moa/summary.json}.}
 \label{tab:primary}
+\centering\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Model} & \textbf{Test PR-AUC} \\
+\midrule
+\textbf{Ensemble-QC-stacking} & \textbf{0.7398 $\pm$ 0.038} \\
+HistGBDT & 0.7393 $\pm$ 0.037 \\
+\midrule
+\multicolumn{2}{l}{\footnotesize Best single run (seed 42): ensemble \textbf{0.7805}; HistGBDT 0.7784.} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:primary} reports the reproducible headline; the full pipeline is shown in Figure~\ref{fig:pipeline}.
+On seed 42, stacking adds +0.0021 PR-AUC over HistGBDT; QSVC alone remains near chance ($\approx$0.50) on this protocol, so we do not claim quantum lift on CtD.
+
+\begin{table}[t]
+\caption{Historical single-run Pauli inversion (128D, full kernel, \texttt{--fast\_mode}; not current headline protocol).}
+\label{tab:legacy_primary}
 \centering\small
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{@{}lccc@{}}
 \toprule
 \textbf{Model} & \textbf{PR-AUC} & \textbf{ROC-AUC} & \textbf{Acc.} \\
 \midrule
-\textbf{Ensemble-QC (Pauli)} & \textbf{0.7987} & 0.7456 & 0.576 \\
+Ensemble-QC (Pauli) & 0.7987 & 0.7456 & 0.576 \\
 RandomForest-Opt & 0.7838 & 0.7319 & 0.583 \\
-ExtraTrees-Opt & 0.7807 & 0.7301 & 0.662 \\
-Ensemble-QC (ZZ)$^\dagger$ & 0.7408 & --- & 0.649 \\
-QSVC (ZZ)$^\dagger$ & 0.7216 & --- & 0.656 \\
 QSVC (Pauli) & 0.6343 & 0.6313 & 0.586 \\
 \bottomrule
-\multicolumn{4}{l}{\footnotesize $^\dagger$From result file 20260216-091710 (same split).}
 \end{tabular}
 \end{table}
-
-Table~\ref{tab:primary} reports the primary short-paper result; the full pipeline producing these numbers is shown in Figure~\ref{fig:pipeline}. The stacking ensemble improves over best classical (RF, 0.7838) by
-\textbf{+0.0149 PR-AUC} (+1.49 pp).
-
-In an extended 256D RotatE/Optuna configuration, the ensemble reaches
-PR-AUC 0.8581 while QSVC remains most useful as a diversity-inducing base
-learner rather than a standalone replacement.
 
 \subsection{Feature Map Analysis: The Pauli Inversion Effect}
 \label{sec:results_feature_map}
@@ -662,17 +680,18 @@ that are orthogonal to RotatE geometry and interpretable by clinicians.
 
 We have presented a hardware-aware hybrid quantum-classical pipeline bridging
 KG embeddings with quantum kernel classifiers for biomedical link prediction.
-On Hetionet CtD, our system achieves PR-AUC 0.7987 (RotatE-128D, Pauli-16Q,
-genuine 2,619 s kernel, +1.49 pp over best classical) and PR-AUC 0.8581
-(RotatE-256D, Pauli-12Q, Optuna-tuned).
-The central finding reframes quantum kernel selection: maximize
-classical-quantum prediction \emph{decorrelation}, not standalone accuracy.
+On Hetionet CtD, our reproducible stacking ensemble achieves
+\textbf{0.7805} test PR-AUC (256D RotatE + MoA, seed 42) and
+\textbf{0.7398 $\pm$ 0.038} over five seeds (Table~\ref{tab:primary}).
+The Pauli inversion effect (Table~\ref{tab:legacy_primary}) reframes quantum
+kernel selection: maximize classical-quantum prediction \emph{decorrelation},
+not standalone accuracy, though current multiseed runs show no quantum lift
+when HistGBDT dominates.
 Clinical validation identifies Losartan $\to$ atherosclerosis and Mitomycin
 $\to$ liver cancer as strongly supported predictions and reveals a
 score-validity inversion motivating the MoA feature module.
-This work establishes a new research direction at the intersection of quantum
-kernel methods and KG reasoning for biomedicine; next steps include multi-seed
-validation, MoA late fusion, and multi-relation extension.
+RNA-seq repurposing validation (harmonized TCGA$\to$GSE225846; CREEDS fusion)
+is documented in \texttt{docs/repurposing/RNASEQ\_REPURPOSING\_METHODS.md}.
 
 \section*{Acknowledgment}
 The authors thank Abdelrahman Elsayed, the IBM HBCU Quantum Center, and the IBM

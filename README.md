@@ -6,7 +6,9 @@ app_port: 7860
 
 # Hybrid Quantum-Classical Knowledge Graph Link Prediction
 
-A hybrid quantum-classical machine learning system for biomedical link prediction on the [Hetionet](https://het.io/) knowledge graph, predicting **Compound-treats-Disease (CtD)** relationships via classical ensembles and quantum kernel classifiers. Best test PR-AUC: **0.7987** (stacking ensemble with Pauli feature map).
+A hybrid quantum-classical machine learning system for biomedical link prediction on the [Hetionet](https://het.io/) knowledge graph, predicting **Compound-treats-Disease (CtD)** relationships via classical ensembles and quantum kernel classifiers.
+
+**Current reproducible best (DGX Spark, 2026-06):** Ensemble PR-AUC **0.7805** (256D RotatE + MoA, seed 42); 5-seed mean **0.7398 ± 0.038**. Historical headline **0.7987** reflects an earlier protocol (`--fast_mode`, RF-led classical); see [TABLE3](results/multiseed/TABLE3.md) and [INVESTIGATION](results/headline_repro_fresh/INVESTIGATION.md).
 
 ## Reading Order
 
@@ -53,11 +55,12 @@ Headline results on the CtD task (test set):
 
 | Model | Test PR-AUC | Type |
 |---|---:|---|
-| Ensemble-QC-stacking (Pauli) | **0.7987** | Hybrid ensemble |
-| RandomForest-Optimized | 0.7838 | Classical |
-| ExtraTrees-Optimized | 0.7807 | Classical |
-| Ensemble-QC-stacking (ZZ) | 0.7408 | Hybrid ensemble |
-| QSVC-Optimized | 0.7216 | Quantum |
+| Ensemble-QC-stacking (256D+MoA, seed 42) | **0.7805** | Hybrid ensemble |
+| Ensemble-QC-stacking (5-seed mean) | **0.7398 ± 0.038** | Hybrid ensemble |
+| HistGBDT (5-seed mean) | 0.7393 ± 0.037 | Classical |
+| QSVC-Optimized | ~0.50 | Quantum (near chance) |
+
+Historical single-run (128D, `--fast_mode`, RF-led): ensemble **0.7987** — not reproduced on current protocol; see [TABLE3](results/multiseed/TABLE3.md).
 
 **Target PR-AUC > 0.70: achieved.**
 
@@ -527,16 +530,36 @@ pip install -r requirements-full.txt
 
 ### Reproduce the best result
 
+**Current protocol (full classical, no `fast_mode`) — matches DGX Spark Tier 1 runs:**
+
+```bash
+./scripts/run_256d_moa_multiseed.sh   # 5 seeds; expect ensemble ~0.74 ± 0.04
+# Single seed 42 only:
+python scripts/run_optimized_pipeline.py --relation CtD \
+  --full_graph_embeddings --embedding_method RotatE --embedding_dim 256 \
+  --embedding_epochs 200 --negative_sampling hard --qml_dim 16 \
+  --qml_feature_map Pauli --qml_feature_map_reps 2 --qsvc_C 0.1 \
+  --optimize_feature_map_reps --run_ensemble --ensemble_method stacking \
+  --tune_classical --qml_pre_pca_dim 24 --use_moa_features \
+  --skip_vqc --skip_svm_rbf --use_cached_embeddings --seed 42
+```
+
+Expected (cached 256D embeddings): Ensemble **~0.7805**, HistGBDT **~0.7784**, RF **~0.47**.
+
+**Historical headline (not reproduced on current code; omit `--fast_mode` for paper runs):**
+
 ```bash
 python scripts/run_optimized_pipeline.py --relation CtD \
   --full_graph_embeddings --embedding_method RotatE --embedding_dim 128 \
   --embedding_epochs 200 --negative_sampling hard --qml_dim 16 \
   --qml_feature_map Pauli --qml_feature_map_reps 2 --qsvc_C 0.1 \
   --optimize_feature_map_reps --run_ensemble --ensemble_method stacking \
-  --tune_classical --qml_pre_pca_dim 24 --fast_mode
+  --tune_classical --qml_pre_pca_dim 24
 ```
 
-For robust evaluation (K-fold CV, no `fast_mode`): add `--use_cv_evaluation --cv_folds 5`. For paper-ready runs: add `--run_multimodel_fusion --fusion_method bayesian_averaging` and omit `--fast_mode`. See [docs/reference/TEST_COMMANDS.md](docs/reference/TEST_COMMANDS.md).
+For robust evaluation (K-fold CV): add `--use_cv_evaluation --cv_folds 5`. For paper-ready runs: add `--run_multimodel_fusion --fusion_method bayesian_averaging`. See [docs/reference/TEST_COMMANDS.md](docs/reference/TEST_COMMANDS.md).
+
+**Optuna HPO:** `scripts/optuna_pipeline_search.py` no longer forces `--fast_mode` by default; pass `--fast-mode` only for quick iteration.
 
 ### NVIDIA DGX Spark (full-graph embedding)
 

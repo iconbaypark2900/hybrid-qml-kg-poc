@@ -106,7 +106,7 @@ Abdelrahman E. Ahmed\\
   \begin{onecolabstract}
 We present the first system to combine knowledge graph (KG) embeddings with quantum kernel classifiers for biomedical link prediction. Our hybrid quantum-classical pipeline predicts \textit{Compound-treats-Disease} (CtD) relationships on the Hetionet knowledge graph --- a heterogeneous biomedical network with 47,031 entities and 2.25 million edges across 24 relation types --- by training full-graph RotatE embeddings, constructing pharmacologically enriched pair-wise features, and classifying candidate links with a stacking ensemble of classical tree models and a quantum support vector classifier (QSVC) using a Pauli feature map in a 16-qubit circuit. While prior work applies quantum kernels to molecular fingerprints and classical KG methods to drug repurposing independently, no existing approach feeds learned KG embedding vectors into quantum feature spaces for link prediction.
 
-Our primary configuration (RotatE-128D, 200 epochs, full-graph, Pauli-16Q, reps=2, C=0.1, hard negatives) achieves a test PR-AUC of \textbf{0.7987}, a +1.49 pp improvement over the strongest classical baseline (RandomForest, 0.7838). An extended configuration with 256D embeddings and Optuna-tuned classical components reaches \textbf{0.8581 PR-AUC}. A central finding is that switching from the ZZ to Pauli feature map \textit{lowers} standalone QSVC performance (0.7216 $\to$ 0.6343) while \textit{raising} ensemble performance (0.7408 $\to$ 0.7987): the Pauli kernel produces predictions less correlated with classical model errors, providing greater complementary signal to the stacking meta-learner. We validate top predictions against ClinicalTrials.gov, identify a score-validity inversion problem in embedding-based scoring, and introduce a ten-feature mechanism-of-action (MoA) module derived from multi-relational Hetionet structure to address it.
+Our reproducible configuration (cached full-graph RotatE 256D with MoA features, Pauli-16Q QSVC, Nystr\"{o}m $m{=}200$, stacking with best-PR-AUC classical selection) achieves test PR-AUC \textbf{0.7805} (seed 42) and \textbf{0.7398 $\pm$ 0.038} over five seeds; HistGBDT is the strongest classical learner and QSVC remains near chance ($\approx$0.50), so we do not claim quantum advantage on CtD under this protocol. A historical single-run with \texttt{--fast\_mode} reported PR-AUC 0.7987 (RF-led classical); that headline is not reproduced on the current pipeline (see \texttt{results/headline\_repro\_fresh/INVESTIGATION.md}). A central finding from the earlier protocol is that switching from ZZ to Pauli \textit{lowers} standalone QSVC (0.7216 $\to$ 0.6343) while \textit{raising} ensemble performance (0.7408 $\to$ 0.7987): the Pauli kernel produces predictions less correlated with classical errors. We validate top predictions against ClinicalTrials.gov, identify score-validity inversion in embedding-based scoring, and introduce a ten-feature mechanism-of-action (MoA) module derived from multi-relational Hetionet structure.
   \end{onecolabstract}
   \vspace{0.4em}
 ]
@@ -380,30 +380,9 @@ We report PR-AUC as the primary metric and ROC-AUC and accuracy as secondary met
 
 \subsection{Reproducing the Primary Result}\label{sec:exp_repro}
 
-The following command reproduces the primary 0.7987 result:
+The reproducible headline is produced by \texttt{./scripts/run\_256d\_moa\_multiseed.sh}: cached 256D RotatE embeddings (symlinked as 128D paths), MoA features, full classical tuning (no \texttt{--fast\_mode}), \texttt{--qsvc\_nystrom\_m 200}, and stacking that selects the best PR-AUC classical model (HistGBDT) via \texttt{\_select\_best\_ensemble\_classical}. Results are written under \texttt{results/rerun\_256d\_moa/}; see \texttt{results/multiseed/TABLE3.md}.
 
-\begin{verbatim}
-python scripts/run_optimized_pipeline.py \
-  --relation CtD \
-  --full_graph_embeddings \
-  --embedding_method RotatE \
-  --embedding_dim 128 \
-  --embedding_epochs 200 \
-  --negative_sampling hard \
-  --qml_dim 16 \
-  --qml_feature_map Pauli \
-  --qml_feature_map_reps 2 \
-  --qsvc_C 0.1 \
-  --qml_pre_pca_dim 24 \
-  --run_ensemble \
-  --ensemble_method stacking \
-  --tune_classical \
-  --fast_mode
-\end{verbatim}
-
-Expected QSVC kernel computation time: approximately 43 minutes on CPU. Results are written to \texttt{results/optimized\_results\_YYYYMMDD-HHMMSS.json}. Complete CLI flag dumps for the primary and extended headline runs are stored alongside the JSON artifacts under \texttt{results/} (see Tables~\ref{tab:primary} and~\ref{tab:extended} for timestamps).
-
-The \texttt{--fast\_mode} flag keeps the run practical: it uses reduced classical tuning (e.g., smaller tree ensembles) and skips optional heavy branches such as VQC comparisons in the same invocation, without changing the headline RotatE--Pauli--stacking configuration above.
+\textbf{Caveat:} \texttt{--fast\_mode} trains only RF+ET and caps embedding epochs at 50; it must not be used for HistGBDT/MoA benchmarking. The historical 0.7987 single-run used \texttt{--fast\_mode} with RF-led classical selection.
 
 %% ==================================================================
 \section{Results}
@@ -599,7 +578,7 @@ Longer-term directions include DRKG-scale kernels, learned quantum feature maps,
 \section{Conclusion}
 %% ==================================================================
 
-We have presented the first hybrid quantum-classical pipeline that bridges knowledge graph embeddings with quantum kernel classifiers for biomedical link prediction. On Hetionet CtD we obtain \textbf{PR-AUC 0.7987} (primary: RotatE-128D, Pauli-16Q, full kernel, +1.49 pp vs.\ best classical) and \textbf{0.8581} (extended: RotatE-256D, Pauli-12Q, Optuna-tuned classical).
+We have presented the first hybrid quantum-classical pipeline that bridges knowledge graph embeddings with quantum kernel classifiers for biomedical link prediction. On Hetionet CtD we report \textbf{PR-AUC 0.7805} (best single-run ensemble, cached 256D RotatE + MoA, seed 42) and \textbf{0.7398 $\pm$ 0.038} (five-seed ensemble mean); QSVC does not lift over HistGBDT on the current protocol. RNA-seq repurposing validation is summarized in \texttt{docs/repurposing/RNASEQ\_REPURPOSING\_METHODS.md}.
 
 The central finding is a counterintuitive quantum-classical synergy: the Pauli feature map degrades standalone QSVC PR-AUC by 8.7 pp relative to ZZ but raises ensemble PR-AUC by 5.8 pp, because it generates predictions more decorrelated from classical tree model errors. This finding reframes the optimization target for quantum kernels in hybrid ensembles: maximize classical-quantum prediction independence, not standalone quantum accuracy.
 

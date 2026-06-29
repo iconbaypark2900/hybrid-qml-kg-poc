@@ -5,14 +5,16 @@
 %   docs/results/sensitivity_pauli_vs_zz.md
 %   docs/results/sensitivity_stacking_vs_weighted.md
 %
-% Re-render after the headline GPU run lands (when the formal weighted-average
-% bootstrap CI replaces the qualitative stacking comparison).
+% NOTE (2026-06): Rows below reflect the historical 128D fast_mode preregistration
+% protocol (headline 0.7987). Current reproducible ensemble is 0.7805 (256D+MoA;
+% see results/multiseed/TABLE3.md).
 
 \begin{table}[t]
 \centering
 \caption{Sensitivity of headline PR-AUC to feature-map family and ensemble
-combiner. Pauli + stacking is the preregistered headline configuration;
-ZZ and weighted-average rows are supplementary sensitivity analyses.}
+combiner under the \textbf{legacy} 128D \texttt{fast\_mode} preregistration
+protocol. Pauli + stacking is the preregistered configuration for that protocol;
+current reproducible ensemble PR-AUC is \textbf{0.7805} (256D+MoA, TABLE3).}
 \label{tab:sensitivity}
 \begin{tabular}{l l c c c}
 \toprule
@@ -20,12 +22,12 @@ ZZ and weighted-average rows are supplementary sensitivity analyses.}
 \midrule
 \multicolumn{5}{l}{\emph{Quantum feature map (everything else held fixed)}} \\
 \midrule
-Feature map (primary)        & PauliFeatureMap (reps=2) & \textbf{0.7987} & ---       & §5.1 preregistration \\
+Feature map (legacy primary) & PauliFeatureMap (reps=2) & \textbf{0.7987} & ---       & §5.1 preregistration \\
 Feature map (sensitivity)    & ZZFeatureMap (depth=2)   & 0.7408          & $-0.0579$ & §5.2 preregistration \\
 \midrule
 \multicolumn{5}{l}{\emph{Ensemble combiner (Pauli + RotatE + hard negatives held fixed)}} \\
 \midrule
-Ensemble (primary)           & Stacking (LR meta)        & \textbf{0.7987} & ---       & §5.4 preregistration \\
+Ensemble (legacy primary)    & Stacking (LR meta)        & \textbf{0.7987} & ---       & §5.4 preregistration \\
 Ensemble (sensitivity)       & Weighted-average (0.5/0.5) & pending GPU run & pending  & §8.6 preregistration \\
 \midrule
 \multicolumn{5}{l}{\emph{QSVC kernel as a stand-alone classifier (informational)}} \\

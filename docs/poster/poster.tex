@@ -123,7 +123,9 @@ orchestrator: \texttt{run\_full\_repurposing\_pipeline.py --mode \{kg-only,kg+om
 \begin{tcolorbox}[colback=qgglight, colframe=qggblue, sharp corners,
                   boxrule=2pt, left=4mm, right=4mm, top=3mm, bottom=3mm]
 \begin{center}
-{\Huge\bfseries PR-AUC = 0.7987}\\[2mm]
+{\Huge\bfseries PR-AUC = 0.7805}\\[1mm]
+{\large Reproducible ensemble (256D+MoA, seed 42)}\\[1mm]
+{\normalsize Historical headline 0.7987 (legacy \texttt{fast\_mode})}\\[2mm]
 \textit{Hetionet Compound-treats-Disease (CtD) sealed test set}
 \end{center}
 \end{tcolorbox}
@@ -183,8 +185,9 @@ R(d, c) = \frac{|U_d \cap D_c| + |D_d \cap U_c| - |U_d \cap U_c| - |D_d \cap D_c
 
 \vspace{3mm}
 \textbf{Evidence fusion.} Linear weighted combination of 10 feature
-streams. \texttt{kg-only} mode zeros the omics block to preserve the
-0.7987 baseline; \texttt{kg+omics} mode incorporates reversal scores.
+streams. \texttt{kg-only} mode zeros the omics block; \texttt{kg+omics}
+mode incorporates CREEDS reversal scores (see TABLE3 reproducible
+\textbf{0.7805} CtD ensemble baseline).
 Confidence tiers T1--T4 from configurable thresholds.
 
 \vspace{3mm}

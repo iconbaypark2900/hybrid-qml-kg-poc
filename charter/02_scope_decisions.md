@@ -5,6 +5,8 @@
 **Decision date:** 2026-05-02
 **Status:** Locked. Forward-looking scope decisions; backward-looking executed scope is documented in §"Already Executed".
 
+> **2026-06 reproducibility note:** Current reproducible headline ensemble PR-AUC is **0.7805** (256D RotatE + MoA, seed 42) with 5-seed mean **0.7398 ± 0.038** (`results/multiseed/TABLE3.md`). The original **0.7987** below reflects an earlier `--fast_mode` protocol and is retained as a historical observation only.
+
 ---
 
 ## Already executed (descriptive, not decisional)

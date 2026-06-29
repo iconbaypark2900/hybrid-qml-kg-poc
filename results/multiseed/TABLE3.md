@@ -104,5 +104,5 @@ are not reproduced on the current protocol (see `results/headline_repro_fresh/IN
 
 1. ~~Random baseline row~~ — done (above).
 2. ~~Degree-heuristic baseline~~ — done (above).
-3. LaTeX citation key reconciliation.
-4. Commit rendered figures `figures/fig{1,2,3}_*.pdf` (PDFs exist under `figures/`; verify vs current numbers before commit).
+3. ~~LaTeX citation key reconciliation~~ — done (`docs/qgg_biomedical.tex` + `references_qce26.bib`, 2026-06).
+4. ~~Commit rendered figures `figures/fig{1,2,3}_*.pdf`~~ — done (regenerated; verify before each submission build).

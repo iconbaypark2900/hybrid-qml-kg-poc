@@ -5,6 +5,8 @@
 **Decision date:** 2026-05-02
 **Status:** Locked. Backward-looking documentation of executed methodology + forward-looking commitment for remaining work.
 
+> **2026-06 reproducibility note:** Current reproducible headline ensemble PR-AUC is **0.7805** (256D RotatE + MoA, seed 42) with 5-seed mean **0.7398 ± 0.038** (`results/multiseed/TABLE3.md`). References to **0.7987** below describe the legacy 128D `fast_mode` protocol.
+
 ---
 
 ## Methodology overview

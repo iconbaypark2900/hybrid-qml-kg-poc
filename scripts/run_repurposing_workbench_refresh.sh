@@ -129,13 +129,28 @@ import json
 from pathlib import Path
 from middleware.repurposing_workbench import build_repurposing_candidates
 
-for disease_id in ("brca_external_validation", "brca_external_validation_organism_any", "all_pairs_kg_omics"):
+EXPECTED_TOP = {
+    "brca_external_validation": "Vemurafenib",
+    "brca_external_validation_organism_any": "Prednisolone",
+    "all_pairs_kg_omics": "Fluticasone furoate",
+}
+
+for disease_id, expected_top in EXPECTED_TOP.items():
     resp = build_repurposing_candidates(disease_id)
     src = resp.get("manifest", {}).get("source", "")
     n = len(resp.get("candidates", []))
     top = resp["candidates"][0]["compound_name"] if resp.get("candidates") else "none"
     print(f"{disease_id}: source={src} candidates={n} top={top}")
     assert src == "repurposing_evidence_bundle", f"expected bundle, got {src}"
+    assert top == expected_top, f"expected top {expected_top}, got {top}"
+
+first = build_repurposing_candidates("brca_external_validation")["candidates"][0]
+rnaseq = first.get("rnaseq_signature") or {}
+assert rnaseq.get("omics_cell_type_status") == "not_computed"
+assert rnaseq.get("omics_pathway_status") == "not_computed"
+creeds_status = rnaseq.get("creeds_match_status") or first.get("creeds_match_status")
+print(f"creeds_match_status sample: {creeds_status}")
+print("smoke: creeds + not_computed checks passed")
 PY
 
 echo "=== Done at $(date) ==="

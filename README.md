@@ -68,7 +68,7 @@ Best configuration: full-graph **RotatE** embeddings (128D, 200 epochs), **hard*
 
 | Finding | Detail |
 |---|---|
-| Pauli vs ZZ | Pauli feature map lifts ensemble PR-AUC from 0.7408 → **0.7987** |
+| Pauli vs ZZ (legacy 128D, `--fast_mode`) | Pauli feature map lifted ensemble PR-AUC from 0.7408 → **0.7987** (historical; not reproduced on current protocol) |
 | Stacking | Learns optimal classical/quantum weights; manual `ensemble_quantum_weight` has no extra effect |
 | Negatives | Hard negatives outperform diverse negatives in this configuration |
 | VQC | Remains near random (best ~0.5474); **QSVC** is the effective quantum model |
@@ -601,11 +601,11 @@ python scripts/e2e_smoke.py                  # End-to-end smoke (< 3 min)
 
 ## Current Phase
 
-**Status (2026 Q2):** Headline result achieved (PR-AUC **0.7987**); focus is **publication-ready evidence**, **hardware validation**, and **Next.js UI parity**.
+**Status (2026 Q2):** Reproducible ensemble PR-AUC **0.7805** (256D+MoA, seed 42); 5-seed mean **0.7398 ± 0.038** ([TABLE3](results/multiseed/TABLE3.md)). Historical **0.7987** used an earlier `--fast_mode` protocol. Focus: **publication-ready evidence**, **hardware validation**, and **Next.js UI parity**.
 
 | Tier | Focus | Examples |
 |---|---|---|
-| **1 — Blocks arXiv v2** | Missing paper v2 experiments | MoA benchmark, CpD run, multi-seed eval, figure renders, baseline table fixes |
+| **1 — Blocks arXiv v2** | Paper alignment and figure renders | ~~MoA benchmark~~, ~~CpD run~~, ~~multi-seed eval~~, baseline table fixes, LaTeX/TABLE3 numbers |
 | **2 — Quantum claim** | Ablations and hardware | 4-condition ablation matrix, KTA diagnostic, noisy sim, IBM Heron benchmark |
 | **3 — Frontend parity** | Researcher workflow in Next.js | Pipeline jobs from UI, MoA panel, benchmark registry, experiment history chart |
 | **4 — Platform** | Longer-term extensions | ClinicalTrials API, multi-relational edges, DRKG, Nyström at scale |
@@ -639,10 +639,12 @@ Evidence and sensitivity writeups: [docs/RESULTS_EVIDENCE.md](docs/RESULTS_EVIDE
 
 ### Experiment log
 
+*Historical 128D `--fast_mode` protocol; current reproducible best is 256D+MoA ensemble **0.7805** (see [TABLE3](results/multiseed/TABLE3.md)).*
+
 | Variant | RF | ET | QSVC | Ensemble | Notes |
 |---|---:|---:|---:|---:|---|
 | Base (200 ep, stacking, tune, pre-PCA 24) | 0.7838 | 0.7807 | 0.7216 | 0.7408 | Best classical |
-| + Pauli feature map (reps=2) | 0.7838 | 0.7807 | 0.6343 | **0.7987** | Best ensemble |
+| + Pauli feature map (reps=2) | 0.7838 | 0.7807 | 0.6343 | **0.7987** | Historical best ensemble (legacy) |
 | + diverse negatives (dw=0.5) | 0.7144 | 0.7298 | 0.6689 | 0.6919 | Diverse hurts here |
 | + qsvc_C=0.05 | 0.7838 | 0.7807 | 0.7216 | 0.7408 | Same as C=0.1 |
 | + ensemble_quantum_weight=0.4 | 0.7838 | 0.7807 | 0.7216 | 0.7408 | Stacking learns weights |
@@ -663,7 +665,7 @@ The repository ships OSF-style preregistration, charter gates, locked constants,
 | [utils/bootstrap_ci.py](utils/bootstrap_ci.py) | Paired-bootstrap PR-AUC CI, conjunction rule |
 | [tests/fixtures/synthetic_kg.py](tests/fixtures/synthetic_kg.py) | Deterministic synthetic KG for smoke tests |
 
-Preregistration is **retroactive**: H1/H1b were formalized after PR-AUC 0.7987 was observed. H2/H3 (hardware) remain blinded where applicable.
+Preregistration is **retroactive**: H1/H1b were formalized after a historical PR-AUC **0.7987** was observed under the legacy protocol. Current reproducible ensemble is **0.7805** ([TABLE3](results/multiseed/TABLE3.md)). H2/H3 (hardware) remain blinded where applicable.
 
 ---
 

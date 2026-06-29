@@ -230,6 +230,81 @@ def test_load_creeds_candidate_profiles_uses_gene_map(tmp_path: Path) -> None:
     assert profiles.iloc[0]["profile_gene_overlap"] == 2
 
 
+def test_load_kg_scores_merged_creeds_profiles(tmp_path: Path) -> None:
+    creeds = tmp_path / "creeds.json"
+    creeds.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "drug:1",
+                    "drug_name": "Vemurafenib",
+                    "organism": "human",
+                    "up_genes": [["GENEUP", 2.0]],
+                    "down_genes": [["GENEDOWN", -2.0]],
+                },
+                {
+                    "id": "drug:2",
+                    "drug_name": "UnmatchedDrug",
+                    "organism": "human",
+                    "up_genes": [["GENEUP", 1.0]],
+                    "down_genes": [["GENEDOWN", -1.0]],
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    gene_map = tmp_path / "gene_map.csv"
+    gene_map.write_text(
+        "gene_id,gene_symbol\nENSG_UP,GENEUP\nENSG_DOWN,GENEDOWN\n",
+        encoding="utf-8",
+    )
+    kg_scores = tmp_path / "kg_scores.json"
+    kg_scores.write_text(
+        json.dumps(
+            [
+                {
+                    "compound": "Vemurafenib",
+                    "compound_hetionet_id": "Compound::DB123",
+                    "disease": "Breast cancer",
+                    "disease_hetionet_id": "Disease::DOID:1612",
+                    "kg_rotate_score": 0.9,
+                    "kg_complex_score": 0.8,
+                    "graph_topology_score": 0.7,
+                    "qsvc_score": 0.6,
+                    "classical_ensemble_score": 0.85,
+                },
+                {
+                    "compound": "OtherDrug",
+                    "compound_hetionet_id": "Compound::DB999",
+                    "disease": "Breast cancer",
+                    "disease_hetionet_id": "Disease::DOID:1612",
+                    "kg_rotate_score": 0.99,
+                    "kg_complex_score": 0.5,
+                    "graph_topology_score": 0.5,
+                    "qsvc_score": 0.5,
+                    "classical_ensemble_score": 0.5,
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    merged = benchmark.load_kg_scores_merged_creeds_profiles(
+        kg_scores,
+        creeds,
+        ["ENSG_UP", "ENSG_DOWN"],
+        gene_map_path=str(gene_map),
+        organism="human",
+        min_gene_overlap=2,
+        max_profiles=10,
+        disease_hetionet_id="Disease::DOID:1612",
+    )
+
+    assert set(merged["compound"]) == {"Vemurafenib"}
+    assert merged.iloc[0]["kg_rotate_score"] == 0.9
+    assert merged.iloc[0]["candidate_id"] == "Compound::DB123::Disease::DOID:1612"
+
+
 def test_rnaseq_quantum_benchmark_cli_smoke(tmp_path: Path) -> None:
     single_cell_dir = tmp_path / "single_cell"
     signatures_dir = tmp_path / "signatures"

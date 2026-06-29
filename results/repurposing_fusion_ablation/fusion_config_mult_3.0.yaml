@@ -1,0 +1,35 @@
+evidence_fusion:
+  method: stacking
+  weights:
+    kg_rotate_score: 1.5
+    kg_complex_score: 1.0
+    graph_topology_score: 0.8
+    qsvc_score: 1.2
+    classical_ensemble_score: 1.5
+    signature_reversal_score: 1.3
+    cell_type_reversal_score: 0.0
+    pathway_reversal_score: 0.0
+    moa_alignment_score: 0.7
+    clinical_evidence_score: 0.5
+  matched_omics:
+    zero_unmatched_reversal: true
+    signature_reversal_multiplier: 3.0
+  include_features:
+  - kg_rotate_score
+  - kg_complex_score
+  - graph_topology_score
+  - qsvc_score
+  - classical_ensemble_score
+  - signature_reversal_score
+  - cell_type_reversal_score
+  - pathway_reversal_score
+  - moa_alignment_score
+  - clinical_evidence_score
+confidence_tiers:
+  tier_1_threshold: 0.9
+  tier_2_threshold: 0.8
+  tier_3_threshold: 0.7
+  tier_4_threshold: 0.6
+output:
+  artifacts_dir: artifacts/predictions
+  top_n: 50

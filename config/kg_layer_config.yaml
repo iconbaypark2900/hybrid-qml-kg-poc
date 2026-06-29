@@ -3,9 +3,10 @@
 
 # Embedding Configuration
 embedding:
-  embedding_dim: 32          # Dimensionality of KG embeddings
-  qml_dim: 5                 # Reduced dimensionality for QML (PCA output)
+  embedding_dim: 64          # Dimensionality of KG embeddings
+  qml_dim: 8                 # Reduced dimensionality for QML (PCA output)
   work_dir: "data"           # Directory to store embeddings and artifacts
+  model_type: "RotatE"       # Options: TransE, RotatE, ComplEx, DistMult
 
 # Data Loading Configuration
 data_loading:
@@ -15,6 +16,7 @@ data_loading:
   test_size: 0.2            # Test set split ratio
   random_state: 42          # Random seed for reproducibility
   num_negatives: null       # Number of negative samples (null = 1:1 ratio with positives)
+  negative_sampling_strategy: "degree_corrupt"  # Options: random, degree_corrupt, type_aware, embedding_knn
 
 # Feature Preparation
 features:

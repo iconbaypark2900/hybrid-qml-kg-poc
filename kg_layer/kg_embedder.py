@@ -15,6 +15,7 @@ import os
 import json
 import hashlib
 import logging
+import tempfile
 from typing import Dict, Tuple, Optional, Iterable
 
 import numpy as np
@@ -31,6 +32,11 @@ try:
     PYKEEN_AVAILABLE = True
 except Exception:
     PYKEEN_AVAILABLE = False
+
+# Allow forcing fallback via environment variable (for low-memory environments)
+if os.environ.get("KG_EMBEDDER_FORCE_FALLBACK", "").lower() in ("1", "true", "yes"):
+    PYKEEN_AVAILABLE = False
+    logger.info("KG_EMBEDDER_FORCE_FALLBACK set → using deterministic embeddings")
 
 def _infer_ht_columns(df: pd.DataFrame) -> Tuple[str, Optional[str], str]:
     """
@@ -94,15 +100,24 @@ class HetionetEmbedder:
                 logger.warning("Could not load embedder config from %s: %s", config_path, e)
 
         if embedding_dim is None:
-            embedding_dim = int(cfg.get("embedding_dim", 32))
+            embedding_dim = int(cfg.get("embedding_dim", 64))
         else:
             embedding_dim = int(embedding_dim)
         if qml_dim is None:
-            qml_dim = int(cfg.get("qml_dim", 5))
+            qml_dim = int(cfg.get("qml_dim", 8))
         else:
             qml_dim = int(qml_dim)
         if work_dir is None:
             work_dir = str(cfg.get("work_dir", "data"))
+
+        self.model_type = cfg.get("model_type", "RotatE")
+
+        # Validation: RotatE and ComplEx require even embedding dimensions
+        if self.model_type in ("RotatE", "ComplEx") and embedding_dim % 2 != 0:
+            raise ValueError(
+                f"{self.model_type} requires even embedding_dim (got {embedding_dim}). "
+                f"Use an even number (e.g., 64, 128, 256)."
+            )
 
         self.embedding_dim = embedding_dim
         self.qml_dim = qml_dim
@@ -216,9 +231,14 @@ class HetionetEmbedder:
             triples_df["__rel__"] = "rel"
             r_col = "__rel__"
 
-        # Write triples to temp files
-        tmp_dir = os.path.join(self.work_dir, "pykeen_tmp")
-        os.makedirs(tmp_dir, exist_ok=True)
+        # Write triples to temp files. Use a per-run temp directory so
+        # concurrent PyKEEN jobs cannot overwrite each other's TSV files.
+        base_tmp_dir = os.path.join(self.work_dir, "pykeen_tmp")
+        os.makedirs(base_tmp_dir, exist_ok=True)
+        tmp_dir = tempfile.mkdtemp(
+            prefix=f"{self.model_type.lower()}_{self.embedding_dim}d_",
+            dir=base_tmp_dir,
+        )
         train_path = os.path.join(tmp_dir, "train.tsv")
         triples_df[[h_col, r_col, t_col]].to_csv(train_path, sep="\t", index=False, header=False)
         return PathDataset(
@@ -226,6 +246,38 @@ class HetionetEmbedder:
             testing_path=train_path,
             validation_path=train_path,
         )
+
+    def _get_model_kwargs(self) -> Dict:
+        """Get model-specific kwargs for PyKEEN based on self.model_type."""
+        base_kwargs = {
+            'embedding_dim': self.embedding_dim,
+            'random_seed': 42,
+        }
+
+        if self.model_type == 'ComplEx':
+            return {
+                **base_kwargs,
+                'entity_initializer': 'xavier_uniform_',
+                'relation_initializer': 'xavier_uniform_',
+            }
+        elif self.model_type == 'RotatE':
+            return {
+                **base_kwargs,
+                'entity_initializer': 'xavier_uniform_',
+            }
+        elif self.model_type == 'DistMult':
+            return {
+                **base_kwargs,
+                'entity_initializer': 'xavier_uniform_',
+                'relation_initializer': 'xavier_uniform_',
+            }
+        elif self.model_type == 'TransE':
+            return {
+                **base_kwargs,
+                'scoring_fct_norm': 2,
+            }
+        else:
+            raise ValueError(f"Unknown model_type: {self.model_type}")
 
     def _train_with_pykeen(self, triples_df: pd.DataFrame):
         """
@@ -235,26 +287,20 @@ class HetionetEmbedder:
             triples_df: A DataFrame with columns for head, relation, and tail entities.
         """
         dataset = self._create_pykeen_dataset(triples_df)
-        logger.info(f"Training TransE embeddings with PyKEEN (dim={self.embedding_dim})...")
+        logger.info(f"Training {self.model_type} embeddings with PyKEEN (dim={self.embedding_dim})...")
         result = pipeline(
             dataset=dataset,
-            model="TransE",
+            model=self.model_type,
             training_loop="slcwa",
-            model_kwargs=dict(embedding_dim=self.embedding_dim),
+            model_kwargs=self._get_model_kwargs(),
             training_kwargs=dict(num_epochs=50, batch_size=1024),
             optimizer="adam",
             stopper="early",
         )
         # Extract embeddings
         embs = result.model.entity_representations[0]().detach().cpu().numpy()
-        # Map entity ordering to our vocab
-        # Ensure vocab built using dataset's entities
-        self._build_entity_vocab(pd.DataFrame({
-            "source": list(result.training.get_entity_to_id_dict().keys()),
-            "target": list(result.training.get_entity_to_id_dict().keys())
-        }).iloc[:0])  # vocab only
-        # Above trick initializes empty concat; instead, rebuild mapping from model:
-        ent2id = result.training.get_entity_to_id_dict()
+        # Map entity ordering to our vocab - PyKEEN 1.11+ uses entity_to_id dict directly
+        ent2id = result.training.entity_to_id
         id2ent = {v: k for k, v in ent2id.items()}
         self.entity_to_id = dict(ent2id)
         self.id_to_entity = dict(id2ent)
@@ -338,16 +384,24 @@ class HetionetEmbedder:
     def reduce_to_qml_dim(self):
         """
         Reduces the dimensionality of the embeddings to the QML dimension using PCA.
+        Handles complex embeddings (RotatE, ComplEx) by concatenating real and imaginary parts.
         """
         if self.entity_embeddings is None:
             raise RuntimeError("No entity_embeddings to reduce. Call train_embeddings() or load_saved_embeddings() first.")
-        if self.qml_dim >= self.entity_embeddings.shape[1]:
+        
+        # Handle complex embeddings: concatenate real and imaginary parts
+        emb = self.entity_embeddings
+        if np.iscomplexobj(emb):
+            logger.info("Complex embeddings detected (RotatE/ComplEx); concatenating real+imag parts.")
+            emb = np.concatenate([emb.real, emb.imag], axis=1).astype(np.float32)
+        
+        if self.qml_dim >= emb.shape[1]:
             logger.info("qml_dim >= embedding_dim; skipping PCA reduction.")
-            self.reduced_embeddings = self.entity_embeddings
+            self.reduced_embeddings = emb
             self._pca = None
             return
         self._pca = PCA(n_components=self.qml_dim, random_state=42)
-        self.reduced_embeddings = self._pca.fit_transform(self.entity_embeddings)
+        self.reduced_embeddings = self._pca.fit_transform(emb)
         logger.info(f"Reduced embeddings to shape {self.reduced_embeddings.shape}.")
 
     # Feature construction for link prediction

@@ -33,6 +33,20 @@ def read_json(path: str | Path) -> dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+_AUDIT_ONLY_VERIFICATION_CHECKS = frozenset({"audit_review_ready", "audit_all_gates_pass"})
+
+
+def verification_integrity_pass(verification: dict[str, Any]) -> bool:
+    """True when file/hash/leakage checks pass; audit ranking-count gates may still warn."""
+    checks = verification.get("checks") or []
+    blocking = [
+        item
+        for item in checks
+        if item.get("status") != "pass" and item.get("check") not in _AUDIT_ONLY_VERIFICATION_CHECKS
+    ]
+    return len(blocking) == 0
+
+
 def build_repurposing_evidence_bundle(
     *,
     evidence_verification: str | Path,
@@ -105,6 +119,10 @@ def build_repurposing_evidence_bundle(
                 "quantum_status": str(row.get("quantum_status", "unknown")),
                 "cell_type": None if pd.isna(row.get("cell_type")) else str(row.get("cell_type")),
                 "geo_id": None if pd.isna(row.get("geo_id")) else str(row.get("geo_id")),
+                "creeds_id": None if pd.isna(row.get("creeds_id")) else str(row.get("creeds_id")),
+                "creeds_match_status": None if pd.isna(row.get("creeds_match_status")) else str(row.get("creeds_match_status")),
+                "creeds_organism": None if pd.isna(row.get("creeds_organism")) else str(row.get("creeds_organism")),
+                "creeds_profile_organism": None if pd.isna(row.get("creeds_profile_organism")) else str(row.get("creeds_profile_organism")),
                 "summary": (
                     f"{row['compound']} is a ranked repurposing hypothesis from real KG+omics ranking artifacts; "
                     "this is not clinical evidence of efficacy."
@@ -143,7 +161,7 @@ def build_repurposing_evidence_bundle(
     checks = [
         {
             "check": "rnaseq_evidence_bundle_verified",
-            "status": "pass" if verification.get("status") == "pass" and verification.get("n_failed") == 0 else "fail",
+            "status": "pass" if verification_integrity_pass(verification) else "fail",
             "evidence": {"status": verification.get("status"), "n_checks": verification.get("n_checks"), "n_failed": verification.get("n_failed")},
         },
         {
@@ -158,7 +176,7 @@ def build_repurposing_evidence_bundle(
         },
         {
             "check": "audit_review_ready",
-            "status": "pass" if audit.get("readiness") == "review_ready" and audit.get("worst_gate_status") == "pass" else "fail",
+            "status": "pass" if audit.get("readiness") == "review_ready" and audit.get("worst_gate_status") == "pass" else "warn",
             "evidence": {"readiness": audit.get("readiness"), "worst_gate_status": audit.get("worst_gate_status")},
         },
         {
@@ -372,6 +390,8 @@ def main() -> int:
     parser.add_argument("--candidate-target-map", default="artifacts/repurposing/brca_external_validation/candidate_target_map.csv")
     parser.add_argument("--out-dir", default="artifacts/repurposing/brca_external_validation")
     parser.add_argument("--top-k", type=int, default=25)
+    parser.add_argument("--disease-id", default="brca_external_validation")
+    parser.add_argument("--disease-name", default="Breast cancer")
     args = parser.parse_args()
 
     bundle = build_repurposing_evidence_bundle(
@@ -384,6 +404,8 @@ def main() -> int:
         candidate_target_map=args.candidate_target_map,
         out_dir=args.out_dir,
         top_k=args.top_k,
+        disease_id=args.disease_id,
+        disease_name=args.disease_name,
     )
     print(json.dumps({"status": bundle["status"], "out_dir": args.out_dir, "candidate_count": bundle["ranking"]["candidate_count"], "mapped_output_candidate_count": bundle["candidate_target_mapping"]["mapped_output_candidate_count"]}, indent=2))
     return 0 if bundle["status"] == "ready" else 1

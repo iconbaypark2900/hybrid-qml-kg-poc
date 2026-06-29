@@ -21,6 +21,7 @@ import argparse
 import json
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, Optional
 import warnings
 warnings.filterwarnings('ignore')
@@ -723,6 +724,86 @@ def train_classical_model(name, model, X_train, y_train, X_test, y_test, cv_fold
         }
 
 
+CLASSICAL_ENSEMBLE_CANDIDATES: tuple[str, ...] = (
+    'HistGBDT',
+    'RandomForest-Optimized',
+    'ExtraTrees-Optimized',
+    'LogisticRegression-L2',
+    'SVM-Linear-Optimized',
+    'SVM-RBF-Optimized',
+    'Ensemble-RF-LR',
+)
+
+QUANTUM_ENSEMBLE_CANDIDATES: tuple[str, ...] = (
+    'QSVC-Optimized',
+    'VQC-Optimized',
+)
+
+
+def _select_best_ensemble_classical(
+    classical_results: dict,
+) -> tuple[str | None, np.ndarray | None, float]:
+    """Pick the classical model with highest test PR-AUC for stacking."""
+    best_name = None
+    best_scores = None
+    best_pr_auc = -1.0
+    for name in CLASSICAL_ENSEMBLE_CANDIDATES:
+        entry = classical_results.get(name)
+        if not isinstance(entry, dict) or entry.get('status') != 'success':
+            continue
+        pr_auc = entry.get('test_metrics', {}).get('pr_auc')
+        scores = entry.get('test_scores')
+        if pr_auc is None or scores is None:
+            continue
+        pr_auc = float(pr_auc)
+        if pr_auc > best_pr_auc:
+            best_pr_auc = pr_auc
+            best_name = name
+            best_scores = np.asarray(scores)
+    return best_name, best_scores, best_pr_auc
+
+
+def _select_best_ensemble_quantum(
+    quantum_results: dict,
+    results_dir: str,
+) -> tuple[str | None, np.ndarray | None, float]:
+    """Pick the quantum model with highest test PR-AUC and load its test scores."""
+    best_name = None
+    best_scores = None
+    best_pr_auc = -1.0
+    for name in QUANTUM_ENSEMBLE_CANDIDATES:
+        entry = quantum_results.get(name)
+        if not isinstance(entry, dict) or entry.get('status') != 'success':
+            continue
+        pr_auc = entry.get('test_metrics', {}).get('pr_auc')
+        if pr_auc is None:
+            continue
+        pr_auc = float(pr_auc)
+        if pr_auc <= best_pr_auc:
+            continue
+        tag = 'QSVC' if 'QSVC' in name else 'VQC'
+        pred_files = sorted(Path(results_dir).glob(f'predictions_{tag}_*.csv'))
+        if not pred_files:
+            latest = Path(results_dir) / 'predictions_latest.csv'
+            pred_files = [latest] if latest.exists() else []
+        scores = None
+        if pred_files:
+            try:
+                pred_df = pd.read_csv(pred_files[-1])
+                if 'split' in pred_df.columns and 'y_score' in pred_df.columns:
+                    test_pred = pred_df[pred_df['split'] == 'test']
+                    if len(test_pred) > 0:
+                        scores = test_pred['y_score'].values
+            except Exception:
+                scores = None
+        if scores is None:
+            continue
+        best_pr_auc = pr_auc
+        best_name = name
+        best_scores = np.asarray(scores)
+    return best_name, best_scores, best_pr_auc
+
+
 def main():
     parser = argparse.ArgumentParser(description="Optimized Hetionet Link Prediction Pipeline")
 
@@ -1366,7 +1447,7 @@ def main():
         embedding_dim=args.embedding_dim,
         method=args.embedding_method,
         num_epochs=args.embedding_epochs if not args.fast_mode else 50,
-        batch_size=512,
+        batch_size=256,
         learning_rate=0.001,
         work_dir="data",
         random_state=args.random_state
@@ -3250,14 +3331,14 @@ def main():
     # When both classical and quantum ran, write a joint predictions file for link-level comparison
     if classical_results and quantum_results:
         try:
-            # Get the best classical model's test scores (prefer LogisticRegression, then RandomForest)
-            classical_test_scores = None
-            for model_name in ['LogisticRegression-L2', 'RandomForest-Optimized', 'Ensemble-RF-LR']:
-                if model_name in classical_results and classical_results[model_name].get('status') == 'success':
-                    classical_test_scores = classical_results[model_name].get('test_scores')
-                    if classical_test_scores is not None:
-                        logger.info(f"Using {model_name} test scores for predictions_compare.csv")
-                        break
+            # Best test PR-AUC classical model (matches ensemble stacking pick)
+            best_classical_name, classical_test_scores, _best_classical_pr_auc = (
+                _select_best_ensemble_classical(classical_results)
+            )
+            if classical_test_scores is not None:
+                logger.info(
+                    f"Using {best_classical_name} test scores for predictions_compare.csv"
+                )
             
             # Get quantum test scores from predictions_latest.csv
             quantum_test_scores = None
@@ -3305,38 +3386,23 @@ def main():
         logger.info("=" * 80)
 
         try:
-            # --- Collect classical prediction scores ---
-            best_classical_name = None
-            best_classical_test_scores = None
-            best_classical_train_scores = None
-            for cname in ['LogisticRegression-L2', 'RandomForest-Optimized', 'Ensemble-RF-LR',
-                          'ExtraTrees-Optimized', 'HistGBDT']:
-                cres = classical_results.get(cname)
-                if cres and cres.get('status') == 'success' and cres.get('test_scores') is not None:
-                    best_classical_name = cname
-                    best_classical_test_scores = np.asarray(cres['test_scores'])
-                    break
-
-            # --- Collect quantum prediction scores ---
-            best_quantum_name = None
-            best_quantum_test_scores = None
-            pred_latest_path = os.path.join(args.results_dir, "predictions_latest.csv")
-            if os.path.exists(pred_latest_path):
-                try:
-                    pred_df = pd.read_csv(pred_latest_path)
-                    if 'split' in pred_df.columns and 'y_score' in pred_df.columns:
-                        test_pred = pred_df[pred_df['split'] == 'test']
-                        if len(test_pred) > 0:
-                            best_quantum_test_scores = test_pred['y_score'].values
-                except Exception:
-                    pass
-
-            # Identify which quantum model succeeded (for naming)
-            for qname in ['QSVC-Optimized', 'VQC-Optimized']:
-                qres = quantum_results.get(qname)
-                if qres and qres.get('status') == 'success':
-                    best_quantum_name = qname
-                    break
+            # --- Collect classical / quantum prediction scores (best test PR-AUC each) ---
+            best_classical_name, best_classical_test_scores, best_classical_pr_auc = (
+                _select_best_ensemble_classical(classical_results)
+            )
+            best_quantum_name, best_quantum_test_scores, best_quantum_pr_auc = (
+                _select_best_ensemble_quantum(quantum_results, args.results_dir)
+            )
+            if best_classical_name:
+                logger.info(
+                    f"Ensemble classical pick: {best_classical_name} "
+                    f"(test PR-AUC={best_classical_pr_auc:.4f})"
+                )
+            if best_quantum_name:
+                logger.info(
+                    f"Ensemble quantum pick: {best_quantum_name} "
+                    f"(test PR-AUC={best_quantum_pr_auc:.4f})"
+                )
 
             if best_classical_test_scores is not None and best_quantum_test_scores is not None:
                 # Ensure lengths match
@@ -3374,8 +3440,20 @@ def main():
                                 raw = fitted_model.decision_function(X_train_classical)
                                 classical_train_scores = 1.0 / (1.0 + np.exp(-raw))
 
-                        # Quantum train scores from predictions_latest.csv
-                        if os.path.exists(pred_latest_path):
+                        # Quantum train scores from the selected quantum model predictions file
+                        pred_latest_path = None
+                        if best_quantum_name:
+                            q_tag = 'QSVC' if 'QSVC' in best_quantum_name else 'VQC'
+                            q_pred_files = sorted(
+                                Path(args.results_dir).glob(f'predictions_{q_tag}_*.csv')
+                            )
+                            if q_pred_files:
+                                pred_latest_path = str(q_pred_files[-1])
+                            else:
+                                _fallback = Path(args.results_dir) / 'predictions_latest.csv'
+                                if _fallback.exists():
+                                    pred_latest_path = str(_fallback)
+                        if pred_latest_path and os.path.exists(pred_latest_path):
                             try:
                                 if 'pred_df' not in dir():
                                     pred_df = pd.read_csv(pred_latest_path)

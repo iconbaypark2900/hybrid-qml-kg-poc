@@ -735,23 +735,25 @@ async def repurposing_evidence_bundle(
     format: str = Query(default="json"),
 ):
     """Download the verified local repurposing evidence bundle."""
-    if disease_id != "brca_external_validation":
+    from .repurposing_workbench import _bundle_path_for_disease
+
+    path = _bundle_path_for_disease(disease_id)
+    if path is None:
         raise HTTPException(status_code=404, detail="Evidence bundle is not available for this disease")
-    bundle_dir = REPO_ROOT / "artifacts" / "repurposing" / "brca_external_validation"
     normalized_format = format.lower()
     if normalized_format == "json":
-        path = bundle_dir / "repurposing_evidence_bundle.json"
+        bundle_path = path
         media_type = "application/json"
-        filename = "brca_external_validation_repurposing_evidence_bundle.json"
+        filename = f"{disease_id}_repurposing_evidence_bundle.json"
     elif normalized_format in {"markdown", "md"}:
-        path = bundle_dir / "repurposing_evidence_bundle.md"
+        bundle_path = path.parent / "repurposing_evidence_bundle.md"
         media_type = "text/markdown"
-        filename = "brca_external_validation_repurposing_evidence_bundle.md"
+        filename = f"{disease_id}_repurposing_evidence_bundle.md"
     else:
         raise HTTPException(status_code=400, detail="format must be one of: json, markdown")
-    if not path.is_file():
+    if not bundle_path.is_file():
         raise HTTPException(status_code=404, detail="Evidence bundle artifact not found")
-    return FileResponse(path, media_type=media_type, filename=filename)
+    return FileResponse(bundle_path, media_type=media_type, filename=filename)
 
 
 @app.get("/repurposing/structure-artifact")

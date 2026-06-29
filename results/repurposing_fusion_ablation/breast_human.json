@@ -1,0 +1,117 @@
+{
+  "n_candidates": 11,
+  "n_creeds_matched": 4,
+  "multipliers": [
+    1.0,
+    2.0,
+    3.0,
+    5.0
+  ],
+  "zero_unmatched_reversal": true,
+  "runs": [
+    {
+      "signature_reversal_multiplier": 1.0,
+      "zero_unmatched_reversal": true,
+      "top3": [
+        {
+          "compound": "Vemurafenib",
+          "final_score": 0.5526,
+          "signature_reversal_score": 0.5879,
+          "kg_rotate_score": 0.9
+        },
+        {
+          "compound": "Cisplatin",
+          "final_score": 0.5125,
+          "signature_reversal_score": 0.5764,
+          "kg_rotate_score": 0.8253
+        },
+        {
+          "compound": "Toremifene",
+          "final_score": 0.5101,
+          "signature_reversal_score": 0.0,
+          "kg_rotate_score": 0.9922
+        }
+      ],
+      "matched_in_top3": 2,
+      "top_compound": "Vemurafenib"
+    },
+    {
+      "signature_reversal_multiplier": 2.0,
+      "zero_unmatched_reversal": true,
+      "top3": [
+        {
+          "compound": "Vemurafenib",
+          "final_score": 0.5573,
+          "signature_reversal_score": 0.5879,
+          "kg_rotate_score": 0.9
+        },
+        {
+          "compound": "Cisplatin",
+          "final_score": 0.521,
+          "signature_reversal_score": 0.5764,
+          "kg_rotate_score": 0.8253
+        },
+        {
+          "compound": "Toremifene",
+          "final_score": 0.5101,
+          "signature_reversal_score": 0.0,
+          "kg_rotate_score": 0.9922
+        }
+      ],
+      "matched_in_top3": 2,
+      "top_compound": "Vemurafenib"
+    },
+    {
+      "signature_reversal_multiplier": 3.0,
+      "zero_unmatched_reversal": true,
+      "top3": [
+        {
+          "compound": "Vemurafenib",
+          "final_score": 0.5609,
+          "signature_reversal_score": 0.5879,
+          "kg_rotate_score": 0.9
+        },
+        {
+          "compound": "Cisplatin",
+          "final_score": 0.5275,
+          "signature_reversal_score": 0.5764,
+          "kg_rotate_score": 0.8253
+        },
+        {
+          "compound": "Toremifene",
+          "final_score": 0.5101,
+          "signature_reversal_score": 0.0,
+          "kg_rotate_score": 0.9922
+        }
+      ],
+      "matched_in_top3": 2,
+      "top_compound": "Vemurafenib"
+    },
+    {
+      "signature_reversal_multiplier": 5.0,
+      "zero_unmatched_reversal": true,
+      "top3": [
+        {
+          "compound": "Vemurafenib",
+          "final_score": 0.566,
+          "signature_reversal_score": 0.5879,
+          "kg_rotate_score": 0.9
+        },
+        {
+          "compound": "Cisplatin",
+          "final_score": 0.5368,
+          "signature_reversal_score": 0.5764,
+          "kg_rotate_score": 0.8253
+        },
+        {
+          "compound": "Toremifene",
+          "final_score": 0.5101,
+          "signature_reversal_score": 0.0,
+          "kg_rotate_score": 0.9922
+        }
+      ],
+      "matched_in_top3": 2,
+      "top_compound": "Vemurafenib"
+    }
+  ]
+}

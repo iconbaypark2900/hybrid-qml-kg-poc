@@ -112,48 +112,92 @@ def build_demo_candidates(disease_filter: Optional[str] = None) -> List[Dict]:
 
 # ---------- Omics enrichment (reversal scores) ----------
 
-def enrich_with_omics(candidates: List[Dict], mode: str) -> List[Dict]:
+def _attach_synthetic_reversal_scores(candidates: List[Dict]) -> None:
+    import numpy as np
+
+    rng = np.random.default_rng(seed=1729)
+    for c in candidates:
+        base = (c.get("kg_rotate_score", 0.5) + c.get("qsvc_score", 0.5)) / 2.0
+        c["signature_reversal_score"] = float(np.clip(base + rng.normal(0, 0.08), -1.0, 1.0))
+        c["cell_type_reversal_score"] = 0.0
+        c["pathway_reversal_score"] = 0.0
+
+
+def enrich_with_omics(
+    candidates: List[Dict],
+    mode: str,
+    *,
+    creeds_path: Optional[str] = None,
+    disease_signature_path: Optional[str] = None,
+    gene_map_path: Optional[str] = None,
+    creeds_organism: str = "human",
+    creeds_reversal_method: str = "gene_overlap",
+) -> Tuple[List[Dict], Dict]:
     """
-    Attach reversal scores from the perturbation layer.
+    Attach reversal scores from CREEDS perturbation profiles vs a disease signature.
 
     In kg-only mode this is a no-op; the fields stay at 0.0 (zero-filled by
     the EvidenceFeatures dataclass) so the baseline PR-AUC is preserved.
 
-    In kg+omics mode this attempts to load a real LINCS signature registry; if
-    none is configured, it emits seeded synthetic reversal scores so the
-    pipeline still produces a usable artifact. Synthetic mode is logged
-    clearly so users don't mistake demo output for real evidence.
+    In kg+omics mode loads CREEDS JSON + disease signature when paths exist.
+    Falls back to synthetic scores only if those artifacts are unavailable.
     """
+    meta: Dict = {"omics_source": "none"}
+
     if mode == "kg-only":
         for c in candidates:
             c["signature_reversal_score"] = 0.0
             c["cell_type_reversal_score"] = 0.0
             c["pathway_reversal_score"] = 0.0
         logger.info("kg-only mode: omics features zero-filled (preserves baseline).")
-        return candidates
+        return candidates, meta
 
-    # kg+omics: try to use real perturbation registry, else synthetic.
+    from perturbation_layer.creeds_reversal import (
+        enrich_candidates_with_creeds,
+        load_creeds_reversal_context,
+    )
+
+    creeds_file = Path(creeds_path or "artifacts/external/creeds/single_drug_perturbations-v1.0.json")
+    signature_file = Path(
+        disease_signature_path or "artifacts/signatures/tcga_brca_60/disease_signature.json"
+    )
+    gene_map_file = Path(
+        gene_map_path or "artifacts/external/gdc_tcga_brca/converted/tcga_brca_gene_map.csv"
+    )
+
     try:
-        from perturbation_layer.perturbation_registry import PerturbationRegistry
-        registry = PerturbationRegistry()
-        if len(registry) == 0:
-            raise RuntimeError("registry empty")
-        logger.info(f"Loaded perturbation registry with {len(registry)} compounds")
-        # Real-path scoring is wired in single-cell pipeline (S5-13 playbook).
-        # For pipeline orchestration we still emit deterministic synthetic
-        # scores below so the end-to-end artifact is reproducible.
-    except Exception as e:
-        logger.warning(f"Perturbation registry unavailable ({e}); using synthetic reversal scores.")
-
-    import numpy as np
-    rng = np.random.default_rng(seed=1729)
-    for c in candidates:
-        base = (c.get("kg_rotate_score", 0.5) + c.get("qsvc_score", 0.5)) / 2.0
-        c["signature_reversal_score"] = float(np.clip(base + rng.normal(0, 0.08), -1.0, 1.0))
-        c["cell_type_reversal_score"] = float(np.clip(base + rng.normal(0, 0.10), -1.0, 1.0))
-        c["pathway_reversal_score"] = float(np.clip(base * 0.9 + rng.normal(0, 0.07), -1.0, 1.0))
-    logger.info("Reversal scores attached (synthetic; replace with LINCS playbook for real data).")
-    return candidates
+        context = load_creeds_reversal_context(
+            creeds_path=creeds_file,
+            disease_signature_path=signature_file,
+            gene_map_path=gene_map_file,
+            organism=creeds_organism,
+            reversal_method=creeds_reversal_method,  # type: ignore[arg-type]
+        )
+        candidates, stats = enrich_candidates_with_creeds(
+            candidates, context, filter_organism=creeds_organism
+        )
+        meta = {
+            "omics_source": "creeds",
+            "creeds_path": str(creeds_file),
+            "disease_signature_path": str(signature_file),
+            "gene_map_path": str(gene_map_file),
+            "creeds_organism": creeds_organism,
+            **stats,
+        }
+        logger.info(
+            "CREEDS reversal scores attached: %d/%d candidates matched profiles.",
+            stats["n_creeds_matched"],
+            stats["n_candidates"],
+        )
+        return candidates, meta
+    except Exception as exc:
+        logger.warning(
+            "CREEDS reversal unavailable (%s); using synthetic reversal scores.",
+            exc,
+        )
+        _attach_synthetic_reversal_scores(candidates)
+        meta = {"omics_source": "synthetic_fallback", "error": str(exc)}
+        return candidates, meta
 
 
 # ---------- Validation layer ----------
@@ -207,13 +251,14 @@ def enrich_with_validation(candidates: List[Dict], top_n: int) -> List[Dict]:
 
 # ---------- Evidence fusion + report ----------
 
-def fuse_and_rank(candidates: List[Dict], mode: str) -> List:
+def fuse_and_rank(candidates: List[Dict], mode: str, *, config_path: str = "config/evidence_fusion_config.yaml") -> List:
     """Convert dicts → EvidenceFeatures, fuse, attach explanations, return sorted list."""
     from evidence_layer.evidence_schema import EvidenceFeatures
     from evidence_layer.feature_fusion import fuse_evidence
     from evidence_layer.explanation_builder import attach_explanations
 
     ev_list: List[EvidenceFeatures] = []
+    match_statuses: List[str] = []
     for c in candidates:
         ef = EvidenceFeatures(
             compound=c.get("compound", ""),
@@ -231,18 +276,44 @@ def fuse_and_rank(candidates: List[Dict], mode: str) -> List:
             clinical_evidence_score=float(c.get("clinical_evidence_score", 0.0)),
         )
         ev_list.append(ef)
+        match_statuses.append(str(c.get("creeds_match_status", "unmatched")))
 
-    fused = fuse_evidence(ev_list, mode=mode)
+    fused = fuse_evidence(
+        ev_list,
+        mode=mode,
+        omics_match_status=match_statuses if mode != "kg-only" else None,
+        config_path=config_path,
+    )
     attach_explanations(fused)
     return fused
 
 
-def write_outputs(fused: List, out_dir: Path, top_n: int, mode: str,
-                  disease_id: Optional[str]) -> Path:
+def write_enriched_candidates(candidates: List[Dict], out_dir: Path) -> Path:
+    """Persist full candidate dicts (CREEDS metadata + Hetionet IDs) before fusion."""
+    path = out_dir / "candidates_enriched.json"
+    path.write_text(json.dumps(candidates, indent=2), encoding="utf-8")
+    logger.info("Wrote %d enriched candidates to %s", len(candidates), path)
+    return path
+
+
+def write_outputs(
+    fused: List,
+    out_dir: Path,
+    top_n: int,
+    mode: str,
+    disease_id: Optional[str],
+    omics_meta: Optional[Dict] = None,
+    enriched_candidates: Optional[List[Dict]] = None,
+) -> Path:
     """Write CSV / JSON / Markdown report plus a run summary."""
     from evidence_layer.evidence_report import write_evidence_report
-    csv_path = write_evidence_report(fused, out_dir=str(out_dir), top_n=top_n,
-                                     disease_id=disease_id)
+    csv_path = write_evidence_report(
+        fused,
+        out_dir=str(out_dir),
+        top_n=top_n,
+        disease_id=disease_id,
+        extra_rows=enriched_candidates,
+    )
 
     # Per-run summary
     summary = {
@@ -252,6 +323,7 @@ def write_outputs(fused: List, out_dir: Path, top_n: int, mode: str,
         "top_n": top_n,
         "top_compound": fused[0].compound if fused else None,
         "top_score": fused[0].final_score if fused else None,
+        "omics": omics_meta or {},
         "tier_distribution": {
             "tier_1": sum(1 for c in fused if c.confidence_tier == 1),
             "tier_2": sum(1 for c in fused if c.confidence_tier == 2),
@@ -283,6 +355,29 @@ def main():
                         help="Output directory (default artifacts/predictions/).")
     parser.add_argument("--kg-scores", default=None,
                         help="Optional path to upstream KG+QML scores JSON.")
+    parser.add_argument(
+        "--creeds-signatures",
+        default="artifacts/external/creeds/single_drug_perturbations-v1.0.json",
+        help="CREEDS drug perturbation JSON for reversal scoring.",
+    )
+    parser.add_argument(
+        "--disease-signature",
+        default="artifacts/signatures/tcga_brca_60/disease_signature.json",
+        help="Disease RNA-seq signature JSON (up/down genes).",
+    )
+    parser.add_argument(
+        "--gene-map",
+        default="artifacts/external/gdc_tcga_brca/converted/tcga_brca_gene_map.csv",
+        help="ENSG→symbol map for aligning signature genes with CREEDS.",
+    )
+    parser.add_argument("--creeds-organism", default="human",
+                        help="Organism filter for CREEDS profiles (use 'any' for all).")
+    parser.add_argument(
+        "--creeds-reversal-method",
+        choices=["gene_overlap", "cosine"],
+        default="gene_overlap",
+        help="CREEDS reversal scoring: gene_overlap (default) or cosine vs disease LFC.",
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.output)
@@ -295,36 +390,62 @@ def main():
     base = load_kg_qml_scores(scores_path)
     if not base:
         base = build_demo_candidates(disease_filter=args.disease)
+    elif args.disease:
+        base = [c for c in base if c.get("disease_hetionet_id") == args.disease]
+        logger.info(f"Filtered kg-scores to disease {args.disease}: {len(base)} candidates")
 
     if not base:
         logger.error("No candidates available (empty after filter). Exiting.")
         return 1
 
     # 2. Omics enrichment (no-op in kg-only mode)
-    base = enrich_with_omics(base, mode=args.mode)
+    base, omics_meta = enrich_with_omics(
+        base,
+        mode=args.mode,
+        creeds_path=args.creeds_signatures,
+        disease_signature_path=args.disease_signature,
+        gene_map_path=args.gene_map,
+        creeds_organism=args.creeds_organism,
+        creeds_reversal_method=args.creeds_reversal_method,
+    )
 
-    # 3. Fuse + rank
+    # 3. Persist enriched candidates (CREEDS + KG metadata) before fusion
+    write_enriched_candidates(base, out_dir)
+
+    # 4. Fuse + rank
     fused = fuse_and_rank(base, mode=args.mode)
 
-    # 4. Optional validation on top-N
+    # 5. Optional validation on top-N
     if args.validate:
         # Rebuild dict from fused to keep validation function generic, then
         # patch clinical_evidence_score back onto the EvidenceFeatures.
         dicts = [ef.to_dict() for ef in fused]
         dicts = enrich_with_validation(dicts, top_n=args.top_n)
         clin_map = {d["compound"]: d.get("clinical_evidence_score", 0.0) for d in dicts}
+        match_map = {c.get("compound"): c.get("creeds_match_status", "unmatched") for c in base}
         for ef in fused:
             if ef.compound in clin_map:
                 ef.clinical_evidence_score = clin_map[ef.compound]
-        # Re-fuse so clinical_evidence_score participates in the final ranking
         from evidence_layer.feature_fusion import fuse_evidence
         from evidence_layer.explanation_builder import attach_explanations
-        fused = fuse_evidence(fused, mode=args.mode)
+        match_statuses = [str(match_map.get(ef.compound, "unmatched")) for ef in fused]
+        fused = fuse_evidence(
+            fused,
+            mode=args.mode,
+            omics_match_status=match_statuses if args.mode != "kg-only" else None,
+        )
         attach_explanations(fused)
 
-    # 5. Write outputs
-    csv_path = write_outputs(fused, out_dir, top_n=args.top_n, mode=args.mode,
-                             disease_id=args.disease)
+    # 6. Write outputs
+    csv_path = write_outputs(
+        fused,
+        out_dir,
+        top_n=args.top_n,
+        mode=args.mode,
+        disease_id=args.disease,
+        omics_meta=omics_meta,
+        enriched_candidates=base,
+    )
     logger.info(f"=== Pipeline complete. Top candidate: {fused[0].compound} "
                 f"(score={fused[0].final_score:.4f}, tier={fused[0].confidence_tier}) ===")
     logger.info(f"Report: {csv_path}")

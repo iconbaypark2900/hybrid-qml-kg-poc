@@ -58,7 +58,7 @@ def _parse_pr_auc_from_log(log_text: str):
     return results
 
 
-def _run_pipeline(params: dict, extra_fixed_args: list, *, subprocess_timeout: int = 600) -> dict:
+def _run_pipeline(params: dict, extra_fixed_args: list, *, subprocess_timeout: int = 600, fast_mode: bool = False) -> dict:
     """Run the pipeline with given params and return parsed PR-AUC dict."""
     python = _find_python()
     cmd = [
@@ -69,8 +69,12 @@ def _run_pipeline(params: dict, extra_fixed_args: list, *, subprocess_timeout: i
         "--negative_sampling", "hard",
         "--optimize_feature_map_reps",
         "--run_ensemble",
-        "--fast_mode",
     ]
+
+    if fast_mode:
+        cmd.append("--fast_mode")
+    else:
+        cmd.extend(["--tune_classical", "--skip_vqc", "--skip_svm_rbf"])
 
     cmd += [
         "--embedding_dim", str(params["embedding_dim"]),
@@ -125,7 +129,10 @@ def objective(trial: optuna.Trial, args) -> float:
 
     try:
         pr_auc_dict = _run_pipeline(
-            params, args.extra_args, subprocess_timeout=args.subprocess_timeout
+            params,
+            args.extra_args,
+            subprocess_timeout=args.subprocess_timeout,
+            fast_mode=args.fast_mode,
         )
     except subprocess.TimeoutExpired:
         logger.warning(f"Trial {trial.number} timed out.")
@@ -139,6 +146,7 @@ def objective(trial: optuna.Trial, args) -> float:
 
     if args.objective == "classical":
         val = max(
+            pr_auc_dict.get("HistGBDT-Optimized", 0.0),
             pr_auc_dict.get("RandomForest-Optimized", 0.0),
             pr_auc_dict.get("ExtraTrees-Optimized", 0.0),
         )
@@ -187,6 +195,11 @@ def main():
         default=600,
         metavar="SEC",
         help="Per-trial timeout for run_optimized_pipeline.py subprocess (default: 600)",
+    )
+    parser.add_argument(
+        "--fast-mode",
+        action="store_true",
+        help="Pass --fast_mode to pipeline (RF+ET only, 50 embedding epochs). Default: full classical + tune.",
     )
 
     args, extra = parser.parse_known_args()

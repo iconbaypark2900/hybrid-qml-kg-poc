@@ -13,6 +13,7 @@ Uses PyKEEN library with optimized hyperparameters for biomedical KGs.
 import os
 import json
 import logging
+import tempfile
 from typing import Dict, Tuple, Optional, Literal
 import numpy as np
 import pandas as pd
@@ -185,6 +186,8 @@ class AdvancedKGEmbedder:
         import torch
         _device = 'cuda' if torch.cuda.is_available() else 'cpu'
         logger.info(f"PyKEEN training device: {_device}")
+        # Nop stopper: skip periodic rank eval during training (OOM on large graphs).
+        # Final pipeline eval uses the small eval_sample.tsv split with tiny batches.
         result = pipeline(
             dataset=dataset,
             model=self.method,
@@ -194,9 +197,11 @@ class AdvancedKGEmbedder:
             optimizer_kwargs=optimizer_kwargs,
             training_loop='sLCWA',  # stochastic local closed world assumption
             negative_sampler_kwargs=negative_sampler_kwargs,
-            stopper='early',
-            stopper_kwargs={'patience': 10, 'frequency': 5},
+            stopper='nop',
             evaluator='RankBasedEvaluator',
+            evaluator_kwargs={'filtered': True},
+            evaluation_kwargs={'batch_size': 64},
+            evaluation_fallback=True,
             random_seed=self.random_state,
             device=_device,
         )
@@ -208,6 +213,12 @@ class AdvancedKGEmbedder:
         self._save_embeddings()
 
         # Extract metrics
+        mrr = None
+        hits_at_10 = None
+        if result.metric_results is not None:
+            mrr = result.metric_results.get_metric('mean_reciprocal_rank')
+            hits_at_10 = result.metric_results.get_metric('hits_at_10')
+
         metrics = {
             'method': self.method,
             'embedding_dim': self.embedding_dim,
@@ -215,11 +226,14 @@ class AdvancedKGEmbedder:
             'num_relations': len(self.relation_to_id),
             'num_epochs_completed': self.num_epochs,
             'final_loss': float(result.losses[-1]) if result.losses else None,
-            'hits_at_10': result.metric_results.get_metric('hits_at_10'),
-            'mrr': result.metric_results.get_metric('mean_reciprocal_rank'),
+            'hits_at_10': hits_at_10,
+            'mrr': mrr,
         }
 
-        logger.info(f"Training complete. MRR: {metrics['mrr']:.4f}, Hits@10: {metrics['hits_at_10']:.4f}")
+        if mrr is not None and hits_at_10 is not None:
+            logger.info(f"Training complete. MRR: {mrr:.4f}, Hits@10: {hits_at_10:.4f}")
+        else:
+            logger.info("Training complete (rank evaluation skipped; nop stopper).")
 
         return metrics
 
@@ -248,12 +262,36 @@ class AdvancedKGEmbedder:
         if 'label' in triples_df.columns:
             triples_df = triples_df[triples_df['label'] == 1].copy()
 
-        # Prepare paths
-        tmp_dir = os.path.join(self.work_dir, 'pykeen_tmp')
-        os.makedirs(tmp_dir, exist_ok=True)
+        # Prepare paths. Use a per-run temp directory so concurrent DGX jobs
+        # cannot overwrite each other's PyKEEN TSV files.
+        base_tmp_dir = os.path.join(self.work_dir, 'pykeen_tmp')
+        os.makedirs(base_tmp_dir, exist_ok=True)
+        tmp_dir = tempfile.mkdtemp(
+            prefix=f'{self.method.lower()}_{self.embedding_dim}d_',
+            dir=base_tmp_dir,
+        )
 
         train_path = os.path.join(tmp_dir, 'train.tsv')
         triples_df[[h_col, r_col, t_col]].to_csv(train_path, sep='\t', index=False, header=False)
+
+        # PyKEEN pipeline always runs filtered rank eval on the testing split after
+        # training. Do NOT point test/val at the full train file (~234k triples) or
+        # GPU eval allocates (batch_size, num_entities) tensors and OOMs on DGX Spark.
+        # Downstream link-prediction PR-AUC does not use this eval; sample only.
+        eval_sample_n = min(256, len(triples_df))
+        eval_df = (
+            triples_df.sample(n=eval_sample_n, random_state=self.random_state)
+            if len(triples_df) > eval_sample_n
+            else triples_df
+        )
+        eval_path = os.path.join(tmp_dir, 'eval_sample.tsv')
+        eval_df[[h_col, r_col, t_col]].to_csv(eval_path, sep='\t', index=False, header=False)
+        logger.info(
+            "PyKEEN eval bookkeeping split: %d triples (train has %d); "
+            "headline metrics come from downstream link prediction.",
+            len(eval_df),
+            len(triples_df),
+        )
 
         # Validation (if provided)
         if validation_triples is not None:
@@ -262,10 +300,9 @@ class AdvancedKGEmbedder:
                 validation_triples = validation_triples[validation_triples['label'] == 1].copy()
             validation_triples[[h_col, r_col, t_col]].to_csv(val_path, sep='\t', index=False, header=False)
         else:
-            # Use training data for validation (not ideal but works)
-            val_path = train_path
+            val_path = eval_path
 
-        test_path = val_path  # Use same as validation
+        test_path = eval_path
 
         return train_path, val_path, test_path
 

@@ -1020,6 +1020,68 @@ def load_creeds_candidate_profiles(
     return pd.DataFrame(rows)
 
 
+def load_kg_scores_merged_creeds_profiles(
+    kg_scores_path: str | Path,
+    creeds_path: str | Path,
+    genes: List[str],
+    *,
+    gene_map_path: Optional[str],
+    organism: str,
+    min_gene_overlap: int,
+    max_profiles: int,
+    disease_hetionet_id: Optional[str] = None,
+) -> pd.DataFrame:
+    """Merge multiseed KG scores into CREEDS ranking profiles (replaces demo kg_rotate)."""
+
+    creeds_df = load_creeds_candidate_profiles(
+        creeds_path,
+        genes,
+        gene_map_path=gene_map_path,
+        organism=organism,
+        min_gene_overlap=min_gene_overlap,
+        max_profiles=0,
+    )
+    kg_rows = json.loads(Path(kg_scores_path).read_text(encoding="utf-8"))
+    if disease_hetionet_id:
+        kg_rows = [row for row in kg_rows if row.get("disease_hetionet_id") == disease_hetionet_id]
+
+    by_compound: Dict[str, dict] = {}
+    for row in kg_rows:
+        key = str(row.get("compound", "")).strip().lower()
+        if not key:
+            continue
+        existing = by_compound.get(key)
+        if existing is None or float(row.get("kg_rotate_score", 0)) > float(existing.get("kg_rotate_score", 0)):
+            by_compound[key] = row
+
+    merged_rows: List[Dict[str, Any]] = []
+    for _, profile in creeds_df.iterrows():
+        compound_key = str(profile.get("compound", "")).strip().lower()
+        kg = by_compound.get(compound_key)
+        if kg is None:
+            continue
+        row = profile.to_dict()
+        row["kg_rotate_score"] = float(kg.get("kg_rotate_score", row.get("kg_rotate_score", 0.5)))
+        row["kg_complex_score"] = float(kg.get("kg_complex_score", row.get("kg_complex_score", 0.5)))
+        row["graph_topology_score"] = float(kg.get("graph_topology_score", row.get("graph_topology_score", 0.5)))
+        row["disease"] = str(kg.get("disease", row.get("disease", "rnaseq_signature")))
+        row["disease_hetionet_id"] = kg.get("disease_hetionet_id")
+        row["compound_hetionet_id"] = kg.get("compound_hetionet_id")
+        if kg.get("compound_hetionet_id") and kg.get("disease_hetionet_id"):
+            row["candidate_id"] = f"{kg['compound_hetionet_id']}::{kg['disease_hetionet_id']}"
+        merged_rows.append(row)
+
+    if not merged_rows:
+        raise ValueError(
+            "No overlap between CREEDS profiles and KG scores "
+            f"(organism={organism}, disease_filter={disease_hetionet_id})."
+        )
+    merged_rows.sort(key=lambda item: float(item.get("kg_rotate_score", 0)), reverse=True)
+    if max_profiles > 0:
+        merged_rows = merged_rows[:max_profiles]
+    return pd.DataFrame(merged_rows)
+
+
 def _fit_full_classical_models(X: np.ndarray, y: np.ndarray, *, random_state: int):
     models = {}
     for name, model in {
@@ -1053,6 +1115,8 @@ def run_ranking_benchmark(
     genes: List[str],
     *,
     candidate_profiles_path: Optional[str],
+    kg_scores_path: Optional[str],
+    disease_hetionet_id: Optional[str],
     cmap_signatures_path: Optional[str],
     creeds_signatures_path: Optional[str],
     gene_map_path: Optional[str],
@@ -1068,6 +1132,18 @@ def run_ranking_benchmark(
     if candidate_profiles_path:
         candidates = pd.read_csv(candidate_profiles_path)
         source = "candidate_profiles"
+    elif kg_scores_path and creeds_signatures_path:
+        candidates = load_kg_scores_merged_creeds_profiles(
+            kg_scores_path,
+            creeds_signatures_path,
+            genes,
+            gene_map_path=gene_map_path,
+            organism=creeds_organism,
+            min_gene_overlap=min_profile_gene_overlap,
+            max_profiles=max_ranking_profiles,
+            disease_hetionet_id=disease_hetionet_id,
+        )
+        source = "kg_scores_plus_creeds"
     elif cmap_signatures_path:
         candidates = load_cmap_candidate_profiles(
             cmap_signatures_path,
@@ -1136,7 +1212,7 @@ def run_ranking_benchmark(
             qsvc_score=float(quantum_score[idx]),
             classical_ensemble_score=float(classical_ensemble[idx]),
             signature_reversal_score=float(reversal),
-            cell_type_reversal_score=float(reversal),
+            cell_type_reversal_score=0.0,
             pathway_reversal_score=0.0,
         )
         fused_inputs.append(ef)
@@ -1435,6 +1511,16 @@ def main() -> int:
     parser.add_argument("--allow-ibm-submit", action="store_true")
     parser.add_argument("--candidate-profiles", default=None)
     parser.add_argument(
+        "--kg-scores",
+        default=None,
+        help="KG+QML scores JSON; merge with --creeds-signatures for ranking (replaces demo kg_rotate).",
+    )
+    parser.add_argument(
+        "--disease-hetionet-id",
+        default=None,
+        help="Optional Hetionet disease filter when using --kg-scores (e.g. Disease::DOID:1612).",
+    )
+    parser.add_argument(
         "--cmap-signatures",
         default=None,
         help="Tidy real compound perturbation CSV with compound/gene/score columns, or CMap defaults.",
@@ -1545,6 +1631,8 @@ def main() -> int:
         args.signature,
         genes,
         candidate_profiles_path=args.candidate_profiles,
+        kg_scores_path=args.kg_scores,
+        disease_hetionet_id=args.disease_hetionet_id,
         cmap_signatures_path=args.cmap_signatures,
         creeds_signatures_path=args.creeds_signatures,
         gene_map_path=args.gene_map,
@@ -1559,7 +1647,12 @@ def main() -> int:
     )
     ranking_level = ranking_context.get("ranking_evidence_level")
     verdict["ranking_evidence_level"] = ranking_level
-    verdict["ranking_is_real_evidence"] = ranking_level in {"candidate_profiles", "cmap_signatures", "creeds_signatures"}
+    verdict["ranking_is_real_evidence"] = ranking_level in {
+        "candidate_profiles",
+        "cmap_signatures",
+        "creeds_signatures",
+        "kg_scores_plus_creeds",
+    }
     verdict.update(build_ranking_materiality(ranking_metrics_df, ranking_is_real_evidence=verdict["ranking_is_real_evidence"]))
     verdict["evidence_scope"] = (
         "real_classifier_and_real_ranking"

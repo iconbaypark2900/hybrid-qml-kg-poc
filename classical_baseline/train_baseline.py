@@ -344,6 +344,9 @@ if __name__ == "__main__":
                         choices=["LogisticRegression", "SVM", "RandomForest"])
     parser.add_argument("--results_dir", type=str, default="results", help="Output directory for metrics")
     parser.add_argument("--random_state", type=int, default=42)
+    parser.add_argument("--negative_sampling_strategy", type=str, default=None,
+                        choices=["random", "degree_corrupt", "type_aware", "embedding_knn"],
+                        help="Negative sampling strategy (overrides config)")
     args = parser.parse_args()
 
     os.makedirs(args.results_dir, exist_ok=True)
@@ -352,7 +355,13 @@ if __name__ == "__main__":
     log.info("Loading Hetionet edges…")
     df = load_hetionet_edges()
     task_edges, _, _ = extract_task_edges(df, relation_type=args.relation, max_entities=args.max_entities)
-    train_df, test_df = prepare_link_prediction_dataset(task_edges)
+
+    # Build config override for negative sampling strategy
+    cfg_override = {}
+    if args.negative_sampling_strategy:
+        cfg_override["data_loading"] = {"negative_sampling_strategy": args.negative_sampling_strategy}
+
+    train_df, test_df = prepare_link_prediction_dataset(task_edges, config=cfg_override)
 
     # 2) Train/load embeddings on the **triples**, not on the link-split
     embedder = HetionetEmbedder(embedding_dim=args.embedding_dim, qml_dim=args.qml_dim)
@@ -382,6 +391,7 @@ if __name__ == "__main__":
                     "qml_dim": args.qml_dim,
                     "model": args.model,
                     "random_state": args.random_state,
+                    "negative_sampling_strategy": args.negative_sampling_strategy,
                 },
                 "metrics": metrics,
             },

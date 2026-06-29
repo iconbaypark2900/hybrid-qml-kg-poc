@@ -16,6 +16,20 @@ SCORING_MODES = [
     "quantum_benchmark_overlay",
 ]
 
+# disease_id -> artifacts/repurposing/{subdir}
+_BUNDLE_DIRS: dict[str, str] = {
+    "brca_external_validation": "brca_external_validation",
+    "brca_external_validation_organism_any": "brca_external_validation_organism_any",
+    "all_pairs_kg_omics": "all_pairs_kg_omics",
+}
+
+
+def _bundle_path_for_disease(disease_id: str) -> Path | None:
+    subdir = _BUNDLE_DIRS.get(disease_id)
+    if not subdir:
+        return None
+    return project_root() / "artifacts" / "repurposing" / subdir / "repurposing_evidence_bundle.json"
+
 
 def list_repurposing_diseases() -> dict[str, Any]:
     return {
@@ -52,10 +66,8 @@ def build_repurposing_candidates(disease_id: str) -> dict[str, Any]:
 
 
 def _load_repurposing_bundle(disease_id: str) -> dict[str, Any] | None:
-    if disease_id != "brca_external_validation":
-        return None
-    path = project_root() / "artifacts" / "repurposing" / "brca_external_validation" / "repurposing_evidence_bundle.json"
-    if not path.exists():
+    path = _bundle_path_for_disease(disease_id)
+    if path is None or not path.exists():
         return None
     bundle = json.loads(path.read_text(encoding="utf-8"))
     if bundle.get("status") != "ready":
@@ -135,6 +147,55 @@ def _bundle_candidate_payload(
     structure_targets = candidate.get("structure_targets") or {}
     target_count = int(structure_targets.get("target_count") or 0)
     parsed_structure_count = int(structure_targets.get("parsed_structure_count") or 0)
+    creeds_status = candidate.get("creeds_match_status") or "unmatched"
+    reversal_score = candidate.get("signature_reversal_score")
+    creeds_value = (
+        f"{float(reversal_score):.3f}"
+        if isinstance(reversal_score, (int, float)) and float(reversal_score) > 0
+        else "unmatched"
+    )
+    creeds_detail_parts = [
+        f"match={creeds_status}",
+        f"profiles={candidate.get('profile_gene_overlap', 0)}",
+    ]
+    if candidate.get("creeds_id"):
+        creeds_detail_parts.append(f"id={candidate.get('creeds_id')}")
+    if candidate.get("creeds_organism"):
+        creeds_detail_parts.append(f"filter={candidate.get('creeds_organism')}")
+    if candidate.get("creeds_profile_organism"):
+        creeds_detail_parts.append(f"profile_organism={candidate.get('creeds_profile_organism')}")
+    evidence_components = [
+        {
+            "label": "KG",
+            "value": f"{float(candidate.get('kg_omics_score') or candidate.get('hypothesis_score') or 0.0):.3f}",
+            "status": "supporting",
+            "detail": "Loaded from ranking_comparison.csv through repurposing_evidence_bundle.json.",
+        },
+        {
+            "label": "CREEDS",
+            "value": creeds_value,
+            "status": "supporting" if creeds_status == "matched_human" else ("limited" if creeds_status == "matched_non_human" else "missing"),
+            "detail": "; ".join(creeds_detail_parts),
+        },
+        {
+            "label": "RNA-seq",
+            "value": str(rnaseq.get("verification_status", "unknown")),
+            "status": "supporting" if rnaseq.get("verification_failed") == 0 else "limited",
+            "detail": f"External classical ROC-AUC {rnaseq.get('external_classical_roc_auc')}; quantum adds value: {rnaseq.get('external_quantum_adds_value')}",
+        },
+        {
+            "label": "Structure",
+            "value": f"targets {target_count}; structures {parsed_structure_count}",
+            "status": "supporting" if parsed_structure_count else "limited",
+            "detail": "Candidate targets are resolved from KG provenance; missing local structure artifacts are shown explicitly.",
+        },
+        {
+            "label": "Quantum",
+            "value": "benchmark only",
+            "status": "limited",
+            "detail": f"External delta ROC-AUC {external_delta}; no quantum advantage claim is allowed.",
+        },
+    ]
     return {
         "compound_id": candidate.get("candidate_id", candidate.get("compound_name", "")),
         "compound_name": candidate.get("compound_name", "Unknown compound"),
@@ -144,32 +205,7 @@ def _bundle_candidate_payload(
         "scoring_mode": "kg_plus_rnaseq_plus_structure",
         "rank": int(candidate.get("rank") or 0),
         "summary": candidate.get("summary", "Ranked research hypothesis; not clinical evidence of efficacy."),
-        "evidence_components": [
-            {
-                "label": "KG",
-                "value": f"{float(candidate.get('hypothesis_score') or 0.0):.3f}",
-                "status": "supporting",
-                "detail": "Loaded from ranking_comparison.csv through repurposing_evidence_bundle.json.",
-            },
-            {
-                "label": "RNA-seq",
-                "value": str(rnaseq.get("verification_status", "unknown")),
-                "status": "supporting" if rnaseq.get("verification_failed") == 0 else "limited",
-                "detail": f"External classical ROC-AUC {rnaseq.get('external_classical_roc_auc')}; quantum adds value: {rnaseq.get('external_quantum_adds_value')}",
-            },
-            {
-                "label": "Structure",
-                "value": f"targets {target_count}; structures {parsed_structure_count}",
-                "status": "supporting" if parsed_structure_count else "limited",
-                "detail": "Candidate targets are resolved from KG provenance; missing local structure artifacts are shown explicitly.",
-            },
-            {
-                "label": "Quantum",
-                "value": "benchmark only",
-                "status": "limited",
-                "detail": f"External delta ROC-AUC {external_delta}; no quantum advantage claim is allowed.",
-            },
-        ],
+        "evidence_components": evidence_components,
         "kg_paths": [
             f"CREEDS profile overlap: {candidate.get('profile_gene_overlap')}",
             f"Signature reversal score: {candidate.get('signature_reversal_score')}",
@@ -179,6 +215,14 @@ def _bundle_candidate_payload(
             "direction": "signature_reversal_ranking",
             "profile_gene_overlap": candidate.get("profile_gene_overlap"),
             "signature_reversal_score": candidate.get("signature_reversal_score"),
+            "cell_type_reversal_score": None,
+            "pathway_reversal_score": None,
+            "omics_cell_type_status": "not_computed",
+            "omics_pathway_status": "not_computed",
+            "creeds_id": candidate.get("creeds_id"),
+            "creeds_match_status": candidate.get("creeds_match_status"),
+            "creeds_organism": candidate.get("creeds_organism"),
+            "creeds_profile_organism": candidate.get("creeds_profile_organism"),
         },
         "structure": structure,
         "structure_targets": structure_targets,
@@ -224,6 +268,32 @@ def _diseases() -> list[dict[str, Any]]:
             "notes": [
                 "Counts-level RNA-seq evidence passed the local evidence-bundle verifier.",
                 "External validation is technical cross-study evidence, not clinical validation.",
+            ],
+        },
+        {
+            "id": "brca_external_validation_organism_any",
+            "name": "Breast cancer (CREEDS any organism)",
+            "cohort": "TCGA-BRCA to GEO GSE225846",
+            "source": "artifact_backed_repurposing_bundle",
+            "sample_count": 215,
+            "smallest_class_count": 30,
+            "evidence_status": "alternate_omics_policy",
+            "notes": [
+                "CREEDS profiles include non-human organisms when human profiles are absent.",
+                "Use brca_external_validation for human-only CREEDS evidence.",
+            ],
+        },
+        {
+            "id": "all_pairs_kg_omics",
+            "name": "All diseases (200-pair KG+omics)",
+            "cohort": "Multiseed KG scores + CREEDS cosine (human)",
+            "source": "artifact_backed_repurposing_bundle",
+            "sample_count": 215,
+            "smallest_class_count": 30,
+            "evidence_status": "exploratory_cross_disease",
+            "notes": [
+                "200 compound-disease pairs from kg_qml_scores_256d_moa.json with CREEDS reversal where matched.",
+                "Cross-disease ranking is exploratory; prefer disease-specific bundles for interpretation.",
             ],
         },
         {

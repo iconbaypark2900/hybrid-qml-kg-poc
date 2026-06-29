@@ -1,0 +1,25 @@
+{
+  "panel_a_breast_matched": {
+    "spearman_rho": 1.0,
+    "spearman_p_value": 0.0,
+    "n": 4,
+    "kg_mean": 0.8359624636166496,
+    "reversal_mean": 0.5170237404322034,
+    "organism_policy": "human",
+    "label": "breast_ctd_cosine_human",
+    "n_total": 11,
+    "n_matched": 4
+  },
+  "panel_b_full200_matched": {
+    "spearman_rho": -0.1237026490801035,
+    "spearman_p_value": 0.4127547855320858,
+    "n": 46,
+    "kg_mean": 0.8805648663824894,
+    "reversal_mean": 0.5246798447737028,
+    "organism_policy": "human",
+    "label": "full_200_cosine_matched",
+    "n_total": 200,
+    "n_matched": 46
+  },
+  "description": "Spearman rank correlation between KG RotatE score and CREEDS cosine reversal score on matched candidates only (signature_reversal_score > 0)."
+}

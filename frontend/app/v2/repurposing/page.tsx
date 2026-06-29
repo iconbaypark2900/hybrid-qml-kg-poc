@@ -177,6 +177,12 @@ export default async function V2RepurposingPage({
 }
 
 function DiseaseRow({ disease, active }: { disease: RepurposingDisease; active: boolean }) {
+  const tone =
+    disease.evidence_status === "review_ready"
+      ? "success"
+      : disease.evidence_status === "alternate_omics_policy"
+        ? "quantum"
+        : "warning";
   return (
     <a
       href={`/v2/repurposing?disease_id=${encodeURIComponent(disease.id)}`}
@@ -191,7 +197,7 @@ function DiseaseRow({ disease, active }: { disease: RepurposingDisease; active: 
           <p className="font-semibold text-on-surface">{disease.name}</p>
           <p className="mt-1 text-xs leading-relaxed text-on-surface-variant">{disease.cohort}</p>
         </div>
-        <StatusBadge tone={disease.evidence_status === "review_ready" ? "success" : "warning"}>
+        <StatusBadge tone={tone}>
           {disease.evidence_status}
         </StatusBadge>
       </div>
@@ -206,6 +212,17 @@ function CandidateRow({ candidate }: { candidate: RepurposingCandidate }) {
   const hiddenTargetCount = Math.max(0, structureTargets.target_count - visibleTargets.length);
   const visibleProteinRows = candidate.protein_structures.slice(0, 4);
   const selectedProtein = candidate.protein_structures.find((protein) => protein.viewer.supports_3d) ?? null;
+  const creedsStatus = String(
+    (candidate.rnaseq_signature as Record<string, unknown>)?.creeds_match_status ?? "",
+  );
+  const creedsLabel =
+    creedsStatus === "matched_human"
+      ? "Human CREEDS profile"
+      : creedsStatus === "matched_non_human"
+        ? "Non-human CREEDS profile"
+        : creedsStatus === "unmatched"
+          ? "No CREEDS profile"
+          : null;
   return (
     <article className="rounded-lg border border-outline-variant/25 bg-surface-container-high/70 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -219,6 +236,13 @@ function CandidateRow({ candidate }: { candidate: RepurposingCandidate }) {
           <p className="mt-2 max-w-4xl text-sm leading-relaxed text-on-surface-variant">
             {candidate.summary}
           </p>
+          {creedsLabel ? (
+            <p className="mt-2">
+              <Chip active={creedsStatus === "matched_human"}>
+                {creedsLabel}
+              </Chip>
+            </p>
+          ) : null}
         </div>
         <div className="text-right">
           <p className="font-label text-[0.65rem] font-bold uppercase tracking-widest text-on-surface-variant">
@@ -230,14 +254,20 @@ function CandidateRow({ candidate }: { candidate: RepurposingCandidate }) {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         {candidate.evidence_components.map((item) => (
           <EvidenceCard
             key={item.label}
             title={item.label}
             value={item.value}
             detail={item.detail}
-            tone={item.status === "supporting" ? "success" : "warning"}
+            tone={
+              item.label === "CREEDS" && item.status === "missing"
+                ? "warning"
+                : item.status === "supporting"
+                  ? "success"
+                  : "warning"
+            }
           />
         ))}
       </div>
@@ -324,6 +354,26 @@ const fallbackDiseases: RepurposingDisease[] = [
     sample_count: 215,
     smallest_class_count: 30,
     evidence_status: "review_ready",
+    notes: [],
+  },
+  {
+    id: "brca_external_validation_organism_any",
+    name: "Breast cancer (CREEDS any organism)",
+    cohort: "TCGA-BRCA to GEO GSE225846",
+    source: "fallback",
+    sample_count: 215,
+    smallest_class_count: 30,
+    evidence_status: "alternate_omics_policy",
+    notes: [],
+  },
+  {
+    id: "all_pairs_kg_omics",
+    name: "All diseases (200-pair KG+omics)",
+    cohort: "Multiseed KG + CREEDS cosine",
+    source: "fallback",
+    sample_count: 0,
+    smallest_class_count: 0,
+    evidence_status: "exploratory_cross_disease",
     notes: [],
   },
 ];

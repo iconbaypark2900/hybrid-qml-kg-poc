@@ -334,11 +334,26 @@ def prepare_link_prediction_dataset(
         train_df: Training DataFrame with positive and negative samples
         test_df: Testing DataFrame with positive and negative samples
     """
-    # Load config if not provided
-    if config is None:
-        if config_path is None:
-            config_path = "config/kg_layer_config.yaml"
-        config = load_kg_config(config_path)
+    # Load base config
+    if config_path is None:
+        config_path = "config/kg_layer_config.yaml"
+    base_config = load_kg_config(config_path)
+
+    # Merge provided config override with base config
+    if config is not None:
+        # Deep merge for nested dicts
+        def deep_merge(base: Dict, override: Dict) -> Dict:
+            result = base.copy()
+            for k, v in override.items():
+                if isinstance(v, dict) and k in result and isinstance(result[k], dict):
+                    result[k] = deep_merge(result[k], v)
+                else:
+                    result[k] = v
+            return result
+
+        config = deep_merge(base_config, config)
+    else:
+        config = base_config
 
     # Use provided parameters or fall back to config
     if test_size is None:
@@ -357,9 +372,10 @@ def prepare_link_prediction_dataset(
         pos_df, test_size=test_size, random_state=random_state
     )
 
-    # Generate negatives
-    neg_train = get_negative_samples(pos_train, random_state=random_state)
-    neg_test = get_negative_samples(pos_test, random_state=random_state + 1)
+    # Generate negatives using configured strategy (default: degree_corrupt)
+    neg_strategy = config.get("data_loading", {}).get("negative_sampling_strategy", "degree_corrupt")
+    neg_train = get_hard_negatives(pos_train, strategy=neg_strategy, random_state=random_state)
+    neg_test = get_hard_negatives(pos_test, strategy=neg_strategy, random_state=random_state + 1)
 
     # Combine
     train_df = pd.concat([pos_train, neg_train], ignore_index=True).sample(frac=1, random_state=random_state)
@@ -781,10 +797,14 @@ def get_hard_negatives(
             pos_edges, embedder, num_negatives, random_state,
             k_neighbors, corrupt_tail_prob
         )
+    elif strategy == "random":
+        return get_negative_samples(
+            pos_edges, num_negatives, random_state
+        )
     else:
         logger.warning(
             "Unknown hard negative strategy '%s'. "
-            "Valid: degree_corrupt, type_aware, embedding_knn. "
+            "Valid: degree_corrupt, type_aware, embedding_knn, random. "
             "Falling back to degree_corrupt.",
             strategy,
         )

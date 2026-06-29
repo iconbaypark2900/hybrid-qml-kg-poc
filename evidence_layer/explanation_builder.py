@@ -35,8 +35,8 @@ def build_explanation(ef: EvidenceFeatures) -> str:
         f"  - QSVC score: {_strength(ef.qsvc_score)} ({ef.qsvc_score:.3f})",
         f"  - Classical ensemble: {_strength(ef.classical_ensemble_score)} ({ef.classical_ensemble_score:.3f})",
         f"  - Disease signature reversal: {_strength(ef.signature_reversal_score)} ({ef.signature_reversal_score:.3f})",
-        f"  - Cell-type reversal: {_strength(ef.cell_type_reversal_score)} ({ef.cell_type_reversal_score:.3f})",
-        f"  - Pathway reversal: {_strength(ef.pathway_reversal_score)} ({ef.pathway_reversal_score:.3f})",
+        f"  - Cell-type reversal: not computed (weight=0 in fusion config)",
+        f"  - Pathway reversal: not computed (GSEA deferred; weight=0)",
         f"  - Clinical evidence: {_strength(ef.clinical_evidence_score)} ({ef.clinical_evidence_score:.3f})",
     ]
     return "\n".join(lines)

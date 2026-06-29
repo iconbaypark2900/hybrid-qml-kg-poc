@@ -85,6 +85,14 @@ class QuantumExecutor:
         self.service = None
         self.session = None
         self.noise_label = None
+        if self.execution_mode == "gpu_simulator" and not self.gpu_available():
+            logger.warning(
+                "⚠️  quantum.execution_mode=gpu_simulator was requested, but "
+                "Qiskit Aer does not expose a GPU device. Falling back to CPU "
+                "statevector simulator. PyTorch/PyKEEN CUDA embedding training "
+                "is unaffected."
+            )
+            self.execution_mode = "simulator"
         self._initialize_service()
     
     def _load_config(self, config_path: str) -> Dict:
@@ -267,6 +275,42 @@ class QuantumExecutor:
                 from qiskit.primitives import Sampler
                 return Sampler(), "simulator"
 
+    def _get_gpu_simulator_sampler(self):
+        """Get a GPU-backed Aer sampler when cuStateVec is registered."""
+        if not self.gpu_available():
+            logger.warning(
+                "⚠️  GPU simulator requested but unavailable; using CPU simulator."
+            )
+            return self._get_simulator_sampler()
+
+        gpu_config = self.config.get('quantum', {}).get('gpu_simulator', {})
+        shots = int(gpu_config.get("shots", 1024) or 1024)
+        method = gpu_config.get("method", "statevector")
+        precision = gpu_config.get("precision")
+
+        backend_options = {
+            "method": method,
+            "device": "GPU",
+        }
+        if precision:
+            backend_options["precision"] = precision
+
+        try:
+            from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
+            return (
+                AerSamplerV2(
+                    default_shots=shots,
+                    options={"backend_options": backend_options},
+                ),
+                "gpu_simulator",
+            )
+        except Exception as e:
+            logger.warning(
+                "⚠️  Failed to initialize GPU Aer sampler (%s); using CPU simulator.",
+                e,
+            )
+            return self._get_simulator_sampler()
+
     def _get_heron_sampler(self) -> Tuple[RuntimeSampler, str]:
         """Get IBM Heron/Torino sampler with error mitigation."""
         if not self.service:
@@ -336,6 +380,9 @@ class QuantumExecutor:
 
     def get_sampler(self):
         """Get sampler - fixed to always return tuple"""
+        if self.execution_mode == "gpu_simulator":
+            return self._get_gpu_simulator_sampler()
+
         # Prefer exact sims locally (statevector if available)
         if self.execution_mode in ("simulator", "auto", "statevector", "simulator_statevector"):
             return self._get_simulator_sampler()
@@ -361,6 +408,8 @@ class QuantumExecutor:
             backend_label = self.config.get('quantum', {}).get('heron', {}).get('backend')
         elif execution_mode in ("simulator", "auto", "statevector", "simulator_statevector"):
             backend_label = "simulator_noisy" if noise_model else "simulator"
+        elif execution_mode == "gpu_simulator":
+            backend_label = "aer_simulator_gpu" if self.gpu_available() else "simulator_cpu_fallback"
         else:
             backend_label = execution_mode
 

@@ -13,7 +13,7 @@ import urllib.request
 
 BASE_URL = os.environ.get("V2_BASE_URL", "http://localhost:3780").rstrip("/")
 ROUTES = [
-    ("/v2/start", "Start with your own biomedical question"),
+    ("/v2/start", "lock the active investigation context"),
     (
         "/v2/experiment?entity=Atherosclerosis&runMode=Hybrid&candidate=Atherosclerosis",
         "Scientific quality controls",

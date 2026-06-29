@@ -16,6 +16,22 @@ if [ ! -f "$POSTER_DIR/$POSTER_NAME.tex" ]; then
 fi
 
 if ! command -v pdflatex >/dev/null 2>&1; then
+    ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    if command -v docker >/dev/null 2>&1; then
+        echo "[info] pdflatex not found; building poster via Docker texlive/texlive:latest"
+        docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$ROOT:/work" \
+            -w "/work/$POSTER_DIR" \
+            texlive/texlive:latest \
+            bash -lc "
+                set -euo pipefail
+                pdflatex -interaction=nonstopmode -halt-on-error '$POSTER_NAME.tex'
+                pdflatex -interaction=nonstopmode -halt-on-error '$POSTER_NAME.tex'
+                ls -lh '$POSTER_NAME.pdf'
+            "
+        exit 0
+    fi
     echo "[error] pdflatex not found. Install with:" >&2
     echo "  sudo apt-get install texlive-latex-extra texlive-pictures" >&2
     exit 1

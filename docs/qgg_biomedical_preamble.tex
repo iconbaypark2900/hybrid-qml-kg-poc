@@ -1,0 +1,58 @@
+\documentclass[a4paper,11pt]{article}
+
+%% ---- Packages ----------------------------------------------------------
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage[table]{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf,skip=2pt,belowskip=0pt}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{xurl}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\hypersetup{
+  pdftitle={Quantum Kernel Link Prediction on Biomedical Knowledge Graphs},
+  pdfauthor={Jonathan Beale, Kevin Robinson, Mark Jack, Abdelrahman E. Ahmed}
+}
+
+%% IEEEtran.bst writes BST control cites to the aux file; stub if not using IEEEtran.cls
+\makeatletter
+\def\bstctlcite{\@ifnextchar[{\@bstctlcite}{\@bstctlcite[@auxout]}}
+\def\@bstctlcite[#1]#2{\@bsphack
+  \@for\@citeb:=#2\do{%
+    \edef\@citeb{\expandafter\@firstofone\@citeb}%
+    \if@filesw\immediate\write\csname #1\endcsname{\string\citation{\@citeb}}\fi}%
+  \@esphack}
+\makeatother
+
+%% ---- Colour palette for tables ----------------------------------------
+\definecolor{tabheader}{RGB}{230,230,227}
+\definecolor{tabrowlight}{RGB}{248,248,246}
+\definecolor{tabrowdark}{RGB}{240,240,237}
+
+%% ---- Title / Authors --------------------------------------------------
+\title{Quantum Kernel Link Prediction on Biomedical\\Knowledge Graphs:
+Bridging Graph Embeddings and\\Quantum Feature Spaces for Drug Repurposing%
+\thanks{Portions of text were drafted and curated with assistance from
+Claude Code (Anthropic, 2025) using a user-provided Python ML codebase.
+All output was reviewed, verified, and edited by the authors.}%
+}
+
+\author{%
+  Jonathan Beale\quad Kevin Robinson\quad Mark Jack\quad Abdelrahman E. Ahmed\\[0.75em]
+  {\small
+    \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.92\linewidth}@{}}
+      Jonathan Beale, Kevin Robinson, and Mark Jack: Quantum Global Group, United States\\
+      IBM Qiskit Advocates; Contributors, IBM HBCU Quantum Center; Participants, IBM Quantum Advocate Mentorship Program (QAMP)\\
+      Emails: \texttt{jon@quantumglobalgroup.io}, \texttt{kevin@quantumglobalgroup.io}, \texttt{mark.a.jack@gmail.com}\\[0.75em]
+      Abdelrahman E. Ahmed: \texttt{abdelrahman.elsayed\_pg@alexu.edu.eg}
+    \end{tabular}}%
+}
+\date{}

@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 
 
-BASE_URL = os.environ.get("V2_BASE_URL", "http://localhost:3001").rstrip("/")
+BASE_URL = os.environ.get("V2_BASE_URL", "http://localhost:3780").rstrip("/")
 ROUTES = [
     ("/v2/start", "Start with your own biomedical question"),
     (
@@ -26,6 +26,12 @@ ROUTES = [
         "/v2/visual?entity=Atherosclerosis&runMode=Hybrid&candidate=Atherosclerosis",
         "Visual",
     ),
+    ("/v2/repurposing?disease_id=brca_external_validation", "Vemurafenib"),
+    (
+        "/v2/repurposing?disease_id=brca_external_validation_organism_any",
+        "Prednisolone",
+    ),
+    ("/v2/repurposing?disease_id=all_pairs_kg_omics", "Fluticasone furoate"),
 ]
 
 

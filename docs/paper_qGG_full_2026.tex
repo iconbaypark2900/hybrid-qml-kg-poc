@@ -139,7 +139,7 @@ Given Hetionet with known CtD edges as positives and hard-sampled negatives, tra
 
 \item \textbf{Novel intersection.} To our knowledge, this is the first system to combine learned KG embedding vectors (RotatE, full-graph) with quantum kernel classifiers (QSVC, fidelity kernel) for biomedical link prediction, bridging two previously disjoint research tracks.
 
-\item \textbf{Counterintuitive quantum-classical synergy.} The Pauli feature map degrades standalone QSVC performance (0.7216 $\to$ 0.6343, $-8.7$ pp) relative to ZZ, yet raises ensemble PR-AUC (0.7408 $\to$ 0.7987, $+5.8$ pp). The Pauli kernel generates predictions with lower correlation to classical tree model errors, providing greater diversity for the stacking meta-learner.
+\item \textbf{Counterintuitive quantum-classical synergy (legacy protocol).} Under the historical \texttt{--fast\_mode} 128D run, the Pauli feature map degrades standalone QSVC performance (0.7216 $\to$ 0.6343, $-8.7$ pp) relative to ZZ, yet raises ensemble PR-AUC (0.7408 $\to$ 0.7987, $+5.8$ pp). On the current reproducible 256D+MoA protocol, QSVC remains near chance and stacking matches HistGBDT (Table~\ref{tab:primary}); the decorrelation story is retained as a legacy-protocol finding, not a current headline claim.
 
 \item \textbf{Mechanism-of-action feature module.} We introduce 10 pharmacological plausibility features derived from multi-relational Hetionet structure --- binding target overlap (CbG $\cap$ DaG), pathway co-involvement (GpPW), pharmacologic class membership (PCiC), and chemical and disease similarity (CrC, DrD) --- to address the score-validity inversion problem inherent in embedding-based scoring.
 
@@ -392,35 +392,45 @@ The reproducible headline is produced by \texttt{./scripts/run\_256d\_moa\_multi
 
 \begin{table*}[t]
 \centering
-\caption{Primary benchmark: test metrics for RotatE-128D with Pauli-16Q QSVC and stacking.\protect\\
-\small\textit{Configuration: full-graph RotatE 128D (200 epochs), Pauli map reps${=}2$, PCA to 24D then 16Q, $C{=}0.1$, hard negatives 1:1, tuned classical models. Result file \texttt{optimized\_results\_20260216-100431.json}. QSVC kernel time 2,619~s (full $1208{\times}1208$ matrix).}}
+\caption{Reproducible Tier-1 CtD benchmark (cached 256D RotatE + MoA, five seeds).
+Nystr\"{o}m $m{=}200$; stacking uses best PR-AUC classical (HistGBDT).
+Source: \texttt{results/rerun\_256d\_moa/summary.json}.}
 \label{tab:primary}
-\begin{tabular}{@{}lcccc@{}}
+\begin{tabular}{@{}lc@{}}
 \toprule
-\textbf{Model} & \textbf{Test PR-AUC} & \textbf{Test ROC-AUC} & \textbf{Test Accuracy} & \textbf{Type} \\
+\textbf{Model} & \textbf{Test PR-AUC} \\
 \midrule
-\textbf{Ensemble-QC-stacking (Pauli)} & \textbf{0.7987} & 0.7456 & 0.5762 & Hybrid quantum-classical \\
-RandomForest-Optimized & 0.7838 & 0.7319 & 0.5828 & Classical \\
-ExtraTrees-Optimized & 0.7807 & 0.7301 & 0.6623 & Classical \\
-Ensemble-QC-stacking (ZZ)$\dagger$ & 0.7408 & --- & 0.6490 & Hybrid quantum-classical \\
-QSVC-Optimized (ZZ)$\dagger$ & 0.7216 & --- & 0.6556 & Quantum only \\
-QSVC-Optimized (Pauli) & 0.6343 & 0.6313 & 0.5861 & Quantum only \\
+\textbf{Ensemble-QC-stacking} & \textbf{0.7398 $\pm$ 0.038} \\
+HistGBDT & 0.7393 $\pm$ 0.037 \\
+\midrule
+\multicolumn{2}{l}{\footnotesize Best single run (seed 42): ensemble \textbf{0.7805}; HistGBDT 0.7784.} \\
 \bottomrule
 \end{tabular}
-
-\smallskip
-\begin{minipage}{\linewidth}
-\small $\dagger$ZZ results from \texttt{results/optimized\_results\_20260216-091710.json} (same train/test split; QSVC genuine computation: 908 s). All Pauli-configuration rows are from the primary run.
-\end{minipage}
 \end{table*}
 
-Table~\ref{tab:primary} reports the primary benchmark; the full pipeline producing these numbers is shown in Figure~\ref{fig:pipeline}. The stacking ensemble improves over the best classical model (RandomForest, 0.7838) by \textbf{+0.0149 PR-AUC} (+1.49 pp).
-
-\subsection{Extended Results: 256D Embeddings and Optuna Tuning}
+Table~\ref{tab:primary} reports the reproducible headline; the full pipeline is shown in Figure~\ref{fig:pipeline}.
+On seed 42, stacking adds +0.0021 PR-AUC over HistGBDT; QSVC alone remains near chance ($\approx$0.50) on this protocol, so we do not claim quantum lift on CtD.
 
 \begin{table*}[t]
 \centering
-\caption{Extended Configuration --- RotatE-256D, Pauli-12Q, Optuna. \textit{Configuration: RotatE 256D, 250 epochs, full-graph embeddings, Pauli feature map (reps=1), 12 qubits, no pre-PCA, QSVC C=0.676 (Optuna-tuned), hard negatives, stacking ensemble. Source: \texttt{results/optimized\_results\_20260323-134844.json}. Note: quantum kernel was computed once (${\sim}$99 s) on the first Optuna trial and reused across subsequent classical hyperparameter trials.}}
+\caption{Historical single-run Pauli inversion (128D, full kernel, \texttt{--fast\_mode}; not current headline protocol).}
+\label{tab:legacy_primary}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Model} & \textbf{PR-AUC} & \textbf{ROC-AUC} & \textbf{Acc.} & \textbf{Type} \\
+\midrule
+Ensemble-QC (Pauli) & 0.7987 & 0.7456 & 0.576 & Hybrid \\
+RandomForest-Opt & 0.7838 & 0.7319 & 0.583 & Classical \\
+QSVC (Pauli) & 0.6343 & 0.6313 & 0.586 & Quantum \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Exploratory Results: Optuna 256D Run (\texttt{--fast\_mode})}
+
+\begin{table*}[t]
+\centering
+\caption{Exploratory single-run Optuna configuration --- RotatE-256D, Pauli-12Q. \textit{Not the reproducible headline protocol: used \texttt{--fast\_mode}, RF/ET-only classical tuning, and reused a cached quantum kernel across Optuna trials. Source: \texttt{results/optimized\_results\_20260323-134844.json}.}}
 \label{tab:extended}
 \begin{tabular}{@{}lcccc@{}}
 \toprule
@@ -434,7 +444,7 @@ QSVC-Optimized (Pauli-256D) & 0.7222 & 0.7272 & 0.6391 & Quantum only \\
 \end{tabular}
 \end{table*}
 
-Table~\ref{tab:extended} reports the extended results. The 256D configuration demonstrates that embedding dimensionality is the dominant performance driver. Upgrading from 128D to 256D RotatE embeddings lifts the classical RF baseline from 0.7838 to 0.8569 (+7.3 pp absolute) and the ensemble ceiling from 0.7987 to 0.8581 (+5.9 pp). Although standalone QSVC performance remained comparable to classical baselines, its contribution within the stacked ensemble improved prediction diversity, supporting the hypothesis that quantum kernels capture complementary relational geometry not fully represented in classical embedding spaces. The Optuna-tuned QSVC C=0.676 (vs.\ manual C=0.1) also contributes to the QSVC improvement (0.6343 $\to$ 0.7222).
+Table~\ref{tab:extended} reports an exploratory Optuna sweep under \texttt{--fast\_mode}; it must not be compared directly to Table~\ref{tab:primary} (full classical suite, no \texttt{fast\_mode}, five-seed mean $\approx$0.74). Within that exploratory run, upgrading from 128D to 256D RotatE lifted RF from 0.7838 to 0.8569 (+7.3 pp) and ensemble from 0.7987 to 0.8581 (+5.9 pp), suggesting embedding dimensionality remains a dominant driver when classical tuning is capped to tree models.
 
 \subsection{Feature Map Analysis: The Pauli Inversion Effect}
 \label{sec:results_feature_map}
@@ -466,10 +476,10 @@ Figure~\ref{fig:pauli_zz} together with Table~\ref{tab:ablation} shows the centr
 \item \textbf{ZZ--QSVC standalone:} 0.7216 PR-AUC. The structured Pauli-$Z$ interactions of the ZZ map produce a kernel whose decision boundary is moderately competitive on its own, but its errors largely overlap with what tree models also get wrong.
 \item \textbf{ZZ--Ensemble:} 0.7408 PR-AUC. Adding ZZ-QSVC into the stacking ensemble of RF, ET and LR yields only a modest +1.9~pp lift over standalone ZZ-QSVC, and the ensemble \emph{remains below} the strongest classical baseline (RF, 0.7838).
 \item \textbf{Pauli--QSVC standalone:} 0.6343 PR-AUC --- $-8.7$~pp lower than ZZ-QSVC. Looking at this column alone one would conclude that Pauli is the worse feature map.
-\item \textbf{Pauli--Ensemble:} \textbf{0.7987 PR-AUC} --- the headline number. Adding Pauli-QSVC into the same stacking ensemble raises ensemble PR-AUC by +5.8~pp over the ZZ ensemble and by +1.5~pp over the best classical baseline.
+\item \textbf{Pauli--Ensemble (legacy):} \textbf{0.7987 PR-AUC} under \texttt{--fast\_mode}. Adding Pauli-QSVC into the same stacking ensemble raises ensemble PR-AUC by +5.8~pp over the ZZ ensemble and by +1.5~pp over the best classical baseline in that protocol.
 \end{itemize}
 
-\noindent\textbf{The inversion.} Standalone QSVC accuracy and ensemble PR-AUC move in \emph{opposite} directions when switching ZZ$\to$Pauli. The naive ``pick the higher single-model bar'' heuristic would have selected ZZ and missed the headline result.
+\noindent\textbf{The inversion (legacy protocol).} Standalone QSVC accuracy and ensemble PR-AUC move in \emph{opposite} directions when switching ZZ$\to$Pauli under the historical 128D run. The reproducible headline on the current protocol is \textbf{0.7805} (seed 42) and \textbf{0.7398 $\pm$ 0.038} (five seeds; Table~\ref{tab:primary}), where QSVC does not lift over HistGBDT.
 
 \noindent\textbf{Why this happens.} RandomForest and ExtraTrees split the 1177-dimensional classical feature vector along axis-aligned thresholds. The ZZ kernel's restricted Pauli-$Z$ basis preserves much of the same coordinate-aligned structure, so its errors remain partly correlated with tree errors and the meta-learner gains little new signal. The Pauli map adds mixed X, Y, Z and ZZ interactions across all qubit pairs, producing a 16-qubit Hilbert-space geometry that is qualitatively different from any axis-aligned partition. Pauli-QSVC is individually weaker, but its errors are \emph{decorrelated} from RF/ET errors, so the logistic-regression meta-learner extracts complementary signal that lifts the whole ensemble above the best classical baseline. The relevant optimisation target for quantum kernels in hybrid ensembles is therefore classical--quantum \emph{prediction decorrelation}, not standalone QSVC accuracy.
 

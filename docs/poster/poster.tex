@@ -20,11 +20,9 @@
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{xcolor}
-\usepackage{hyperref}
 \usepackage{tcolorbox}
+\usepackage{url}
 \usetikzlibrary{positioning, arrows.meta, shapes}
-
-\hypersetup{colorlinks=true, urlcolor=blue!60!black, linkcolor=black, citecolor=blue!50!black}
 
 % --- Theme: clean academic look (white background, subtle accents) ----------
 \definecolor{qggblue}{RGB}{20, 70, 140}
@@ -125,19 +123,19 @@ orchestrator: \texttt{run\_full\_repurposing\_pipeline.py --mode \{kg-only,kg+om
 \begin{center}
 {\Huge\bfseries PR-AUC = 0.7805}\\[1mm]
 {\large Reproducible ensemble (256D+MoA, seed 42)}\\[1mm]
+{\normalsize Five-seed mean 0.7398 $\pm$ 0.038}\\[1mm]
 {\normalsize Historical headline 0.7987 (legacy \texttt{fast\_mode})}\\[2mm]
 \textit{Hetionet Compound-treats-Disease (CtD) sealed test set}
 \end{center}
 \end{tcolorbox}
 
 \vspace{6mm}
-\textbf{Configuration} (preregistered on OSF):
+\textbf{Configuration} (preregistered; OSF filing Q3 2026):
 \begin{itemize}
-  \item Pauli feature map (5 qubits, reps=2)
-  \item RotatE 32d $\to$ PCA $\to$ 5d
-  \item Hard degree-corrupt negatives
-  \item Stacking ensemble (QSVC + RF + LR)
-  \item Linear + Richardson zero-noise extrapolation
+  \item Cached full-graph \textbf{RotatE 256D} + \textbf{MoA} (1177-d features)
+  \item Pauli feature map (\textbf{16 qubits}, reps=2); Nystr\"{o}m $m{=}200$
+  \item Hard degree-corrupt negatives; stacking selects \textbf{HistGBDT}
+  \item Five-seed reproducible mean \textbf{0.7398 $\pm$ 0.038}
 \end{itemize}
 
 \vspace{4mm}
@@ -167,7 +165,7 @@ prediction task.
 |\phi(x)\rangle = U_{\Phi(x)} H^{\otimes n} |0\rangle^{\otimes n}, \qquad
 U_{\Phi(x)} = \text{PauliFeatureMap}(x)
 \]
-on $n=5$ qubits, reps$=2$. Quantum kernel
+on $n=16$ qubits, reps$=2$. Quantum kernel
 $K(x_i, x_j) = |\langle\phi(x_i)|\phi(x_j)\rangle|^2$ feeds a
 classical SVC (QSVC).
 
@@ -184,11 +182,11 @@ R(d, c) = \frac{|U_d \cap D_c| + |D_d \cap U_c| - |U_d \cap U_c| - |D_d \cap D_c
 \]
 
 \vspace{3mm}
-\textbf{Evidence fusion.} Linear weighted combination of 10 feature
-streams. \texttt{kg-only} mode zeros the omics block; \texttt{kg+omics}
-mode incorporates CREEDS reversal scores (see TABLE3 reproducible
+\textbf{Evidence fusion.} Linear weighted combination of feature
+streams. Cell/pathway fusion weights are \textbf{0} (decoupled);
+CREEDS reversal + structure evidence active. \texttt{kg+omics}
+mode incorporates CREEDS profiles (see TABLE3 reproducible
 \textbf{0.7805} CtD ensemble baseline).
-Confidence tiers T1--T4 from configurable thresholds.
 
 \vspace{3mm}
 \textbf{Validation.} Top-N candidates queried against
@@ -199,42 +197,38 @@ exploratory.
 
 % --- Per-disease results ---------------------------------------------------
 \column{0.5}
-\block{5.~Per-disease ranking results}{
-\textbf{Pipeline output} (12 demo candidate-disease pairs):
+\block{5.~Breast cancer repurposing (real artifacts)}{
+\textbf{Top candidates} (\texttt{brca\_external\_validation} bundle, $n{=}11$):
 
 \vspace{3mm}
 \begin{center}
 \renewcommand{\arraystretch}{1.15}
-\begin{tabular}{l l c c c}
+\small
+\begin{tabular}{l c c l}
 \toprule
-\textbf{Compound} & \textbf{Disease} & \textbf{KG-only} &
-\textbf{KG+omics} & \textbf{$\Delta$} \\
+\textbf{Compound} & \textbf{KG+omics} & \textbf{Reversal} & \textbf{CREEDS} \\
 \midrule
-metformin    & T2D                & 0.456 & 0.714 & \textcolor{qggaccent}{$+0.258$} \\
-aspirin      & diabetes           & 0.420 & 0.671 & \textcolor{qggaccent}{$+0.252$} \\
-sertraline   & MDD                & 0.456 & 0.692 & \textcolor{qggaccent}{$+0.236$} \\
-tamoxifen    & breast cancer      & 0.413 & 0.641 & \textcolor{qggaccent}{$+0.228$} \\
-rosuvastatin & hyperlipidemia     & 0.398 & 0.618 & \textcolor{qggaccent}{$+0.220$} \\
-imatinib     & CML                & 0.385 & 0.601 & \textcolor{qggaccent}{$+0.216$} \\
+Vemurafenib       & 0.555 & 0.588 & matched\_human \\
+Cisplatin         & 0.514 & 0.576 & matched\_human \\
+Toremifene        & 0.514 & 0.000 & unmatched \\
+Vinblastine       & 0.511 & 0.000 & unmatched \\
+Prednisolone      & 0.498 & 0.000 & unmatched \\
+Paclitaxel        & 0.490 & 0.469 & matched\_human \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 \vspace{4mm}
-\textbf{Validation hits} (\texttt{--validate} flag, top-3 per disease):
-\begin{itemize}
-  \item metformin $\to$ T2D: \textcolor{qggaccent}{\textbf{Tier 3 (known indication)}}
-  \item rosuvastatin $\to$ hyperlipidemia: \textbf{Tier 3 (known)}
-  \item imatinib $\to$ CML: \textbf{Tier 3 (known)}
-\end{itemize}
+\textbf{Workbench smoke anchors}: Vemurafenib and Prednisolone (above);
+Fluticasone furoate ranks \#1 in \texttt{all\_pairs\_kg\_omics} (0.610).
 
 \vspace{4mm}
-\textbf{Evidence fusion impact}: mean $\Delta$PR-AUC $=+0.207$
-when omics evidence is included; tier promotion rate
-$\approx 25\%$ on demo set with seeded reversal scores.
+\textbf{RNA-seq external benchmark} (harmonized TCGA + GSE225846,
+18 candidates, \texttt{kg\_scores\_plus\_creeds} ranking):
+LogisticRegression PR-AUC \textbf{0.973} vs QSVC \textbf{0.922}.
 
 \vspace{4mm}
-\textbf{Sensitivity analyses} (preregistered, OSF \href{https://osf.io}{link}):
+\textbf{Sensitivity analyses} (preregistered; see \texttt{preregistration/osf\_preregistration\_v1.md}):
 H1 (Pauli $>$ ZZ): $\Delta = +0.034$, 95\% CI $[+0.012, +0.057]$ \\
 H1b (stacking $>$ weighted): $\Delta = +0.022$, 95\% CI $[+0.005, +0.039]$
 }
@@ -264,7 +258,7 @@ H1b (stacking $>$ weighted): $\Delta = +0.022$, 95\% CI $[+0.005, +0.039]$
 
 \vspace{3mm}
 \centering
-\textbf{Code:} \href{https://github.com/Quantum-Global-Group/hybrid-qml-kg-poc}{github.com/Quantum-Global-Group/hybrid-qml-kg-poc}
+\textbf{Code:} \url{https://github.com/Quantum-Global-Group/hybrid-qml-kg-poc}
 }
 
 % --- Limitations -----------------------------------------------------------
@@ -273,9 +267,8 @@ H1b (stacking $>$ weighted): $\Delta = +0.022$, 95\% CI $[+0.005, +0.039]$
 \begin{itemize}
   \item \textbf{Statevector simulator} primary backend; hardware
         execution deferred to journal version.
-  \item \textbf{Synthetic perturbation registry} in demo runs;
-        real LINCS L1000 integration runs only on DGX with full
-        \texttt{cmapPy} install.
+  \item \textbf{Cell/pathway fusion} weights set to 0; CREEDS + structure
+        evidence only (omics path partially decoupled).
   \item \textbf{Single-cell sample size}: results sensitive to
         cohort size $<$ 1000 cells per condition.
   \item \textbf{Hetionet coverage}: rare diseases under-represented;

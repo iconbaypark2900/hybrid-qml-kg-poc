@@ -10,7 +10,7 @@ Compiles to a single PDF (`poster.pdf`) suitable for conference printing.
 |     TITLE  · Authors · Quantum Global Group                  |
 +----------------+----------------+----------------------------+
 | 1. Motivation  | 2. Architecture | 3. Headline result        |
-|                |   (pipeline      |   (PR-AUC = 0.7987)       |
+|                |   (pipeline      |   (PR-AUC = 0.7805)       |
 |                |    diagram)      |                           |
 +----------------+----------------+----------------------------+
 | 4. Methods                      | 5. Per-disease results    |
@@ -66,26 +66,21 @@ sudo tlmgr install tikzposter tcolorbox
 
 ## Updating from real artifacts
 
-The headline numbers in sections 3 and 5 should be regenerated from the
-latest pipeline run before printing:
+The headline CtD numbers in section 3 come from
+[`results/multiseed/TABLE3.md`](../../results/multiseed/TABLE3.md).
+Section 5 breast-cancer rows are sourced from
+[`artifacts/repurposing/brca_external_validation/repurposing_evidence_bundle.json`](../../artifacts/repurposing/brca_external_validation/repurposing_evidence_bundle.json).
 
 ```bash
-# 1. Run the pipeline
-python scripts/run_full_repurposing_pipeline.py --mode kg+omics --validate --top-n 12
+# 1. Refresh repurposing bundles (optional)
+./scripts/run_repurposing_workbench_refresh.sh
 
-# 2. Build the comparison delta
-python scripts/compare_pipeline_modes.py --top-n 12
-
-# 3. Build LaTeX tables (table 8 & 9)
-python scripts/build_paper_tables.py --tables 8,9
-
-# 4. Update poster.tex section 5 to import or paste the real numbers,
-#    then rebuild
+# 2. Edit poster.tex section 5 if bundle scores change, then rebuild
 bash scripts/build_poster.sh
 ```
 
-Section 5 currently has hand-curated placeholder rows; future work
-(Sprint 14) will auto-inject from `artifacts/predictions/mode_comparison.csv`.
+For full pipeline demos (kg-only vs kg+omics mode comparison), see
+`scripts/run_full_repurposing_pipeline.py` and `scripts/compare_pipeline_modes.py`.
 
 ## Print specs
 

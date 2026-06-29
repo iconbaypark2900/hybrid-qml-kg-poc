@@ -1,0 +1,11 @@
+% QCE short-track build (target 4--6 pages + references)
+% Build: ./scripts/build_papers.sh
+% Output: docs/qgg_biomedical_qce.pdf
+
+\input{qgg_biomedical_preamble.tex}
+\newif\ifqceshort
+\qceshorttrue
+\geometry{margin=2cm}
+\begin{document}
+\input{qgg_biomedical_content.tex}
+\end{document}
